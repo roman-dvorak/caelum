@@ -1,0 +1,95 @@
+{
+  "config_version": 1,
+  "camera": {
+    "backend": "mock",
+    "sensor_id": "cam0",
+    "resolution": [
+      4056,
+      3040
+    ]
+  },
+  "location": {
+    "lat": 50.0755,
+    "lon": 14.4378,
+    "elevation_m": 200.0,
+    "timezone": "Europe/Prague"
+  },
+  "exposure_policy": {
+    "presets": {
+      "day": {
+        "exposure_us_min": 100,
+        "exposure_us_max": 10000,
+        "gain_min": 1.0,
+        "gain_max": 2.0,
+        "target_mean_adu": 128.0,
+        "saturation_threshold": 250.0
+      },
+      "civil_twilight": {
+        "exposure_us_min": 200,
+        "exposure_us_max": 100000,
+        "gain_min": 1.0,
+        "gain_max": 4.0,
+        "target_mean_adu": 120.0,
+        "saturation_threshold": 250.0
+      },
+      "nautical_twilight": {
+        "exposure_us_min": 1000,
+        "exposure_us_max": 2000000,
+        "gain_min": 1.0,
+        "gain_max": 8.0,
+        "target_mean_adu": 110.0,
+        "saturation_threshold": 250.0
+      },
+      "astronomical_twilight": {
+        "exposure_us_min": 10000,
+        "exposure_us_max": 8000000,
+        "gain_min": 1.0,
+        "gain_max": 12.0,
+        "target_mean_adu": 100.0,
+        "saturation_threshold": 250.0
+      },
+      "night": {
+        "exposure_us_min": 100000,
+        "exposure_us_max": 15000000,
+        "gain_min": 1.0,
+        "gain_max": 16.0,
+        "target_mean_adu": 100.0,
+        "saturation_threshold": 250.0
+      }
+    }
+  },
+  "storage_policy": {
+    "raw_periods": [
+      "astronomical_twilight",
+      "night"
+    ],
+    "thumbnail_max_dim": 1024,
+    "jpeg_quality": 85,
+    "night_capture_interval_s": 30.0,
+    "day_capture_interval_s": 60.0,
+    "realtime_stream_fps": 2.0
+  },
+  "retention": {
+    "max_age_days": 14,
+    "min_free_space_mb": 1024,
+    "sweep_interval_s": 3600.0
+  },
+  "upload": {
+    "enabled": false,
+    "remote_host": "",
+    "remote_user": "",
+    "remote_base_path": "/var/www/allsky-data",
+    "ssh_key_path": "/etc/caelum/upload_key",
+    "camera_slug": "cam0",
+    "camera_name": "Caelum Camera",
+    "thumbnail_interval_s": 60.0,
+    "reconcile_interval_s": 1800.0
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "db": 0,
+    "key_prefix": "caelum"
+  },
+  "plugins": {}
+}

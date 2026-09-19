@@ -1,0 +1,16 @@
+[Unit]
+Description=caelum — allsky/astro camera capture engine
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=caelum
+WorkingDirectory=/opt/caelum
+EnvironmentFile=/opt/caelum/.env
+ExecStart=/opt/caelum/.venv/bin/caelum
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

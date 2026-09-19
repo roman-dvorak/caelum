@@ -1,0 +1,30 @@
+"""FastAPI dependency accessors — everything lives on `app.state`, wired
+once in `main.py`. Type-hinted with `HTTPConnection` (the common base of
+`Request` and `WebSocket`) so the same dependency works for both HTTP routes
+and the `/ws/stream` websocket route.
+"""
+
+from __future__ import annotations
+
+from starlette.requests import HTTPConnection
+
+from caelum.capture.frame_store import FrameStore
+from caelum.capture.worker import CaptureWorker
+from caelum.config.manager import ConfigManager
+from caelum.control.skystate import SkyStateCalculator
+
+
+def get_config_manager(conn: HTTPConnection) -> ConfigManager:
+    return conn.app.state.config_manager
+
+
+def get_frame_store(conn: HTTPConnection) -> FrameStore:
+    return conn.app.state.frame_store
+
+
+def get_capture_worker(conn: HTTPConnection) -> CaptureWorker:
+    return conn.app.state.capture_worker
+
+
+def get_skystate_calculator(conn: HTTPConnection) -> SkyStateCalculator:
+    return conn.app.state.skystate_calculator
