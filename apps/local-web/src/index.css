@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Explicit source so Tailwind's class scanner also sees classes used only
+ * inside the shared @caelum/ui component source (which this app imports
+ * directly, unbuilt, via the pnpm workspace link). Without this, utility
+ * classes referenced only from packages/ui would be tree-shaken out of the
+ * generated CSS. */
+@source "../../../packages/ui/src";
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background: #05070d;
+  color: #e2e8f0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}

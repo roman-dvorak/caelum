@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* See apps/local-web/src/index.css for why this is needed: Tailwind's class
+ * scanner needs an explicit pointer at the shared @caelum/ui source, which
+ * this app imports unbuilt via the pnpm workspace link. */
+@source "../../../packages/ui/src";
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background: #05070d;
+  color: #e2e8f0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}
