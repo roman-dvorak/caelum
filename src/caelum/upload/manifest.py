@@ -9,22 +9,35 @@ and is handled separately in uploader.py.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+_YEAR_RE = re.compile(r"^\d{4}$")
+_MONTH_DAY_RE = re.compile(r"^\d{2}$")
+
 
 def _dated_files(data_dir: Path, subdir: str) -> dict[str, list[Path]]:
+    """Walks `<subdir>/YYYY/MM/DD/` (see storage/paths.py) and returns each
+    date's files keyed by its `YYYY-MM-DD` label — the manifest's public,
+    on-disk-layout-independent identifier."""
     base = data_dir / subdir
     by_date: dict[str, list[Path]] = {}
     if not base.exists():
         return by_date
-    for date_dir in sorted(base.iterdir()):
-        if not date_dir.is_dir():
+    for year_dir in sorted(base.iterdir()):
+        if not (year_dir.is_dir() and _YEAR_RE.match(year_dir.name)):
             continue
-        files = sorted(p for p in date_dir.glob("*") if p.is_file() and p.suffix != ".json")
-        if files:
-            by_date[date_dir.name] = files
+        for month_dir in sorted(year_dir.iterdir()):
+            if not (month_dir.is_dir() and _MONTH_DAY_RE.match(month_dir.name)):
+                continue
+            for day_dir in sorted(month_dir.iterdir()):
+                if not (day_dir.is_dir() and _MONTH_DAY_RE.match(day_dir.name)):
+                    continue
+                files = sorted(p for p in day_dir.glob("*") if p.is_file() and p.suffix != ".json")
+                if files:
+                    by_date[f"{year_dir.name}-{month_dir.name}-{day_dir.name}"] = files
     return by_date
 
 
@@ -32,12 +45,20 @@ def write_local_manifests(
     data_dir: Path, camera_slug: str, camera_name: str, location: dict[str, Any]
 ) -> dict[str, Any]:
     """Regenerate `<data_dir>/manifest.json` and every date's
-    `thumbnails/<date>/index.json`. Returns the built camera manifest dict."""
+    `thumbnails/<YYYY>/<MM>/<DD>/index.json`. Returns the built camera
+    manifest dict.
+
+    `date` (the dict key from `_dated_files`) is the public `YYYY-MM-DD`
+    identifier used in the JSON; `date_path` is that same date translated to
+    the actual nested on-disk/URL layout — every path written into the
+    manifest or to disk uses `date_path`, never `date` directly.
+    """
     thumbs_by_date = _dated_files(data_dir, "thumbnails")
     raws_by_date = _dated_files(data_dir, "raw")
 
     dates = []
     for date, thumb_files in sorted(thumbs_by_date.items()):
+        date_path = date.replace("-", "/")
         raw_files = raws_by_date.get(date, [])
         dates.append(
             {
@@ -45,7 +66,7 @@ def write_local_manifests(
                 "thumbnail_count": len(thumb_files),
                 "has_raw": bool(raw_files),
                 "raw_count": len(raw_files),
-                "latest_thumbnail": f"thumbnails/{date}/{thumb_files[-1].name}",
+                "latest_thumbnail": f"thumbnails/{date_path}/{thumb_files[-1].name}",
             }
         )
         index = {
@@ -53,13 +74,13 @@ def write_local_manifests(
             "images": [
                 {
                     "time": path.stem,
-                    "thumbnail": f"thumbnails/{date}/{path.name}",
-                    "metadata": f"thumbnails/{date}/{path.stem}.json",
+                    "thumbnail": f"thumbnails/{date_path}/{path.name}",
+                    "metadata": f"thumbnails/{date_path}/{path.stem}.json",
                 }
                 for path in thumb_files
             ],
         }
-        (data_dir / "thumbnails" / date / "index.json").write_text(json.dumps(index, indent=2))
+        (data_dir / "thumbnails" / date_path / "index.json").write_text(json.dumps(index, indent=2))
 
     camera_manifest = {
         "version": 1,

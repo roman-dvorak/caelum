@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from caelum.control.skystate import SkyStateCalculator
 
 PRAGUE = {"lat": 50.0755, "lon": 14.4378, "elevation_m": 200.0}
+_DAY_THRESHOLD = -0.8333
 
 
 @pytest.fixture(scope="module")
@@ -58,3 +59,39 @@ def test_period_over_one_day_rises_then_falls_exactly_once(calculator):
 def test_compute_defaults_to_now_without_error(calculator):
     state = calculator.compute()
     assert isinstance(state.sun_altitude_deg, float)
+
+
+def test_next_sunrise_is_in_the_future_and_near_the_day_threshold(calculator):
+    after = datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
+    sunrise = calculator.next_sunrise(after)
+
+    assert sunrise > after
+    assert sunrise - after < timedelta(hours=24)
+
+    # Just before, the sun must still be below threshold; just after, above
+    # it — pins down which side of the crossing `next_sunrise` returns, and
+    # that bisection converged tightly rather than landing well inside
+    # either side.
+    just_before = calculator.compute(sunrise - timedelta(minutes=2))
+    just_after = calculator.compute(sunrise + timedelta(minutes=2))
+    assert just_before.sun_altitude_deg < _DAY_THRESHOLD
+    assert just_after.sun_altitude_deg > _DAY_THRESHOLD
+
+    # The next call, started just after this sunrise, must find the
+    # *following* one roughly a day later — not the same crossing again.
+    second = calculator.next_sunrise(sunrise + timedelta(minutes=1))
+    assert timedelta(hours=20) < (second - sunrise) < timedelta(hours=28)
+
+
+def test_next_sunrise_defaults_to_now_without_error(calculator):
+    sunrise = calculator.next_sunrise()
+    assert sunrise > datetime.now(UTC) - timedelta(minutes=1)
+
+
+def test_next_sunrise_raises_rather_than_hanging_when_none_is_found(calculator, monkeypatch):
+    """A too-short search window — standing in for a real polar day/night,
+    without needing to actually scan 48 real hours to prove it — must raise,
+    not loop silently or hang."""
+    monkeypatch.setattr("caelum.control.skystate._CROSSING_SEARCH_WINDOW", timedelta(minutes=20))
+    with pytest.raises(RuntimeError, match="No sunrise found"):
+        calculator.next_sunrise(datetime(2026, 3, 15, 23, 0, tzinfo=UTC))  # deep night, none in 20 minutes

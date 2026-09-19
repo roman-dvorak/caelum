@@ -18,13 +18,13 @@ import logging
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 
 import cv2
 
 from caelum.capture.frame_store import FrameStore, ProcessedFrame
 from caelum.events import FRAME_CAPTURED, EventBus
+from caelum.storage import paths
 
 from .base import Derivative, DerivativeWorker
 
@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 
 def _derivative_path(data_dir: Path, derivative: Derivative, worker_id: str) -> Path:
     when = derivative.created_at
-    day: date = when.date()
     ext = "png" if derivative.kind.startswith("keogram") else "jpg"
-    return data_dir / "derivatives" / str(day) / f"{when.strftime('%H%M%S')}_{worker_id}_{derivative.kind}.{ext}"
+    stem = paths.timestamp_stem(when)
+    return paths.date_dir(data_dir, "derivatives", when) / f"{stem}_{worker_id}_{derivative.kind}.{ext}"
 
 
 def write_derivative(data_dir: Path, derivative: Derivative, worker_id: str) -> Path | None:

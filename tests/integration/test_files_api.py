@@ -12,17 +12,21 @@ from .test_api_endpoints import VIEWER_PASSWORD, _build_harness, login
 
 
 def _seed(data_dir, date: str = "2026-03-14") -> None:
-    """A day of output shaped exactly like the capture pipeline writes it."""
-    thumbnails = data_dir / "thumbnails" / date
-    raws = data_dir / "raw" / date
-    derivatives = data_dir / "derivatives" / date
+    """A day of output shaped exactly like the capture pipeline writes it —
+    nested YYYY/MM/DD directories, YYYYMMDD-HHMMSS (UTC) filenames."""
+    date_path = date.replace("-", "/")
+    stem_date = date.replace("-", "")
+    thumbnails = data_dir / "thumbnails" / date_path
+    raws = data_dir / "raw" / date_path
+    derivatives = data_dir / "derivatives" / date_path
     for directory in (thumbnails, raws, derivatives):
         directory.mkdir(parents=True, exist_ok=True)
 
     for time_token in ("201500", "203000"):
-        (thumbnails / f"{time_token}.jpg").write_bytes(b"\xff\xd8\xff" + b"0" * 64)
-        (thumbnails / f"{time_token}.json").write_text('{"exposure_us": 1000}')
-    (raws / "203000.fits").write_bytes(b"SIMPLE  =" + b" " * 100)
+        stem = f"{stem_date}-{time_token}"
+        (thumbnails / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff" + b"0" * 64)
+        (thumbnails / f"{stem}.json").write_text('{"exposure_us": 1000}')
+    (raws / f"{stem_date}-203000.fits").write_bytes(b"SIMPLE  =" + b" " * 100)
     (derivatives / "keogram.png").write_bytes(b"\x89PNG" + b"0" * 32)
 
 
@@ -38,11 +42,11 @@ async def test_directory_listing_and_usage(tmp_path, redis_url):
             assert root["parent"] is None
             assert all(e["kind"] == "dir" for e in root["entries"])
 
-            day = (await client.get("/api/files", params={"path": "thumbnails/2026-03-14"})).json()
-            assert day["parent"] == "thumbnails"
+            day = (await client.get("/api/files", params={"path": "thumbnails/2026/03/14"})).json()
+            assert day["parent"] == "thumbnails/2026/03"
             names = {e["name"]: e for e in day["entries"]}
-            assert names["201500.jpg"]["media"] == "image"
-            assert names["201500.json"]["media"] == "json"
+            assert names["20260314-201500.jpg"]["media"] == "image"
+            assert names["20260314-201500.json"]["media"] == "json"
 
             usage = (await client.get("/api/files/usage")).json()
             assert usage["by_subdir"]["thumbnails"] > 0
@@ -91,14 +95,16 @@ async def test_download_and_delete(tmp_path, redis_url):
             await login(client)
 
             content = await client.get(
-                "/api/files/content", params={"path": "thumbnails/2026-03-14/201500.json"}
+                "/api/files/content", params={"path": "thumbnails/2026/03/14/20260314-201500.json"}
             )
             assert content.status_code == 200
             assert content.json() == {"exposure_us": 1000}
 
-            deleted = await client.delete("/api/files", params={"path": "thumbnails/2026-03-14/201500.jpg"})
+            deleted = await client.delete(
+                "/api/files", params={"path": "thumbnails/2026/03/14/20260314-201500.jpg"}
+            )
             assert deleted.status_code == 200
-            assert not (harness.data_dir / "thumbnails/2026-03-14/201500.jpg").exists()
+            assert not (harness.data_dir / "thumbnails/2026/03/14/20260314-201500.jpg").exists()
 
             # The data directory itself is not deletable.
             assert (await client.delete("/api/files", params={"path": ""})).status_code == 400
@@ -108,17 +114,18 @@ async def test_download_and_delete(tmp_path, redis_url):
 
 async def test_fits_preview_renders_png(tmp_path, redis_url):
     harness = await _build_harness(tmp_path, redis_url, "filestest4")
-    raw_dir = harness.data_dir / "raw" / "2026-03-14"
+    raw_dir = harness.data_dir / "raw" / "2026" / "03" / "14"
     raw_dir.mkdir(parents=True)
     # (channels, height, width), matching storage/raw_writer.py.
     data = np.random.default_rng(0).integers(0, 4096, size=(3, 64, 96), dtype=np.uint16)
-    fits.PrimaryHDU(data=data).writeto(raw_dir / "203000.fits")
+    fits.PrimaryHDU(data=data).writeto(raw_dir / "20260314-203000.fits")
 
     try:
         async with harness.client() as client:
             await login(client)
             resp = await client.get(
-                "/api/files/preview", params={"path": "raw/2026-03-14/203000.fits", "max_dim": 64}
+                "/api/files/preview",
+                params={"path": "raw/2026/03/14/20260314-203000.fits", "max_dim": 64},
             )
             assert resp.status_code == 200
             assert resp.headers["content-type"] == "image/png"
@@ -146,20 +153,20 @@ async def test_frames_manager_groups_and_deletes_captures(tmp_path, redis_url):
             listing = (await client.get("/api/frames", params={"date": "2026-03-14"})).json()
             frames = {f["time"]: f for f in listing["frames"]}
             # One capture is three files in three directories; the manager
-            # presents it as a single row.
-            assert frames["203000"]["thumbnail"] == "thumbnails/2026-03-14/203000.jpg"
-            assert frames["203000"]["raw"] == "raw/2026-03-14/203000.fits"
-            assert frames["203000"]["metadata"] == "thumbnails/2026-03-14/203000.json"
-            assert frames["201500"]["raw"] is None
-            assert frames["203000"]["captured_at"].startswith("2026-03-14T20:30:00")
+            # presents it as a single row, keyed by its full UTC stem.
+            assert frames["20260314-203000"]["thumbnail"] == "thumbnails/2026/03/14/20260314-203000.jpg"
+            assert frames["20260314-203000"]["raw"] == "raw/2026/03/14/20260314-203000.fits"
+            assert frames["20260314-203000"]["metadata"] == "thumbnails/2026/03/14/20260314-203000.json"
+            assert frames["20260314-201500"]["raw"] is None
+            assert frames["20260314-203000"]["captured_at"].startswith("2026-03-14T20:30:00")
             assert [d["name"] for d in listing["derivatives"]] == ["keogram.png"]
 
             single = await client.request(
-                "DELETE", "/api/frames", json={"date": "2026-03-14", "times": ["201500"]}
+                "DELETE", "/api/frames", json={"times": ["20260314-201500"]}
             )
             assert single.json()["files_removed"] == 2  # jpg + json sidecar
-            assert not (harness.data_dir / "thumbnails/2026-03-14/201500.jpg").exists()
-            assert (harness.data_dir / "thumbnails/2026-03-14/203000.jpg").exists()
+            assert not (harness.data_dir / "thumbnails/2026/03/14/20260314-201500.jpg").exists()
+            assert (harness.data_dir / "thumbnails/2026/03/14/20260314-203000.jpg").exists()
 
             whole_day = await client.request("DELETE", "/api/frames", json={"date": "2026-03-14"})
             assert whole_day.json()["files_removed"] == 4
@@ -168,6 +175,7 @@ async def test_frames_manager_groups_and_deletes_captures(tmp_path, redis_url):
             assert (
                 await client.request("DELETE", "/api/frames", json={"date": "not-a-date"})
             ).status_code == 400
+            assert (await client.request("DELETE", "/api/frames", json={})).status_code == 400
     finally:
         await harness.config_manager.stop()
 
@@ -181,6 +189,66 @@ async def test_viewers_can_read_but_not_delete(tmp_path, redis_url):
             assert (await client.get("/api/frames", params={"date": "2026-03-14"})).status_code == 200
             resp = await client.request("DELETE", "/api/frames", json={"date": "2026-03-14"})
             assert resp.status_code == 403
-            assert (harness.data_dir / "thumbnails/2026-03-14/201500.jpg").exists()
+            assert (harness.data_dir / "thumbnails/2026/03/14/20260314-201500.jpg").exists()
+    finally:
+        await harness.config_manager.stop()
+
+
+async def test_frames_pagination(tmp_path, redis_url):
+    """limit/offset slice the (time-sorted) frame list and total_frames
+    reflects the unpaginated count."""
+    harness = await _build_harness(tmp_path, redis_url, "filestest7")
+    thumbs = harness.data_dir / "thumbnails" / "2026" / "03" / "14"
+    thumbs.mkdir(parents=True)
+    for hour in range(5):
+        (thumbs / f"20260314-{hour:02d}0000.jpg").write_bytes(b"\xff\xd8\xff")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            page1 = (
+                await client.get("/api/frames", params={"date": "2026-03-14", "limit": 2, "offset": 0})
+            ).json()
+            page2 = (
+                await client.get("/api/frames", params={"date": "2026-03-14", "limit": 2, "offset": 2})
+            ).json()
+            assert page1["total_frames"] == 5
+            assert [f["time"] for f in page1["frames"]] == ["20260314-000000", "20260314-010000"]
+            assert [f["time"] for f in page2["frames"]] == ["20260314-020000", "20260314-030000"]
+    finally:
+        await harness.config_manager.stop()
+
+
+async def test_observation_night_spans_utc_midnight(tmp_path, redis_url):
+    """A session running late on one UTC date and into the next (the normal
+    case anywhere east of Greenwich) must show up as one observation night,
+    not split across two — the whole point of night-mode grouping. Also
+    proves a night-mode selection deletes correctly with no `date` field,
+    since each capture's own stem carries its date."""
+    harness = await _build_harness(tmp_path, redis_url, "filestest8")
+    # Prague in December: night runs roughly 15:00 UTC to 07:00 UTC, so
+    # these two timestamps are both deep night regardless of the exact
+    # sunrise second, on either side of the UTC date boundary between them.
+    evening = harness.data_dir / "thumbnails" / "2026" / "12" / "20"
+    early_morning = harness.data_dir / "thumbnails" / "2026" / "12" / "21"
+    evening.mkdir(parents=True)
+    early_morning.mkdir(parents=True)
+    (evening / "20261220-230000.jpg").write_bytes(b"\xff\xd8\xff")
+    (early_morning / "20261221-030000.jpg").write_bytes(b"\xff\xd8\xff")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            nights = (await client.get("/api/frames/nights")).json()
+            matching = [n for n in nights if n["thumbnails"] == 2]
+            assert len(matching) == 1, f"expected one night with both frames, got {nights}"
+            night_label = matching[0]["date"]
+
+            listing = (await client.get("/api/frames", params={"night": night_label})).json()
+            stems = {f["time"] for f in listing["frames"]}
+            assert stems == {"20261220-230000", "20261221-030000"}
+
+            deleted = await client.request("DELETE", "/api/frames", json={"times": list(stems)})
+            assert deleted.json()["files_removed"] == 2
+            assert not evening.joinpath("20261220-230000.jpg").exists()
+            assert not early_morning.joinpath("20261221-030000.jpg").exists()
     finally:
         await harness.config_manager.stop()

@@ -75,11 +75,14 @@ class UploadWorker(threading.Thread):
                 self._stop_event.wait(_IDLE_POLL_S)
 
     def _incremental_push(self, cfg: UploadConfig) -> None:
-        today = datetime.now(UTC).date().isoformat()
+        # "Today" is a UTC date, and storage/paths.py nests it as YYYY/MM/DD
+        # on disk — translate once here so both the local lookup and the
+        # remote target mirror that layout exactly.
+        today_path = datetime.now(UTC).date().isoformat().replace("-", "/")
         for subdir in ("thumbnails", "raw", "derivatives"):
-            local = self._data_dir / subdir / today
+            local = self._data_dir / subdir / today_path
             if local.exists():
-                transport_rsync.push_tree(cfg, local, f"{cfg.camera_slug}/{subdir}/{today}")
+                transport_rsync.push_tree(cfg, local, f"{cfg.camera_slug}/{subdir}/{today_path}")
         self._push_manifests(cfg)
 
     def _reconcile(self, cfg: UploadConfig) -> None:

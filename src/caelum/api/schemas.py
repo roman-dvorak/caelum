@@ -19,6 +19,11 @@ class StatusResponse(BaseModel):
     last_capture_at: str | None
     last_stats: FrameStats | None
     last_save_raw: bool | None
+    #: IANA name from `location.timezone` (e.g. "Europe/Prague") — every
+    #: timestamp elsewhere in the API is UTC; this is what the frontend
+    #: converts to and labels, so "what timezone am I looking at" is never
+    #: a guess. See packages/ui's `formatLocalTime`.
+    timezone: str
 
 
 class SkyStateResponse(BaseModel):
@@ -137,6 +142,11 @@ class FrameDateSummary(BaseModel):
 
 
 class FrameEntry(BaseModel):
+    #: The full `YYYYMMDD-HHMMSS` (UTC) stem every file for this capture
+    #: shares — self-sufficient: it is what `DELETE /api/frames` takes back,
+    #: and it is enough on its own to know which UTC date directory the
+    #: files live in, so a night-mode selection spanning two UTC dates
+    #: needs no separate date field to delete correctly.
     time: str
     captured_at: str
     thumbnail: str | None
@@ -146,14 +156,41 @@ class FrameEntry(BaseModel):
 
 
 class FrameListResponse(BaseModel):
+    #: Echoes whichever of `date`/`night` the request used.
     date: str
     frames: list[FrameEntry]
     derivatives: list[FileEntry]
+    #: Total frames in this date/night before `limit`/`offset` were applied
+    #: — what the UI needs to render "51-100 of 1200" and page count.
+    total_frames: int
+    limit: int
+    offset: int
+    #: Every UTC date this response draws from — one entry in date mode,
+    #: up to two in night mode. Lets the UI bulk-delete a whole observation
+    #: night correctly (one DELETE per UTC date) without needing every page
+    #: of results loaded first to know which dates are involved.
+    utc_dates: list[str]
+
+
+class ObservationNightSummary(BaseModel):
+    """Same shape as `FrameDateSummary`, but `date` is the *local* calendar
+    date the night started on (see `next_sunrise`-based grouping in
+    api/routes/frames.py) rather than the UTC directory date — a session
+    that runs past UTC midnight stays one entry instead of splitting."""
+
+    date: str
+    thumbnails: int
+    raws: int
+    derivatives: int
+    total_bytes: int
 
 
 class DeleteFramesRequest(BaseModel):
-    date: str
-    #: Empty means "the whole date", which is the bulk-delete case.
+    #: Required when `times` is empty (the whole-date bulk-delete case).
+    #: Ignored otherwise — each entry in `times` is a full `YYYYMMDD-HHMMSS`
+    #: stem and carries its own date, so a selection spanning two UTC dates
+    #: (an observation night crossing midnight) deletes correctly without it.
+    date: str | None = None
     times: list[str] = Field(default_factory=list)
     kinds: list[Literal["raw", "thumbnails", "derivatives"]] = Field(
         default_factory=lambda: ["raw", "thumbnails", "derivatives"]
