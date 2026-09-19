@@ -16,6 +16,8 @@ import type {
   ExposureOverrideRequest,
   ExposureOverrideResponse,
   FrameListResponse,
+  ListFramesParams,
+  ObservationNightSummary,
   FrameMetadata,
   FrameDateSummary,
   LogEntry,
@@ -226,12 +228,23 @@ export class LocalApiClient {
 
   // ---- recordings --------------------------------------------------------
 
+  /** UTC calendar dates — matches the on-disk layout, splits at UTC midnight. */
   listFrameDates(): Promise<FrameDateSummary[]> {
     return this.request<FrameDateSummary[]>('/frames/dates')
   }
 
-  listFrames(date: string): Promise<FrameListResponse> {
-    return this.request<FrameListResponse>(`/frames?date=${encodeURIComponent(date)}`)
+  /** Observation nights, sunrise to sunrise — see ListFramesParams. */
+  listObservationNights(): Promise<ObservationNightSummary[]> {
+    return this.request<ObservationNightSummary[]>('/frames/nights')
+  }
+
+  listFrames(params: ListFramesParams): Promise<FrameListResponse> {
+    const query = new URLSearchParams()
+    if (params.date) query.set('date', params.date)
+    if (params.night) query.set('night', params.night)
+    if (params.limit) query.set('limit', String(params.limit))
+    if (params.offset) query.set('offset', String(params.offset))
+    return this.request<FrameListResponse>(`/frames?${query}`)
   }
 
   deleteFrames(body: DeleteFramesRequest): Promise<{ date: string; files_removed: number }> {

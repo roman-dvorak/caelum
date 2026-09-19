@@ -52,6 +52,10 @@ export interface StatusResponse {
   last_capture_at: string | null
   last_stats: FrameStats | null
   last_save_raw: boolean | null
+  /** IANA name from `location.timezone` (e.g. "Europe/Prague"). Every
+   * timestamp elsewhere in the API is UTC; this is what to convert to and
+   * label when showing a time to a human — see `formatLocalTime`. */
+  timezone: string
 }
 
 /**
@@ -365,6 +369,17 @@ export interface UsageResponse {
 }
 
 // ---- /api/frames/* -------------------------------------------------------
+//
+// Two ways to group frames into a "day" — see the backend's
+// api/routes/frames.py module docstring for the full rationale:
+//
+// - date  (GET /api/frames/dates, ?date=)  — UTC calendar date, matches the
+//   on-disk layout, but a session crossing UTC midnight splits across two.
+// - night (GET /api/frames/nights, ?night=) — sunrise-to-sunrise, labelled
+//   by the local date the preceding sunrise fell on. Stays one entry
+//   regardless of UTC midnight. This is the one worth defaulting the UI to.
+//
+// Both take/return "YYYY-MM-DD" strings; every timestamp remains UTC.
 
 export interface FrameDateSummary {
   date: string
@@ -374,8 +389,16 @@ export interface FrameDateSummary {
   total_bytes: number
 }
 
+/** Same shape, `date` means "the local date the night started on" instead
+ * of a UTC calendar date. */
+export type ObservationNightSummary = FrameDateSummary
+
 /** One capture, with its up-to-three files resolved back into a single row. */
 export interface FrameEntry {
+  /** Full `YYYYMMDD-HHMMSS` (UTC) stem shared by all of this capture's
+   * files — self-sufficient: it is what `DeleteFramesRequest.times` takes
+   * back, and it is enough on its own to know which UTC date directory the
+   * files live in (see `formatCaptureTime` for pulling out just the time). */
   time: string
   captured_at: string
   thumbnail: string | null
@@ -385,14 +408,32 @@ export interface FrameEntry {
 }
 
 export interface FrameListResponse {
+  /** Echoes whichever of `date`/`night` the request used. */
   date: string
   frames: FrameEntry[]
   derivatives: FileEntry[]
+  /** Total frames in this date/night before `limit`/`offset` were applied. */
+  total_frames: number
+  limit: number
+  offset: number
+  /** Every UTC date this response draws from — one in date mode, up to two
+   * in night mode. Lets a "delete this whole period" action bulk-delete
+   * correctly without needing every page of results loaded first. */
+  utc_dates: string[]
+}
+
+export interface ListFramesParams {
+  /** Pass exactly one of `date` or `night`. */
+  date?: string
+  night?: string
+  limit?: number
+  offset?: number
 }
 
 export interface DeleteFramesRequest {
-  date: string
-  /** Empty (or omitted) means the whole date. */
+  /** Required when `times` is empty (the whole-date bulk-delete case);
+   * ignored otherwise — each stem in `times` carries its own date. */
+  date?: string
   times?: string[]
   kinds?: ('raw' | 'thumbnails' | 'derivatives')[]
 }

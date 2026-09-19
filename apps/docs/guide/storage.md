@@ -10,7 +10,7 @@ convention shared by the storage writer, the retention sweeper and the
 uploader:
 
 ```
-<data_dir>/<kind>/<YYYY-MM-DD>/<HHMMSS>[...].<ext>
+<data_dir>/<kind>/<YYYY>/<MM>/<DD>/<YYYYMMDD-HHMMSS>[...].<ext>
 ```
 
 A populated data directory looks like this:
@@ -18,43 +18,50 @@ A populated data directory looks like this:
 ```
 data/
   raw/
-    2026-09-19/
-      210431.fits
-      210431.json
-      210501.fits
-      210501.json
+    2026/09/19/
+      20260919-210431.fits
+      20260919-210431.json
+      20260919-210501.fits
+      20260919-210501.json
   thumbnails/
-    2026-09-19/
-      210431.jpg
-      210431.json
-      210501.jpg
-      210501.json
+    2026/09/19/
+      20260919-210431.jpg
+      20260919-210431.json
+      20260919-210501.jpg
+      20260919-210501.json
       index.json
   derivatives/
-    2026-09-19/
-      235959_keogram_keogram.png
-      210433_meteor_detection_meteor_crop.jpg
+    2026/09/19/
+      20260919-235959_keogram_keogram.png
+      20260919-210433_meteor_detection_meteor_crop.jpg
   darks/
     dark_1000000us_4.0g_4056x3040.npy
   manifest.json
 ```
 
-Dates and times are UTC, taken from the frame's `captured_at`. The three
-managed subdirectories — `raw`, `thumbnails`, `derivatives` — are the ones
-retention sweeps. `darks` is a hand-curated calibration library and is never
-touched.
+Both the nested `YYYY/MM/DD` directories and the `YYYYMMDD-HHMMSS` filename
+carry the same timestamp, deliberately redundantly — the nesting makes a
+`thumbnails/2026/09/` listing a plain "browse by month" without opening
+anything, and the full timestamp in the name means any single file, on its
+own, is enough to know exactly when it was captured. Every date and time
+here is **UTC**, always, taken from the frame's `captured_at` — the local
+site time only ever shows up already converted, in the [web UI](/guide/web-ui),
+with the zone made explicit. The three managed subdirectories — `raw`, `thumbnails`, `derivatives` — are
+the ones retention sweeps. `darks` is a hand-curated calibration library and
+is never touched.
 
-Derivative filenames carry more than a time, because several workers may emit
-on the same second:
+Derivative filenames carry more than a timestamp, because several workers may
+emit on the same second:
 
 ```
-<HHMMSS>_<worker_id>_<kind>.<ext>
+<YYYYMMDD-HHMMSS>_<worker_id>_<kind>.<ext>
 ```
 
 The extension is `png` for anything whose kind starts with `keogram`, and `jpg`
-otherwise. Retention reconstructs a file's capture time by splitting the stem
-on the first `_` and parsing `<parent dir name><time token>`, which is why the
-time component must come first.
+otherwise. Retention reconstructs a file's capture time straight from its own
+name — splitting the stem on the first `_` and parsing what's left as
+`YYYYMMDD-HHMMSS` — which is why the timestamp must come first and needs no
+help from the parent directory.
 
 ## Metadata sidecars
 

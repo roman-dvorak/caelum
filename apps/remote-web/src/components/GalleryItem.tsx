@@ -1,4 +1,4 @@
-import { ImageViewer } from '@caelum/ui'
+import { ImageViewer, formatCaptureTime } from '@caelum/ui'
 import { useFrameMetadata } from '../hooks/useFrameMetadata.ts'
 import { remoteApiClient } from '../services/client.ts'
 
@@ -20,15 +20,8 @@ export function GalleryItem({ slug, time, thumbnailPath, metadataPath }: Gallery
     <figure className="overflow-hidden border border-line bg-void">
       <ImageViewer src={thumbnailUrl} metadata={metadata} alt={`Frame at ${time}`} />
       <figcaption className="border-t border-line-soft px-2 py-1 text-center font-mono text-xs text-ink-faint">
-        {formatTime(time)}
+        {formatCaptureTime(time)}
       </figcaption>
     </figure>
   )
-}
-
-function formatTime(time: string): string {
-  const match = /^(\d{2})(\d{2})(\d{2})$/.exec(time)
-  if (!match) return time
-  const [, h, m, s] = match
-  return `${h}:${m}:${s}`
 }

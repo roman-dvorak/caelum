@@ -109,7 +109,7 @@ the local UI requests live viewing (`POST /api/camera/mode`), the worker takes
 ## Frame metadata
 
 Every frame carries a `FrameMetadata` document. The same JSON shape is pushed
-live over the WebSocket, written as a `<HHMMSS>.json` sidecar next to every
+live over the WebSocket, written as a `<YYYYMMDD-HHMMSS>.json` sidecar next to every
 stored image, and mirrored to the remote server by the uploader — so the
 overlay renderer in `@caelum/ui` draws from an identical structure regardless
 of where it came from.

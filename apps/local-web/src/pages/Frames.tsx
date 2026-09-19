@@ -13,9 +13,13 @@ import {
   TrashIcon,
   formatBytes,
   formatCaptureTime,
+  formatSiteTime,
 } from '@caelum/ui'
 import { useAuth } from '../authContext.ts'
 import { localApiClient } from '../services/client.ts'
+
+type GroupMode = 'night' | 'date'
+const PAGE_SIZE = 60
 
 /**
  * The recordings manager: the capture archive as a time series rather than
@@ -23,27 +27,51 @@ import { localApiClient } from '../services/client.ts'
  * frame collapsed together, plus the bulk deletes that actually reclaim
  * space — a night of raw frames is gigabytes, and deleting it one file at a
  * time through the file browser is not a real option.
+ *
+ * Two groupings, picked with the toggle below:
+ * - **Night** (default) — sunrise to sunrise, local time. A session that
+ *   runs past UTC midnight (the normal case anywhere east of Greenwich)
+ *   stays one entry instead of splitting in two.
+ * - **Date (UTC)** — the on-disk calendar date, useful for cross-referencing
+ *   the raw directory tree or the remote gallery, which both use it.
+ *
+ * Every timestamp from the API is UTC; `timezone` (from `/api/status`) is
+ * what every displayed time gets converted to and labelled with, so it is
+ * never a guess which zone a given clock reading is in.
  */
 export function Frames() {
   const { isAdmin } = useAuth()
-  const [dates, setDates] = useState<FrameDateSummary[] | null>(null)
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [mode, setMode] = useState<GroupMode>('night')
+  const [timezone, setTimezone] = useState<string | null>(null)
+  const [summaries, setSummaries] = useState<FrameDateSummary[] | null>(null)
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  // Re-runs the date fetch from handlers without those handlers touching
-  // state themselves — see the same idiom in Files.tsx and hooks/useStatus.
   const [reloadToken, setReloadToken] = useState(0)
-  const reloadDates = useCallback(async () => setReloadToken((n) => n + 1), [])
+  const reload = useCallback(async () => setReloadToken((n) => n + 1), [])
+
+  useEffect(() => {
+    let cancelled = false
+    localApiClient
+      .getStatus()
+      .then((status) => {
+        if (!cancelled) setTimezone(status.timezone)
+      })
+      .catch(() => undefined) // non-fatal: falls back to showing raw UTC only
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
 
     async function run() {
       try {
-        const result = await localApiClient.listFrameDates()
+        const result =
+          mode === 'night' ? await localApiClient.listObservationNights() : await localApiClient.listFrameDates()
         if (cancelled) return
-        setDates(result)
-        setSelectedDate((current) => current ?? result[0]?.date ?? null)
+        setSummaries(result)
+        setSelectedLabel(result[0]?.date ?? null)
         setError(null)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
@@ -54,14 +82,19 @@ export function Frames() {
     return () => {
       cancelled = true
     }
-  }, [reloadToken])
+    // Switching mode picks a fresh default selection rather than trying to
+    // carry a UTC date into night-mode's different labelling or vice versa.
+  }, [mode, reloadToken])
 
-  async function deleteDate(date: string) {
-    if (!window.confirm(`Delete every file captured on ${date}? This cannot be undone.`)) return
+  async function deleteWholePeriod(utcDates: string[]) {
+    const what = mode === 'night' ? 'night' : 'date'
+    if (!window.confirm(`Delete every file captured this ${what}? This cannot be undone.`)) return
     try {
-      await localApiClient.deleteFrames({ date })
-      setSelectedDate(null)
-      await reloadDates()
+      for (const utcDate of utcDates) {
+        await localApiClient.deleteFrames({ date: utcDate })
+      }
+      setSelectedLabel(null)
+      await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -71,31 +104,48 @@ export function Frames() {
     <>
       <PageHeader
         title="Recordings"
-        description="Captured frames by night, with the raw files and derivatives that belong to each."
+        description="Captured frames, with the raw files and derivatives that belong to each."
         actions={
-          <Button icon={<RefreshIcon size={14} />} onClick={() => void reloadDates()}>
-            Refresh
-          </Button>
+          <>
+            <div className="flex border border-line text-xs">
+              {(['night', 'date'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setMode(option)}
+                  className={[
+                    'px-3 py-1.5 tracking-wide uppercase transition',
+                    mode === option ? 'bg-amber text-void font-semibold' : 'text-ink-dim hover:text-ink',
+                  ].join(' ')}
+                >
+                  {option === 'night' ? 'Night' : 'Date (UTC)'}
+                </button>
+              ))}
+            </div>
+            <Button icon={<RefreshIcon size={14} />} onClick={() => void reload()}>
+              Refresh
+            </Button>
+          </>
         }
       />
 
       {error ? <Message kind="error">{error}</Message> : null}
 
-      {dates === null ? (
+      {summaries === null ? (
         <Loading />
-      ) : dates.length === 0 ? (
+      ) : summaries.length === 0 ? (
         <EmptyState>Nothing recorded yet.</EmptyState>
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {dates.map((summary) => (
+            {summaries.map((summary) => (
               <button
                 key={summary.date}
                 type="button"
-                onClick={() => setSelectedDate(summary.date)}
+                onClick={() => setSelectedLabel(summary.date)}
                 className={[
                   'flex shrink-0 flex-col items-start gap-0.5 border px-3 py-2 text-left transition',
-                  summary.date === selectedDate
+                  summary.date === selectedLabel
                     ? 'border-amber bg-amber/8 text-amber'
                     : 'border-line text-ink-dim hover:border-amber-dim hover:text-ink',
                 ].join(' ')}
@@ -108,13 +158,15 @@ export function Frames() {
             ))}
           </div>
 
-          {selectedDate ? (
-            <DateDetail
-              key={selectedDate}
-              date={selectedDate}
+          {selectedLabel ? (
+            <PeriodDetail
+              key={`${mode}:${selectedLabel}`}
+              mode={mode}
+              label={selectedLabel}
+              timezone={timezone}
               isAdmin={isAdmin}
-              onDeleteDate={() => void deleteDate(selectedDate)}
-              onChanged={reloadDates}
+              onDeleteWholePeriod={deleteWholePeriod}
+              onChanged={reload}
             />
           ) : null}
         </div>
@@ -123,21 +175,26 @@ export function Frames() {
   )
 }
 
-function DateDetail({
-  date,
+function PeriodDetail({
+  mode,
+  label,
+  timezone,
   isAdmin,
-  onDeleteDate,
+  onDeleteWholePeriod,
   onChanged,
 }: {
-  date: string
+  mode: GroupMode
+  label: string
+  timezone: string | null
   isAdmin: boolean
-  onDeleteDate: () => void
+  onDeleteWholePeriod: (utcDates: string[]) => void
   onChanged: () => Promise<void>
 }) {
   const [listing, setListing] = useState<FrameListResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selection, setSelection] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(0)
 
   const [reloadToken, setReloadToken] = useState(0)
   const reload = useCallback(async () => setReloadToken((n) => n + 1), [])
@@ -147,7 +204,12 @@ function DateDetail({
 
     async function run() {
       try {
-        const next = await localApiClient.listFrames(date)
+        const params = {
+          [mode]: label,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        } as Parameters<typeof localApiClient.listFrames>[0]
+        const next = await localApiClient.listFrames(params)
         if (cancelled) return
         setListing(next)
         setSelection(new Set())
@@ -161,12 +223,11 @@ function DateDetail({
     return () => {
       cancelled = true
     }
-  }, [date, reloadToken])
+  }, [mode, label, page, reloadToken])
 
   const totals = useMemo(() => {
     const frames = listing?.frames ?? []
     return {
-      count: frames.length,
       raws: frames.filter((f) => f.raw).length,
       bytes: frames.reduce((sum, f) => sum + f.total_bytes, 0),
     }
@@ -182,10 +243,12 @@ function DateDetail({
 
   async function deleteSelection() {
     if (selection.size === 0) return
-    if (!window.confirm(`Delete ${selection.size} capture(s) from ${date}?`)) return
+    if (!window.confirm(`Delete ${selection.size} capture(s)?`)) return
     setBusy(true)
     try {
-      await localApiClient.deleteFrames({ date, times: [...selection] })
+      // Each stem carries its own UTC date, so this deletes correctly even
+      // when the selection spans two dates (a night crossing midnight).
+      await localApiClient.deleteFrames({ times: [...selection] })
       await reload()
       await onChanged()
     } catch (err) {
@@ -195,14 +258,18 @@ function DateDetail({
     }
   }
 
-  /** Delete only the raw FITS files, keeping thumbnails and metadata — the
-   * usual way to reclaim most of a night's space without losing the record
-   * that the night happened. */
-  async function deleteRawOnly() {
-    if (!window.confirm(`Delete all raw frames from ${date}, keeping thumbnails?`)) return
+  /** Delete only the raw FITS files on the *currently loaded page*, keeping
+   * thumbnails and metadata — the usual way to reclaim most of a night's
+   * space without losing the record that it happened. Scoped to the page
+   * (not the whole period) so it doesn't silently touch more than what's
+   * on screen when the listing is paginated. */
+  async function deleteRawOnlyOnPage() {
+    const stemsWithRaw = (listing?.frames ?? []).filter((f) => f.raw).map((f) => f.time)
+    if (stemsWithRaw.length === 0) return
+    if (!window.confirm(`Delete ${stemsWithRaw.length} raw frame(s) on this page, keeping thumbnails?`)) return
     setBusy(true)
     try {
-      await localApiClient.deleteFrames({ date, kinds: ['raw'] })
+      await localApiClient.deleteFrames({ times: stemsWithRaw, kinds: ['raw'] })
       await reload()
       await onChanged()
     } catch (err) {
@@ -215,10 +282,15 @@ function DateDetail({
   if (error) return <Message kind="error">{error}</Message>
   if (!listing) return <Loading />
 
+  const pageCount = Math.max(1, Math.ceil(listing.total_frames / PAGE_SIZE))
+  const currentPage = Math.floor(listing.offset / PAGE_SIZE)
+  const rangeStart = listing.total_frames === 0 ? 0 : listing.offset + 1
+  const rangeEnd = Math.min(listing.offset + listing.frames.length, listing.total_frames)
+
   return (
     <div className="flex flex-col gap-4">
       <Panel
-        title={date}
+        title={mode === 'night' ? `Night of ${label}` : label}
         actions={
           isAdmin ? (
             <>
@@ -230,21 +302,26 @@ function DateDetail({
               >
                 Delete {selection.size || ''} selected
               </Button>
-              <Button variant="danger" disabled={busy || totals.raws === 0} onClick={() => void deleteRawOnly()}>
-                Delete raw only
+              <Button variant="danger" disabled={busy || totals.raws === 0} onClick={() => void deleteRawOnlyOnPage()}>
+                Delete raw on page
               </Button>
-              <Button variant="danger" icon={<TrashIcon size={14} />} disabled={busy} onClick={onDeleteDate}>
-                Delete date
+              <Button
+                variant="danger"
+                icon={<TrashIcon size={14} />}
+                disabled={busy}
+                onClick={() => onDeleteWholePeriod(listing.utc_dates)}
+              >
+                Delete {mode === 'night' ? 'night' : 'date'}
               </Button>
             </>
           ) : null
         }
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Readout label="Captures" value={totals.count} />
-          <Readout label="With raw" value={totals.raws} />
+          <Readout label="Captures (page)" value={listing.frames.length} />
+          <Readout label="Total captures" value={listing.total_frames} />
           <Readout label="Derivatives" value={listing.derivatives.length} />
-          <Readout label="Total size" value={formatBytes(totals.bytes)} />
+          <Readout label="Page size" value={formatBytes(totals.bytes)} />
         </div>
       </Panel>
 
@@ -258,11 +335,18 @@ function DateDetail({
                   <span className="font-mono text-xs text-ink-faint">{formatBytes(entry.size)}</span>
                 </div>
                 {entry.media === 'image' ? (
+                  // Not `w-full`: a keogram is wide once a night's worth of
+                  // columns has built up, but the "live" one starts as just
+                  // a handful of columns — portrait, not landscape — and
+                  // `w-full` would stretch that sliver to full width, which
+                  // blows the height up proportionally to match. Capping
+                  // height and letting width follow (object-contain) scales
+                  // correctly either way, mid-night or finished.
                   <img
                     src={localApiClient.fileContentUrl(entry.path)}
                     alt={entry.name}
                     loading="lazy"
-                    className="w-full border border-line-soft bg-void"
+                    className="mx-auto max-h-40 max-w-full border border-line-soft bg-void object-contain"
                   />
                 ) : null}
               </div>
@@ -272,14 +356,14 @@ function DateDetail({
       ) : null}
 
       {listing.frames.length === 0 ? (
-        <EmptyState>No captures stored for this date.</EmptyState>
+        <EmptyState>No captures on this page.</EmptyState>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {listing.frames.map((frame) => (
             <FrameTile
               key={frame.time}
               frame={frame}
-              date={date}
+              timezone={timezone}
               selected={selection.has(frame.time)}
               selectable={isAdmin}
               onToggle={() => toggle(frame.time)}
@@ -287,6 +371,25 @@ function DateDetail({
           ))}
         </div>
       )}
+
+      {listing.total_frames > PAGE_SIZE ? (
+        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-3">
+          <span className="font-mono text-xs text-ink-faint tabular-nums">
+            {rangeStart}–{rangeEnd} of {listing.total_frames}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button disabled={currentPage === 0} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </Button>
+            <span className="font-mono text-xs text-ink-faint tabular-nums">
+              Page {currentPage + 1} / {pageCount}
+            </span>
+            <Button disabled={currentPage + 1 >= pageCount} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -321,13 +424,13 @@ function AssetChip({ label, path, title }: { label: string; path: string | null;
 
 function FrameTile({
   frame,
-  date,
+  timezone,
   selected,
   selectable,
   onToggle,
 }: {
   frame: FrameEntry
-  date: string
+  timezone: string | null
   selected: boolean
   selectable: boolean
   onToggle: () => void
@@ -339,6 +442,12 @@ function FrameTile({
     : frame.raw
       ? localApiClient.filePreviewUrl(frame.raw, 400)
       : null
+
+  // The site's local time is the primary reading (what a human standing at
+  // the camera would see on a clock); the raw UTC stem stays available as a
+  // tooltip so the two can always be cross-checked, never just one or the
+  // other silently.
+  const site = timezone ? formatSiteTime(frame.captured_at, timezone) : null
 
   return (
     <figure
@@ -384,11 +493,9 @@ function FrameTile({
           </span>
         </div>
 
-        {/* Full date, not just the time: these tiles get screenshotted and
-            pasted into reports, where a bare "13:41:32" means nothing. */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2" title={formatCaptureTime(frame.time)}>
           <span className="font-mono text-xs text-ink-dim tabular-nums">
-            {date} {formatCaptureTime(frame.time)}
+            {site ? `${site.clock} ${site.zone}` : formatCaptureTime(frame.time)}
           </span>
           {frame.raw ? (
             <a

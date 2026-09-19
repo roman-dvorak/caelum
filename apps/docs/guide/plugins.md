@@ -58,7 +58,7 @@ class Derivative:
 ```
 
 Return one with an `image` and the pool writes it to
-`<data_dir>/derivatives/<date>/<HHMMSS>_<worker_id>_<kind>.<ext>`, PNG for
+`<data_dir>/derivatives/<YYYY>/<MM>/<DD>/<YYYYMMDD-HHMMSS>_<worker_id>_<kind>.<ext>`, PNG for
 kinds starting with `keogram` and JPEG otherwise, and logs the path.
 
 ## `Plugin`
