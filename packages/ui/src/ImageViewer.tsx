@@ -29,7 +29,7 @@ export function ImageViewer({ src, metadata, alt, className, fit = 'contain' }: 
   return (
     <div className={['relative inline-block w-full leading-none', className ?? ''].join(' ')}>
       {failed ? (
-        <div className="flex aspect-video w-full items-center justify-center rounded bg-slate-900 text-sm text-slate-500">
+        <div className="flex aspect-video w-full items-center justify-center bg-panel text-sm text-ink-faint">
           Image failed to load
         </div>
       ) : (

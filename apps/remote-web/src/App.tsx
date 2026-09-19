@@ -11,10 +11,16 @@ export default function App() {
   return (
     <HashRouter>
       <div className="flex min-h-svh flex-col">
-        <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur-sm">
-          <Link to="/" className="font-semibold tracking-wide text-slate-100">
-            caelum · allsky cameras
-          </Link>
+        <header className="sticky top-0 z-10 border-b border-line bg-void/95 backdrop-blur-sm">
+          <div className="mx-auto flex w-full max-w-6xl items-center px-4 py-3.5">
+            <Link
+              to="/"
+              className="flex items-center gap-2 text-sm font-semibold tracking-[0.2em] text-ink uppercase"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber shadow-[0_0_8px_var(--color-amber)]" />
+              caelum <span className="font-normal tracking-normal text-ink-faint normal-case">/ allsky network</span>
+            </Link>
+          </div>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
           <Routes>

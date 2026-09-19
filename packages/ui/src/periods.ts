@@ -8,12 +8,15 @@ export const PERIOD_LABELS: Record<string, string> = {
   night: 'Night',
 }
 
+/** A warm-to-cool gradient across the day/night cycle — amber at midday,
+ * shading through to cyan at full night — rather than arbitrary category
+ * colors, so the badge itself hints at where in the cycle things are. */
 export const PERIOD_COLORS: Record<string, string> = {
-  day: 'bg-sky-500/20 text-sky-200 ring-sky-400/40',
-  civil_twilight: 'bg-amber-500/20 text-amber-200 ring-amber-400/40',
-  nautical_twilight: 'bg-indigo-500/20 text-indigo-200 ring-indigo-400/40',
-  astronomical_twilight: 'bg-violet-500/20 text-violet-200 ring-violet-400/40',
-  night: 'bg-slate-800/60 text-slate-200 ring-slate-500/40',
+  day: 'bg-amber/15 text-amber-bright ring-amber/50',
+  civil_twilight: 'bg-amber-dim/25 text-amber ring-amber-dim/60',
+  nautical_twilight: 'bg-panel-raised text-ink-dim ring-line',
+  astronomical_twilight: 'bg-cyan-dim/25 text-cyan ring-cyan-dim/60',
+  night: 'bg-cyan-dim/15 text-cyan ring-cyan-dim/50',
 }
 
 export function periodLabel(period: SkyPeriod | string): string {

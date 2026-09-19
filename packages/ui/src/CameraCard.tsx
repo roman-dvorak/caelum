@@ -16,12 +16,12 @@ export function CameraCard({ camera, thumbnailUrl, updatedAt, onClick, className
     <Wrapper
       onClick={onClick}
       className={[
-        'group flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60 text-left transition',
-        onClick ? 'cursor-pointer hover:border-slate-600 hover:bg-slate-900' : '',
+        'group flex flex-col overflow-hidden border border-line bg-panel text-left transition',
+        onClick ? 'cursor-pointer hover:border-amber-dim' : '',
         className ?? '',
       ].join(' ')}
     >
-      <div className="aspect-video w-full overflow-hidden bg-slate-950">
+      <div className="aspect-video w-full overflow-hidden bg-void">
         {thumbnailUrl ? (
           <img
             src={thumbnailUrl}
@@ -29,15 +29,15 @@ export function CameraCard({ camera, thumbnailUrl, updatedAt, onClick, className
             className="h-full w-full object-cover transition group-hover:scale-[1.02]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-slate-600">
+          <div className="flex h-full w-full items-center justify-center text-xs text-ink-faint">
             No frames yet
           </div>
         )}
       </div>
-      <div className="flex flex-col gap-0.5 px-4 py-3">
-        <span className="font-medium text-slate-100">{camera.name}</span>
-        <span className="text-xs text-slate-500">{camera.slug}</span>
-        {updatedAt ? <span className="text-xs text-slate-500">Updated {updatedAt}</span> : null}
+      <div className="flex flex-col gap-0.5 border-t border-line-soft px-4 py-3">
+        <span className="font-medium text-ink">{camera.name}</span>
+        <span className="font-mono text-xs text-ink-faint">{camera.slug}</span>
+        {updatedAt ? <span className="text-xs text-ink-faint">Updated {updatedAt}</span> : null}
       </div>
     </Wrapper>
   )

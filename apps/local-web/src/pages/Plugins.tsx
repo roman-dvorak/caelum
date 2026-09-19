@@ -1,40 +1,45 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { PluginsResponse } from '@caelum/api-client'
 import { usePlugins } from '../hooks/usePlugins.ts'
 
-interface PluginDraft {
-  settingsText: string
-  settingsError: string | null
-}
-
 export function Plugins() {
   const { plugins, error, loading, refresh, updatePlugin } = usePlugins()
-  const [drafts, setDrafts] = useState<Record<string, PluginDraft>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
   const orderedIds = useMemo(() => Object.keys(plugins ?? {}), [plugins])
 
-  useEffect(() => {
-    if (!plugins) return
-    setDrafts((prev) => {
-      const next = { ...prev }
-      for (const [id, plugin] of Object.entries(plugins)) {
-        if (!next[id]) {
-          next[id] = { settingsText: JSON.stringify(plugin.settings, null, 2), settingsError: null }
-        }
-      }
-      return next
-    })
-  }, [plugins])
-
-  if (loading) return <p className="text-sm text-slate-500">Loading plugins…</p>
+  if (loading) return <p className="text-sm text-ink-faint">Loading plugins…</p>
   if (error) {
-    return <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>
+    return <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
   }
-  if (!plugins || orderedIds.length === 0) {
-    return <p className="text-sm text-slate-500">No plugins registered.</p>
-  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <h1 className="text-sm font-semibold tracking-[0.2em] text-ink-dim uppercase">Plugins</h1>
+      {message ? <p className="text-sm text-ink-dim">{message}</p> : null}
+
+      {!plugins || orderedIds.length === 0 ? (
+        <p className="border border-line bg-panel px-4 py-3 text-sm text-ink-faint">No plugins registered.</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {orderedIds.map((id, index) => (
+            <PluginCard
+              key={id}
+              id={id}
+              plugins={plugins}
+              index={index}
+              total={orderedIds.length}
+              busy={busyId === id}
+              onToggleEnabled={(enabled) => void toggleEnabled(id, enabled)}
+              onMove={(direction) => void move(id, direction)}
+              onSaveSettings={(settings) => void saveSettings(id, settings)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   async function toggleEnabled(id: string, enabled: boolean) {
     setBusyId(id)
@@ -71,24 +76,11 @@ export function Plugins() {
     }
   }
 
-  async function saveSettings(id: string) {
-    const draft = drafts[id]
-    if (!draft) return
-    let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(draft.settingsText) as Record<string, unknown>
-    } catch (err) {
-      setDrafts((prev) => ({
-        ...prev,
-        [id]: { ...prev[id], settingsError: err instanceof Error ? err.message : 'Invalid JSON' },
-      }))
-      return
-    }
-    setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], settingsError: null } }))
+  async function saveSettings(id: string, settings: Record<string, unknown>) {
     setBusyId(id)
     setMessage(null)
     try {
-      await updatePlugin(id, { settings: parsed })
+      await updatePlugin(id, { settings })
       setMessage(`Saved settings for "${id}".`)
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err))
@@ -96,33 +88,6 @@ export function Plugins() {
       setBusyId(null)
     }
   }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold text-slate-100">Plugins</h1>
-      {message ? <p className="text-sm text-slate-400">{message}</p> : null}
-
-      <div className="flex flex-col gap-4">
-        {orderedIds.map((id, index) => (
-          <PluginCard
-            key={id}
-            id={id}
-            plugins={plugins}
-            index={index}
-            total={orderedIds.length}
-            busy={busyId === id}
-            draft={drafts[id]}
-            onToggleEnabled={(enabled) => void toggleEnabled(id, enabled)}
-            onMove={(direction) => void move(id, direction)}
-            onSettingsTextChange={(text) =>
-              setDrafts((prev) => ({ ...prev, [id]: { settingsText: text, settingsError: null } }))
-            }
-            onSaveSettings={() => void saveSettings(id)}
-          />
-        ))}
-      </div>
-    </div>
-  )
 }
 
 function PluginCard({
@@ -131,10 +96,8 @@ function PluginCard({
   index,
   total,
   busy,
-  draft,
   onToggleEnabled,
   onMove,
-  onSettingsTextChange,
   onSaveSettings,
 }: {
   id: string
@@ -142,19 +105,35 @@ function PluginCard({
   index: number
   total: number
   busy: boolean
-  draft: PluginDraft | undefined
   onToggleEnabled: (enabled: boolean) => void
   onMove: (direction: -1 | 1) => void
-  onSettingsTextChange: (text: string) => void
-  onSaveSettings: () => void
+  onSaveSettings: (settings: Record<string, unknown>) => void
 }) {
   const plugin = plugins[id]
+  // Seeded once from the plugin's settings at mount — this card's `key={id}`
+  // in the parent means React gives each plugin its own instance/state, so
+  // there's no need to re-sync this from props on every render.
+  const [settingsText, setSettingsText] = useState(() => JSON.stringify(plugin.settings, null, 2))
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+
+  function handleSave() {
+    let parsed: Record<string, unknown>
+    try {
+      parsed = JSON.parse(settingsText) as Record<string, unknown>
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Invalid JSON')
+      return
+    }
+    setSettingsError(null)
+    onSaveSettings(parsed)
+  }
+
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+    <section className="flex flex-col gap-3 border border-line bg-panel p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-sm text-slate-100">{id}</span>
-          <span className="text-xs text-slate-500">order {plugin.order}</span>
+          <span className="font-mono text-sm text-ink">{id}</span>
+          <span className="font-mono text-xs text-ink-faint">order {plugin.order}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -162,7 +141,7 @@ function PluginCard({
             onClick={() => onMove(-1)}
             disabled={busy || index === 0}
             title="Move up"
-            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="border border-line px-2 py-1 text-xs text-ink-dim hover:border-amber-dim hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
           >
             ↑
           </button>
@@ -171,41 +150,41 @@ function PluginCard({
             onClick={() => onMove(1)}
             disabled={busy || index === total - 1}
             title="Move down"
-            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="border border-line px-2 py-1 text-xs text-ink-dim hover:border-amber-dim hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
           >
             ↓
           </button>
-          <label className="flex items-center gap-1.5 text-sm text-slate-300">
+          <label className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-ink-dim uppercase">
             <input
               type="checkbox"
               checked={plugin.enabled}
               disabled={busy}
               onChange={(e) => onToggleEnabled(e.target.checked)}
-              className="accent-sky-500"
+              className="accent-amber"
             />
             Enabled
           </label>
         </div>
       </div>
 
-      <label className="flex flex-col gap-1 text-sm text-slate-300">
+      <label className="flex flex-col gap-1 text-xs font-medium tracking-wide text-ink-dim uppercase">
         Settings (JSON)
         <textarea
-          value={draft?.settingsText ?? '{}'}
-          onChange={(e) => onSettingsTextChange(e.target.value)}
+          value={settingsText}
+          onChange={(e) => setSettingsText(e.target.value)}
           rows={6}
           spellCheck={false}
-          className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-100 focus:border-sky-500 focus:outline-none"
+          className="border border-line bg-void px-3 py-2 font-mono text-xs font-normal tracking-normal text-ink normal-case focus:border-amber focus:outline-none"
         />
       </label>
-      {draft?.settingsError ? <p className="text-xs text-red-400">{draft.settingsError}</p> : null}
+      {settingsError ? <p className="text-xs text-danger">{settingsError}</p> : null}
 
       <div>
         <button
           type="button"
-          onClick={onSaveSettings}
+          onClick={handleSave}
           disabled={busy}
-          className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="bg-amber px-3 py-1.5 text-xs font-semibold tracking-wide text-void uppercase transition hover:bg-amber-bright disabled:cursor-not-allowed disabled:opacity-40"
         >
           Save settings
         </button>

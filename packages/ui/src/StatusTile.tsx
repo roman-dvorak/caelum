@@ -11,17 +11,14 @@ export interface StatusTileProps {
 export function StatusTile({ label, value, unit, hint, className }: StatusTileProps) {
   return (
     <div
-      className={[
-        'flex flex-col gap-1 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3',
-        className ?? '',
-      ].join(' ')}
+      className={['flex flex-col gap-1.5 border-l-2 border-line bg-panel px-4 py-3', className ?? ''].join(' ')}
     >
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
-      <span className="flex items-baseline gap-1 text-xl font-semibold text-slate-100">
+      <span className="text-[10px] font-semibold tracking-[0.15em] text-ink-faint uppercase">{label}</span>
+      <span className="tabular-nums flex items-baseline gap-1 font-mono text-xl font-medium text-ink">
         {value}
-        {unit ? <span className="text-sm font-normal text-slate-400">{unit}</span> : null}
+        {unit ? <span className="font-sans text-xs font-normal text-ink-dim">{unit}</span> : null}
       </span>
-      {hint ? <span className="text-xs text-slate-500">{hint}</span> : null}
+      {hint ? <span className="text-xs text-ink-faint">{hint}</span> : null}
     </div>
   )
 }

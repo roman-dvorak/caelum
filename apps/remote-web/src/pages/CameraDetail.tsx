@@ -30,23 +30,21 @@ function CameraDetailView({ slug }: { slug: string }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <Link to="/" className="text-sm text-slate-400 hover:text-slate-200">
+        <Link to="/" className="text-xs font-medium tracking-wide text-ink-faint uppercase hover:text-amber">
           ← Cameras
         </Link>
       </div>
 
-      {manifestLoading && <p className="text-sm text-slate-500">Loading camera…</p>}
+      {manifestLoading && <p className="text-sm text-ink-faint">Loading camera…</p>}
       {manifestError && (
-        <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">
-          {manifestError}
-        </p>
+        <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{manifestError}</p>
       )}
 
       {manifest && (
         <>
           <div>
-            <h1 className="text-lg font-semibold text-slate-100">{manifest.name}</h1>
-            <p className="text-xs text-slate-500">
+            <h1 className="text-lg font-semibold text-ink">{manifest.name}</h1>
+            <p className="font-mono text-xs text-ink-faint">
               {manifest.slug} · {manifest.location.lat.toFixed(4)}, {manifest.location.lon.toFixed(4)}
             </p>
           </div>
@@ -72,10 +70,8 @@ function DateGallery({ slug, date }: { slug: string; date: string }) {
     <div className="flex flex-col gap-4">
       <KeogramStrip src={remoteApiClient.keogramUrl(slug, date)} date={date} />
 
-      {loading && <p className="text-sm text-slate-500">Loading frames…</p>}
-      {error && (
-        <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>
-      )}
+      {loading && <p className="text-sm text-ink-faint">Loading frames…</p>}
+      {error && <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
 
       {dateIndex ? <Gallery slug={slug} dateIndex={dateIndex} /> : null}
     </div>

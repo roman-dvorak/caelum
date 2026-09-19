@@ -17,9 +17,11 @@ export function GalleryItem({ slug, time, thumbnailPath, metadataPath }: Gallery
   const thumbnailUrl = remoteApiClient.resolveCameraUrl(slug, thumbnailPath)
 
   return (
-    <figure className="overflow-hidden rounded-lg border border-slate-800 bg-black">
+    <figure className="overflow-hidden border border-line bg-void">
       <ImageViewer src={thumbnailUrl} metadata={metadata} alt={`Frame at ${time}`} />
-      <figcaption className="px-2 py-1 text-center text-xs text-slate-500">{formatTime(time)}</figcaption>
+      <figcaption className="border-t border-line-soft px-2 py-1 text-center font-mono text-xs text-ink-faint">
+        {formatTime(time)}
+      </figcaption>
     </figure>
   )
 }

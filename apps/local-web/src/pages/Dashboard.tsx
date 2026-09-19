@@ -11,28 +11,28 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-100">Dashboard</h1>
+        <h1 className="text-sm font-semibold tracking-[0.2em] text-ink-dim uppercase">Dashboard</h1>
         {skyState ? <SkyStateBadge skyState={skyState} /> : null}
       </div>
 
       {(statusError || skyError) && (
-        <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">
+        <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           {statusError ?? skyError}
         </p>
       )}
 
-      <section className="overflow-hidden rounded-lg border border-slate-800 bg-black">
+      <section className="overflow-hidden border border-line bg-void">
         {frame ? (
           <ImageViewer src={frame.imageBlobUrl} metadata={frame.metadata} alt="Live camera feed" />
         ) : (
-          <div className="flex aspect-video items-center justify-center text-sm text-slate-500">
+          <div className="flex aspect-video items-center justify-center text-sm text-ink-faint">
             {streamStatus === 'connecting' ? 'Connecting to live stream…' : 'Waiting for first frame…'}
           </div>
         )}
       </section>
 
       {status ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px bg-line-soft sm:grid-cols-3 lg:grid-cols-4">
           <StatusTile label="Camera backend" value={status.camera_backend} />
           <StatusTile label="Capturing" value={status.capturing ? 'Yes' : 'No'} />
           <StatusTile label="Exposure" value={formatExposure(status.exposure_us)} />

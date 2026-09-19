@@ -9,25 +9,32 @@ const LINKS = [
 
 export function NavBar() {
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur-sm">
-      <span className="mr-4 font-semibold tracking-wide text-slate-100">caelum</span>
-      <nav className="flex gap-1">
-        {LINKS.map((link) => (
-          <NavLink
-            key={link.to}
-            to={link.to}
-            end={link.end}
-            className={({ isActive }) =>
-              [
-                'rounded-md px-3 py-1.5 text-sm font-medium transition',
-                isActive ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200',
-              ].join(' ')
-            }
-          >
-            {link.label}
-          </NavLink>
-        ))}
-      </nav>
+    <header className="sticky top-0 z-10 border-b border-line bg-void/95 backdrop-blur-sm">
+      <div className="mx-auto flex w-full max-w-5xl items-center gap-1 px-4">
+        <span className="mr-6 flex items-center gap-2 py-3.5 text-sm font-semibold tracking-[0.2em] text-ink uppercase">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber shadow-[0_0_8px_var(--color-amber)]" />
+          caelum
+        </span>
+        <nav className="flex gap-1">
+          {LINKS.map((link) => (
+            <NavLink
+              key={link.to}
+              to={link.to}
+              end={link.end}
+              className={({ isActive }) =>
+                [
+                  'border-b-2 px-3 py-3.5 text-xs font-medium tracking-widest uppercase transition',
+                  isActive
+                    ? 'border-amber text-amber'
+                    : 'border-transparent text-ink-dim hover:border-line hover:text-ink',
+                ].join(' ')
+              }
+            >
+              {link.label}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
     </header>
   )
 }

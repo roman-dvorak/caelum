@@ -42,14 +42,12 @@ function OverlayElementView({ element }: { element: OverlayElement }) {
   }
 }
 
+const chip = 'bg-void/70 px-2 py-1 font-mono text-[11px] text-ink ring-1 ring-line backdrop-blur-sm'
+
 function TimestampLabel({ payload }: { payload: Record<string, unknown> }) {
   const text = readString(payload, 'text')
   if (!text) return null
-  return (
-    <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 font-mono text-xs text-slate-100">
-      {text}
-    </div>
-  )
+  return <div className={['absolute bottom-2 left-2', chip].join(' ')}>{text}</div>
 }
 
 function ExposureReadoutLabel({ payload }: { payload: Record<string, unknown> }) {
@@ -57,10 +55,10 @@ function ExposureReadoutLabel({ payload }: { payload: Record<string, unknown> })
   const gain = readNumber(payload, 'analogue_gain')
   if (exposureUs === undefined && gain === undefined) return null
   return (
-    <div className="absolute bottom-2 right-2 rounded bg-black/60 px-2 py-1 font-mono text-xs text-slate-100">
+    <div className={['tabular-nums absolute right-2 bottom-2 text-amber-bright', chip].join(' ')}>
       {exposureUs !== undefined ? <span>{formatExposure(exposureUs)}</span> : null}
-      {exposureUs !== undefined && gain !== undefined ? <span className="mx-1 opacity-60">·</span> : null}
-      {gain !== undefined ? <span>ISO×{gain.toFixed(1)}</span> : null}
+      {exposureUs !== undefined && gain !== undefined ? <span className="mx-1.5 text-ink-faint">/</span> : null}
+      {gain !== undefined ? <span>{gain.toFixed(1)}×</span> : null}
     </div>
   )
 }
@@ -71,10 +69,10 @@ function SkyStateBadgeLabel({ payload }: { payload: Record<string, unknown> }) {
   const moonIllum = readNumber(payload, 'moon_illumination')
   if (!period) return null
   return (
-    <div className="absolute top-2 left-2 flex items-center gap-2 rounded-full bg-black/60 px-2.5 py-1 text-xs text-slate-100 ring-1 ring-white/10">
-      <span className="font-medium">{periodLabel(period)}</span>
-      {sunAlt !== undefined ? <span className="opacity-80">☉ {sunAlt.toFixed(1)}°</span> : null}
-      {moonIllum !== undefined ? <span className="opacity-80">☾ {Math.round(moonIllum * 100)}%</span> : null}
+    <div className={['tabular-nums absolute top-2 left-2 flex items-center gap-2', chip].join(' ')}>
+      <span className="font-sans font-semibold tracking-wide text-amber uppercase">{periodLabel(period)}</span>
+      {sunAlt !== undefined ? <span className="text-ink-dim">☉{sunAlt.toFixed(1)}°</span> : null}
+      {moonIllum !== undefined ? <span className="text-ink-dim">☾{Math.round(moonIllum * 100)}%</span> : null}
     </div>
   )
 }
@@ -90,7 +88,7 @@ function DetectionBoxMarker({
   if (!box) return null
   return (
     <div
-      className="absolute border-2 border-amber-400 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+      className="absolute border-2 border-amber shadow-[0_0_0_1px_rgba(0,0,0,0.6),0_0_12px_rgba(232,161,58,0.5)]"
       style={{
         left: `${box.x * 100}%`,
         top: `${box.y * 100}%`,
@@ -99,7 +97,7 @@ function DetectionBoxMarker({
       }}
     >
       {label ? (
-        <span className="absolute -top-5 left-0 whitespace-nowrap rounded bg-amber-400 px-1 text-[10px] font-semibold text-black">
+        <span className="absolute -top-5 left-0 bg-amber px-1 text-[10px] font-semibold whitespace-nowrap text-void">
           {label}
         </span>
       ) : null}
@@ -116,7 +114,7 @@ function UnknownOverlayMarker({ element }: { element: OverlayElement }) {
   if (box) {
     return (
       <div
-        className="absolute border-2 border-dashed border-fuchsia-400/80"
+        className="absolute border-2 border-dashed border-cyan/80"
         style={{
           left: `${box.x * 100}%`,
           top: `${box.y * 100}%`,
@@ -124,16 +122,14 @@ function UnknownOverlayMarker({ element }: { element: OverlayElement }) {
           height: `${box.h * 100}%`,
         }}
       >
-        <span className="absolute -top-5 left-0 whitespace-nowrap rounded bg-fuchsia-400/80 px-1 text-[10px] font-semibold text-black">
+        <span className="absolute -top-5 left-0 bg-cyan/80 px-1 text-[10px] font-semibold whitespace-nowrap text-void">
           {label}
         </span>
       </div>
     )
   }
   return (
-    <div className="absolute top-2 right-2 rounded bg-black/50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-400 ring-1 ring-white/10">
-      {element.type}
-    </div>
+    <div className={['absolute top-2 right-2 text-ink-faint uppercase', chip].join(' ')}>{element.type}</div>
   )
 }
 

@@ -13,6 +13,7 @@
     "@caelum/api-client": "workspace:*",
     "@caelum/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
+    "json-edit-react": "^1.30.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",

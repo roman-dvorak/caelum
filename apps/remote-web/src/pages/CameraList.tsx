@@ -7,21 +7,19 @@ export function CameraList() {
   const { cameras, error, loading } = useCameras()
   const navigate = useNavigate()
 
-  if (loading) return <p className="text-sm text-slate-500">Loading cameras…</p>
+  if (loading) return <p className="text-sm text-ink-faint">Loading cameras…</p>
   if (error) {
-    return <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>
+    return <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
   }
   if (!cameras || cameras.cameras.length === 0) {
-    return <p className="text-sm text-slate-500">No cameras published yet.</p>
+    return <p className="text-sm text-ink-faint">No cameras published yet.</p>
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-100">Cameras</h1>
-        <span className="text-xs text-slate-500">
-          Updated {new Date(cameras.updated_at).toLocaleString()}
-        </span>
+        <h1 className="text-sm font-semibold tracking-[0.2em] text-ink-dim uppercase">Cameras</h1>
+        <span className="text-xs text-ink-faint">Updated {new Date(cameras.updated_at).toLocaleString()}</span>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cameras.cameras.map((camera) => (

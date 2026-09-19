@@ -9,19 +9,19 @@ export interface SkyStateBadgeProps {
 }
 
 export function SkyStateBadge({ skyState, compact = false, className }: SkyStateBadgeProps) {
-  const colors = PERIOD_COLORS[skyState.period] ?? 'bg-slate-700/60 text-slate-200 ring-slate-500/40'
+  const colors = PERIOD_COLORS[skyState.period] ?? 'bg-panel-raised text-ink-dim ring-line'
   return (
     <div
       className={[
-        'inline-flex items-center gap-2 rounded-full ring-1 backdrop-blur-sm',
+        'tabular-nums inline-flex items-center gap-2.5 font-mono ring-1 backdrop-blur-sm',
         colors,
-        compact ? 'px-2 py-0.5 text-xs' : 'px-3 py-1.5 text-sm',
+        compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs',
         className ?? '',
       ].join(' ')}
     >
-      <span className="font-medium">{periodLabel(skyState.period)}</span>
-      <span className="opacity-80">☉ {skyState.sun_altitude_deg.toFixed(1)}°</span>
-      <span className="opacity-80">☾ {Math.round(skyState.moon_illumination * 100)}%</span>
+      <span className="font-sans font-semibold tracking-wide uppercase">{periodLabel(skyState.period)}</span>
+      <span className="opacity-70">☉{skyState.sun_altitude_deg.toFixed(1)}°</span>
+      <span className="opacity-70">☾{Math.round(skyState.moon_illumination * 100)}%</span>
     </div>
   )
 }
