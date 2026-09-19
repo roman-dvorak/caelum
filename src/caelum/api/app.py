@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import camera, config, plugins, status, stream
+from .routes import auth, camera, config, files, frames, plugins, status, stream, terminal
+from .security import require_admin, require_preview
 
 
 def create_app(static_dir: Path | None = None) -> FastAPI:
@@ -14,20 +15,42 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        # The browser only sends the session cookie to the origin that set
+        # it, so a wildcard here would be both useless and rejected by every
+        # browser for credentialed requests. Vite's dev server proxies /api
+        # to the backend, making even development same-origin; this list is
+        # only for pointing a dev frontend at a camera on the LAN.
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origin_regex=r"http://localhost:\d+|http://127\.0\.0\.1:\d+",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    app.include_router(status.router, prefix="/api")
-    app.include_router(config.router, prefix="/api")
-    app.include_router(camera.router, prefix="/api")
-    app.include_router(plugins.router, prefix="/api")
+    # Auth routes handle their own access levels (login must stay reachable
+    # to anonymous callers); everything else is blanket-guarded per router,
+    # so adding a route can never accidentally ship it unauthenticated.
+    app.include_router(auth.router, prefix="/api")
+
+    preview_only = [Depends(require_preview)]
+    admin_only = [Depends(require_admin)]
+
+    app.include_router(status.router, prefix="/api", dependencies=preview_only)
+    app.include_router(config.router, prefix="/api", dependencies=admin_only)
+    app.include_router(camera.router, prefix="/api", dependencies=admin_only)
+    app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
+    # files/frames declare per-route levels: reads are preview, deletes admin.
+    app.include_router(files.router, prefix="/api")
+    app.include_router(frames.router, prefix="/api")
+    # Websocket routers authorize inside the handler — a dependency raising
+    # HTTPException after the handshake has no way to reach the client.
     app.include_router(stream.router)  # paths are already fully qualified (/api/frame/*, /ws/*)
+    app.include_router(terminal.router)
 
     if static_dir is not None and static_dir.exists():
         # local-web's built assets — the Pi runs a single service, no nginx.
+        # Unauthenticated on purpose: it is the login page, and the bundle
+        # contains no data of its own.
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="local-web")
 
     return app

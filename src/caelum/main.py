@@ -11,6 +11,7 @@ from pathlib import Path
 import uvicorn
 
 from caelum.api.app import create_app
+from caelum.auth import UserStore
 from caelum.cameras.registry import create_camera_backend
 from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore
@@ -48,6 +49,10 @@ async def _async_main(settings: Settings) -> None:
     await config_manager.start()
     cfg = config_manager.current
 
+    # Accounts live beside config.json but never inside it — see auth/store.py.
+    user_store = UserStore(settings.config_dir / "auth.json")
+    user_store.load()
+
     location = cfg.location
     skystate_calculator = SkyStateCalculator(lat=location.lat, lon=location.lon, elevation_m=location.elevation_m)
 
@@ -84,7 +89,9 @@ async def _async_main(settings: Settings) -> None:
     derivative_pool.register_all(loaded.plugin for loaded in plugin_loader.load(config_manager.current))
 
     app = create_app(static_dir=_LOCAL_WEB_DIST if _LOCAL_WEB_DIST.exists() else None)
+    app.state.settings = settings
     app.state.config_manager = config_manager
+    app.state.user_store = user_store
     app.state.frame_store = frame_store
     app.state.capture_worker = capture_worker
     app.state.skystate_calculator = skystate_calculator
@@ -94,11 +101,12 @@ async def _async_main(settings: Settings) -> None:
     retention_sweeper.start()
     upload_worker.start()
     logger.info(
-        "caelum starting: camera=%s http=%s:%d local-web=%s",
+        "caelum starting: camera=%s http=%s:%d local-web=%s auth=%s",
         backend_name,
         settings.http_host,
         settings.http_port,
         "bundled" if _LOCAL_WEB_DIST.exists() else "not built",
+        "on" if cfg.auth.enabled else "OFF",
     )
 
     server = uvicorn.Server(

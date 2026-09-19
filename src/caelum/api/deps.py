@@ -12,10 +12,15 @@ from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
 from caelum.control.skystate import SkyStateCalculator
+from caelum.settings import Settings
 
 
 def get_config_manager(conn: HTTPConnection) -> ConfigManager:
     return conn.app.state.config_manager
+
+
+def get_settings(conn: HTTPConnection) -> Settings:
+    return conn.app.state.settings
 
 
 def get_frame_store(conn: HTTPConnection) -> FrameStore:

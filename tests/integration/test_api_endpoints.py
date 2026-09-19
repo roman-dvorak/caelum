@@ -6,6 +6,7 @@ import time
 import httpx
 
 from caelum.api.app import create_app
+from caelum.auth import UserStore
 from caelum.cameras.mock_backend import MockCameraBackend
 from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore
@@ -15,6 +16,10 @@ from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
 from caelum.events import EventBus
+from caelum.settings import Settings
+
+ADMIN_PASSWORD = "admin-test-password"
+VIEWER_PASSWORD = "viewer-test-password"
 
 
 def _wait_until(predicate, timeout: float = 3.0, interval: float = 0.02) -> bool:
@@ -27,11 +32,21 @@ def _wait_until(predicate, timeout: float = 3.0, interval: float = 0.02) -> bool
 
 
 class _Harness:
-    def __init__(self, app, worker, config_manager, frame_store):
+    def __init__(self, app, worker, config_manager, frame_store, data_dir):
         self.app = app
         self.worker = worker
         self.config_manager = config_manager
         self.frame_store = frame_store
+        self.data_dir = data_dir
+
+    def client(self) -> httpx.AsyncClient:
+        """An un-authenticated client. `httpx` keeps the session cookie for
+        the lifetime of the client, so `login()` is all that is needed."""
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://test")
+
+
+async def login(client: httpx.AsyncClient, username: str = "admin", password: str = ADMIN_PASSWORD):
+    return await client.post("/api/auth/login", json={"username": username, "password": password})
 
 
 async def _build_harness(tmp_path, redis_url, key_prefix: str) -> _Harness:
@@ -57,13 +72,34 @@ async def _build_harness(tmp_path, redis_url, key_prefix: str) -> _Harness:
         event_bus=event_bus,
     )
 
+    # Real accounts, real password hashing, real cookies — the API is now
+    # authenticated in production, so the tests exercise it that way rather
+    # than switching auth off.
+    user_store = UserStore(tmp_path / "auth.json")
+    user_store.load()
+    user_store.set_password("admin", ADMIN_PASSWORD)
+    user_store.create_user("viewer1", VIEWER_PASSWORD, "viewer")
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+
     app = create_app(static_dir=None)
+    app.state.settings = Settings(
+        config_dir=tmp_path,
+        data_dir=data_dir,
+        http_host="127.0.0.1",
+        http_port=0,
+        redis_url=redis_url,
+        camera_backend_override=None,
+        log_level="WARNING",
+    )
     app.state.config_manager = config_manager
+    app.state.user_store = user_store
     app.state.frame_store = frame_store
     app.state.capture_worker = worker
     app.state.skystate_calculator = SkyStateCalculator(lat=50.0755, lon=14.4378, elevation_m=200.0)
 
-    return _Harness(app, worker, config_manager, frame_store)
+    return _Harness(app, worker, config_manager, frame_store, data_dir)
 
 
 async def test_status_and_skystate_endpoints(tmp_path, redis_url):
@@ -71,8 +107,8 @@ async def test_status_and_skystate_endpoints(tmp_path, redis_url):
     harness.worker.start()
     try:
         assert _wait_until(lambda: harness.frame_store.get_latest() is not None)
-        transport = httpx.ASGITransport(app=harness.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with harness.client() as client:
+            await login(client)
             status_resp = await client.get("/api/status")
             assert status_resp.status_code == 200
             body = status_resp.json()
@@ -91,8 +127,8 @@ async def test_status_and_skystate_endpoints(tmp_path, redis_url):
 async def test_config_get_and_patch_roundtrip(tmp_path, redis_url):
     harness = await _build_harness(tmp_path, redis_url, "apitest2")
     try:
-        transport = httpx.ASGITransport(app=harness.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with harness.client() as client:
+            await login(client)
             get_resp = await client.get("/api/config")
             assert get_resp.status_code == 200
             assert get_resp.json()["location"]["lat"] == 50.0755
@@ -108,8 +144,8 @@ async def test_config_get_and_patch_roundtrip(tmp_path, redis_url):
 async def test_camera_mode_and_exposure_override_endpoints(tmp_path, redis_url):
     harness = await _build_harness(tmp_path, redis_url, "apitest3")
     try:
-        transport = httpx.ASGITransport(app=harness.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with harness.client() as client:
+            await login(client)
             mode_resp = await client.post("/api/camera/mode", json={"stream_mode": True})
             assert mode_resp.status_code == 200
             assert mode_resp.json()["stream_mode"] is True
@@ -131,8 +167,8 @@ async def test_camera_mode_and_exposure_override_endpoints(tmp_path, redis_url):
 async def test_plugins_endpoints(tmp_path, redis_url):
     harness = await _build_harness(tmp_path, redis_url, "apitest4")
     try:
-        transport = httpx.ASGITransport(app=harness.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with harness.client() as client:
+            await login(client)
             put_resp = await client.put(
                 "/api/plugins/watermark", json={"enabled": True, "order": 5, "settings": {"text": "hi"}}
             )
@@ -151,8 +187,8 @@ async def test_latest_frame_jpeg_endpoint(tmp_path, redis_url):
     harness.worker.start()
     try:
         assert _wait_until(lambda: harness.frame_store.get_latest() is not None)
-        transport = httpx.ASGITransport(app=harness.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with harness.client() as client:
+            await login(client)
             resp = await client.get("/api/frame/latest.jpg")
             assert resp.status_code == 200
             assert resp.headers["content-type"] == "image/jpeg"

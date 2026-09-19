@@ -10,6 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
 
 from caelum.api.deps import get_frame_store
+from caelum.api.security import Principal, authorize_websocket, require_preview
 from caelum.capture.frame_store import FrameStore
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,9 @@ router = APIRouter()
 
 
 @router.get("/api/frame/latest.jpg")
-def get_latest_thumbnail(frame_store: FrameStore = Depends(get_frame_store)) -> Response:
+def get_latest_thumbnail(
+    _: Principal = Depends(require_preview), frame_store: FrameStore = Depends(get_frame_store)
+) -> Response:
     latest = frame_store.get_latest()
     if latest is None:
         raise HTTPException(status_code=404, detail="no frame captured yet")
@@ -27,6 +30,8 @@ def get_latest_thumbnail(frame_store: FrameStore = Depends(get_frame_store)) -> 
 
 @router.websocket("/ws/stream")
 async def stream_ws(websocket: WebSocket, frame_store: FrameStore = Depends(get_frame_store)) -> None:
+    if await authorize_websocket(websocket, admin=False) is None:
+        return
     await websocket.accept()
     queue = frame_store.subscribe()
     try:

@@ -57,3 +57,78 @@ shape), kept in sync between disk (`config/config.json`, the durable source of
 truth) and Redis (fast runtime reads + pub/sub change notifications) — see
 `src/caelum/config/manager.py`. Copy `.env.example` to `.env` to override
 bootstrap paths/ports.
+
+## Accounts and access control
+
+The API and web UI are behind a login. On first start, if there is no account
+database, caelum creates an `admin` account with a random password and writes
+it to `<config_dir>/initial-admin-password.txt` (mode 0600) — log in with it,
+change the password from the Accounts page, then delete the file.
+
+Accounts live in `<config_dir>/auth.json`, deliberately **not** in
+`config.json`: `GET /api/config` returns the whole config document and the
+Settings page renders it as an editable JSON tree, so credentials there would
+be visible to anyone who can open that page. Copying a config between cameras
+therefore never carries credentials with it.
+
+Two roles:
+
+| Role | Can do |
+| --- | --- |
+| `admin` | everything — config, camera control, plugins, deletes, terminal |
+| `viewer` | read-only preview: status, sky state, live stream, browsing stored output |
+
+The `auth` config section holds policy only:
+
+- `enabled` — set to `false` to disable authentication entirely and treat every
+  caller as an admin. For a trusted LAN, or for recovering from a lockout.
+- `preview_access` — `"public"` (no login for the preview at all), `"viewer"`
+  (any account, the default) or `"admin"` (viewers cannot see it either).
+  Control endpoints are admin-only regardless.
+- `terminal_enabled` — see below.
+- `session_ttl_hours`.
+
+Changing a password invalidates that user's sessions everywhere except the tab
+that made the change. Sessions are stateless signed tokens, so they survive a
+restart and a Redis flush.
+
+**Forgotten admin password**: stop caelum, delete the `admin` entry from
+`auth.json` (or move the whole file aside), start it again — caelum recreates a
+bootstrap admin and writes a fresh password file. Removing just the admin entry
+keeps any viewer accounts intact.
+
+### Web terminal
+
+`/ws/terminal` is a real PTY: an interactive shell running as the user caelum
+runs as, with that user's full privileges. It is admin-only, and it is the one
+switch worth turning off on any host reachable from a network you do not
+control:
+
+```json
+{ "auth": { "terminal_enabled": false } }
+```
+
+The shell is `$CAELUM_TERMINAL_SHELL`, else `$SHELL`, else `/bin/bash`, started
+in the data directory.
+
+Note also that the session cookie is not marked `secure`, because the common
+deployment is plain HTTP on a LAN address where a secure-only cookie would
+never be sent at all. Put caelum behind a TLS reverse proxy if the network is
+not trusted.
+
+## Browsing stored output
+
+Two endpoints back the web UI's file and recording views, both with reads at
+preview level and deletes admin-only:
+
+- `/api/files` — the data directory as it sits on disk: listing, download,
+  recursive delete, and per-category usage plus free space. Every path is
+  resolved and confined to the data directory before use, symlinks included.
+  `/api/files/preview` renders any image *including FITS* as a downscaled PNG
+  with a percentile stretch, which is the only way to look at a raw frame in a
+  browser.
+- `/api/frames` — the same files seen as a time series instead of a tree. One
+  capture is up to three files in three directories (thumbnail, `.json`
+  sidecar, raw FITS); this collapses them into one row per capture, and
+  supports deleting a whole date, a selection of captures, or just the raw
+  frames of a night (which is where the gigabytes are).

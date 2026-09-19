@@ -16,6 +16,12 @@ wheels/
 *.bsp
 .env
 
+# Credentials — the account store and the first-run bootstrap password.
+# These are generated per install and must never reach a repository.
+/config/auth.json
+/config/auth.json.tmp
+/config/initial-admin-password.txt
+
 # Test artifacts
 .pytest_cache/
 .ruff_cache/

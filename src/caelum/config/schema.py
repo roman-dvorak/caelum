@@ -146,6 +146,40 @@ class RedisConfig(StrictModel):
     key_prefix: str = "caelum"
 
 
+class AuthConfig(StrictModel):
+    """Access-control *policy* only.
+
+    Deliberately holds no secrets: accounts, password hashes and the session
+    signing key live in `<config_dir>/auth.json` (see `auth/store.py`), which
+    is never exposed through `/api/config`. That endpoint is rendered as an
+    editable JSON tree in the web UI, so anything placed here is effectively
+    public to every admin — policy flags are fine, credentials are not.
+    """
+
+    enabled: bool = True
+    # Who may see the live preview (status, sky state, latest frame,
+    # /ws/stream) — as opposed to the control surfaces, which are always
+    # admin-only. "public" leaves the preview open to anyone who can reach
+    # the port; "viewer" puts it behind any account; "admin" hides it from
+    # viewer accounts entirely.
+    preview_access: Literal["public", "viewer", "admin"] = "viewer"
+    session_ttl_hours: int = 720
+    # The web terminal is a real shell running as the caelum process user.
+    # Left on for the usual single-operator LAN deployment, but this is the
+    # one switch to flip on anything reachable from an untrusted network.
+    terminal_enabled: bool = True
+
+
+class DocsConfig(StrictModel):
+    """Where the public documentation site is published.
+
+    The web UI deep-links into it (`DocsLink`), so it has to be configurable
+    per deployment rather than hardcoded in the frontend bundle.
+    """
+
+    base_url: str = "https://caelum.astrometers.eu"
+
+
 class PluginConfig(StrictModel):
     """One entry per plugin id under AppConfig.plugins.
 
@@ -168,4 +202,6 @@ class AppConfig(StrictModel):
     retention: RetentionConfig = Field(default_factory=RetentionConfig)
     upload: UploadConfig = Field(default_factory=UploadConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    docs: DocsConfig = Field(default_factory=DocsConfig)
     plugins: dict[str, PluginConfig] = Field(default_factory=dict)

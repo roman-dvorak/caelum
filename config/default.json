@@ -91,5 +91,14 @@
     "db": 0,
     "key_prefix": "caelum"
   },
+  "auth": {
+    "enabled": true,
+    "preview_access": "viewer",
+    "session_ttl_hours": 720,
+    "terminal_enabled": true
+  },
+  "docs": {
+    "base_url": "https://caelum.astrometers.eu"
+  },
   "plugins": {}
 }
