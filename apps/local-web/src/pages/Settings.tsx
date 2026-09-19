@@ -303,7 +303,7 @@ function buildPatch(before: AppConfig, after: AppConfig): DeepPartial<AppConfig>
   if (location) patch.location = location
 
   const storagePolicy = diffSection(before.storage_policy, after.storage_policy, (key, a, b) =>
-    key === 'raw_periods' ? JSON.stringify(a) !== JSON.stringify(b) : a !== b,
+    key === 'raw_periods' ? JSON.stringify(a) === JSON.stringify(b) : a === b,
   )
   if (storagePolicy) patch.storage_policy = storagePolicy
 
