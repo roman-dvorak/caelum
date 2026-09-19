@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from caelum.auth import Role
 from caelum.capture.stats import FrameStats
+from caelum.config.schema import CameraConfig
 
 
 class StatusResponse(BaseModel):
@@ -35,6 +36,21 @@ class ConfigPatchRequest(BaseModel):
 
 class CameraModeRequest(BaseModel):
     stream_mode: bool
+
+
+class CameraOptionsResponse(BaseModel):
+    """Everything the UI needs to offer a camera choice rather than a guess."""
+
+    backends: list[str]
+    #: Device nodes present on this host, for the `opencv` backend's sensor_id.
+    v4l2_devices: list[str]
+    configured: CameraConfig
+    #: What the capture thread currently has open — None before the first
+    #: successful open, and different from `configured` while a change is
+    #: still pending or if opening the new camera is failing.
+    active: CameraConfig | None
+    active_backend_class: str
+    applied: bool
 
 
 class ExposureOverrideRequest(BaseModel):

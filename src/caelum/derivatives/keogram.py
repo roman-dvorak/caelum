@@ -11,26 +11,43 @@ from typing import Any
 
 import cv2
 import numpy as np
+from pydantic import BaseModel, Field
 
 from caelum.capture.frame_store import ProcessedFrame
+from caelum.plugins.base import Plugin
 
-from .base import Derivative, DerivativeWorker
+from .base import Derivative
 
 _LIVE_FLUSH_INTERVAL_S = 300.0  # write a partial "live" keogram at most this often
 
 
-class KeogramWorker(DerivativeWorker):
-    id = "keogram"
+class KeogramSettings(BaseModel):
+    """Validated against `AppConfig.plugins["keogram"].settings`."""
 
-    def __init__(
-        self,
-        column_width: int = 2,
-        strip_height: int = 240,
-        live_flush_interval_s: float = _LIVE_FLUSH_INTERVAL_S,
-    ) -> None:
-        self._column_width = column_width
-        self._strip_height = strip_height
-        self._live_flush_interval_s = live_flush_interval_s
+    #: Pixels each frame contributes to the finished strip. Wider makes a
+    #: short night readable; narrower fits a long one on screen.
+    column_width: int = Field(default=2, ge=1, le=32)
+    #: Height the extracted centre column is resized to — the keogram's
+    #: vertical resolution, independent of the sensor's.
+    strip_height: int = Field(default=240, ge=8, le=2048)
+    #: How often a partial keogram is written during the night, so it is
+    #: viewable before the night ends.
+    live_flush_interval_s: float = Field(default=_LIVE_FLUSH_INTERVAL_S, ge=0.0)
+
+
+class KeogramWorker(Plugin):
+    """Shipped built-in, but loaded through `PluginLoader` like any
+    third-party plugin — so `enabled`, `order` and `settings` apply to it."""
+
+    id = "keogram"
+    config_schema = KeogramSettings
+
+    def __init__(self, settings: dict | None = None) -> None:
+        super().__init__(settings or {})
+        parsed = KeogramSettings.model_validate(self.settings)
+        self._column_width = parsed.column_width
+        self._strip_height = parsed.strip_height
+        self._live_flush_interval_s = parsed.live_flush_interval_s
         self._buffer: list[np.ndarray] = []
         self._current_date: date | None = None
         self._rollover_pending = False

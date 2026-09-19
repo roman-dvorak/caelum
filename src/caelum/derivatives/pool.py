@@ -65,11 +65,28 @@ class DerivativePool:
         event_bus.subscribe(FRAME_CAPTURED, self._on_frame_captured)
 
     def register(self, worker: DerivativeWorker) -> None:
+        # Injected rather than passed at construction, so a worker can be
+        # built from nothing but its config block — which is what lets
+        # PluginLoader instantiate built-ins and third-party plugins the
+        # same way. See DerivativeWorker.process_pool.
+        worker.process_pool = self.process_pool
         self._workers.append(worker)
 
     def register_all(self, workers: Iterable[DerivativeWorker]) -> None:
         for worker in workers:
             self.register(worker)
+
+    def replace_all(self, workers: Iterable[DerivativeWorker]) -> None:
+        """Swap the whole worker set — how a config change takes effect.
+
+        Replacing wholesale rather than diffing means a worker whose settings
+        changed is rebuilt from scratch, which is the only way to be sure its
+        accumulated state (a keogram buffer sized by `strip_height`, a
+        detector's previous frame at the old `max_dim`) matches its new
+        configuration. The cost is that an in-progress keogram restarts.
+        """
+        self._workers = []
+        self.register_all(workers)
 
     def _on_frame_captured(self, frame: ProcessedFrame) -> None:
         for worker in self._workers:

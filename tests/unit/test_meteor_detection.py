@@ -43,7 +43,9 @@ def test_detect_streak_ignores_a_compact_round_blob():
 
 
 def test_worker_emits_overlay_and_derivative_once_per_detection(executor):
-    worker = MeteorDetectionWorker(process_pool=executor, diff_threshold=40.0, max_dim=100)
+    worker = MeteorDetectionWorker({"diff_threshold": 40.0, "max_dim": 100})
+    # Injected the way DerivativePool.register() does it in production.
+    worker.process_pool = executor
 
     blank_image = np.zeros((100, 100, 3), dtype=np.uint8)
     streak_image = np.zeros((100, 100, 3), dtype=np.uint8)

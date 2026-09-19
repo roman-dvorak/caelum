@@ -78,7 +78,7 @@ async def test_capture_worker_switches_storage_decision_with_sky_state(tmp_path,
         event_bus.subscribe(FRAME_CAPTURED, on_frame)
 
         worker = CaptureWorker(
-            camera=camera,
+            camera_factory=lambda _cfg: camera,
             config_manager=config_manager,
             skystate_calculator=fake_sky,
             exposure_controller=ExposureController(),
@@ -123,7 +123,7 @@ async def test_capture_worker_updates_frame_store(tmp_path, redis_url):
         )
         frame_store = FrameStore()
         worker = CaptureWorker(
-            camera=MockCameraBackend(),
+            camera_factory=lambda _cfg: MockCameraBackend(),
             config_manager=config_manager,
             skystate_calculator=_FakeSkyStateCalculator(period="day"),
             exposure_controller=ExposureController(),

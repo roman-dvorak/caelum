@@ -132,3 +132,43 @@ preview level and deletes admin-only:
   sidecar, raw FITS); this collapses them into one row per capture, and
   supports deleting a whole date, a selection of captures, or just the raw
   frames of a night (which is where the gigabytes are).
+
+## Switching cameras without a restart
+
+`CaptureWorker` reopens the camera whenever `config.camera` changes, checked
+between exposures (never mid-capture) so a switch is safe regardless of how
+long an exposure was running. Change `camera.backend` / `camera.sensor_id`
+through `PUT /api/config` (or the Settings page's camera picker, which also
+lists detected `/dev/video*` devices) and the new device opens on the next
+cycle — up to one capture interval later, not immediately.
+
+`GET /api/camera/options` reports both `configured` (what the config says)
+and `active` (what is actually open right now); `applied` is false in the gap
+between the two, which is how the UI shows "pending" instead of claiming
+success the moment the config write returns. If a bad device path is
+configured, `active`/`applied` simply never catch up — the capture loop logs
+the failure and keeps retrying rather than crashing.
+
+The `CAELUM_CAMERA_BACKEND` env var still overrides `config.camera.backend`
+unconditionally (dev/CI convenience, pins a machine to `mock` regardless of
+what's configured) but no longer freezes the camera for the process
+lifetime — the override is reapplied every time the config-driven camera is
+rebuilt.
+
+## Plugins
+
+`keogram` and `meteor_detection` are ordinary plugins, loaded through
+`PluginLoader` exactly like a third-party one would be — not special-cased.
+`AppConfig.plugins["keogram"]` / `["meteor_detection"]` control them via the
+usual `enabled` / `order` / `settings` fields (see `/api/plugins` and the
+Plugins page), and each declares a `config_schema` validating its own
+settings (column width and live-flush interval for the keogram; diff
+threshold, downscale size, and streak-shape thresholds for the detector).
+
+Changing a plugin's config takes effect on the next captured frame:
+`ConfigManager.on_change` triggers a full reload or the whole worker set,
+which is deliberate — a worker's accumulated state (a keogram buffer sized
+by the old `strip_height`, a detector's previous frame at the old `max_dim`)
+would not make sense under new settings, so it is rebuilt from scratch
+rather than patched in place. The one visible cost: an in-progress keogram
+restarts if its own settings change mid-night.

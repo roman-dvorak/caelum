@@ -100,5 +100,16 @@
   "docs": {
     "base_url": "https://caelum.astrometers.eu"
   },
-  "plugins": {}
+  "plugins": {
+    "keogram": {
+      "enabled": true,
+      "order": 10,
+      "settings": {}
+    },
+    "meteor_detection": {
+      "enabled": true,
+      "order": 20,
+      "settings": {}
+    }
+  }
 }

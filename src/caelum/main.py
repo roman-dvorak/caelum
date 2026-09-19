@@ -12,11 +12,13 @@ import uvicorn
 
 from caelum.api.app import create_app
 from caelum.auth import UserStore
+from caelum.cameras.base import CameraBackend
 from caelum.cameras.registry import create_camera_backend
 from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
+from caelum.config.schema import AppConfig, CameraConfig
 from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
@@ -60,12 +62,19 @@ async def _async_main(settings: Settings) -> None:
     event_bus = EventBus()
     frame_store = FrameStore(loop=loop, event_bus=event_bus)
 
-    backend_name = settings.camera_backend_override or cfg.camera.backend
-    camera = create_camera_backend(cfg.camera.model_copy(update={"backend": backend_name}))
+    def camera_factory(camera_cfg: CameraConfig) -> CameraBackend:
+        """Built fresh each time the camera config changes, so switching
+        backend or device from the web UI takes effect without a restart.
+        The env override still wins when it is set — it exists precisely to
+        pin a dev/CI machine to the mock backend regardless of config."""
+        if settings.camera_backend_override:
+            camera_cfg = camera_cfg.model_copy(update={"backend": settings.camera_backend_override})
+        return create_camera_backend(camera_cfg)
+
     dark_library = DarkLibrary(darks_dir=settings.data_dir / "darks")
 
     capture_worker = CaptureWorker(
-        camera=camera,
+        camera_factory=camera_factory,
         config_manager=config_manager,
         skystate_calculator=skystate_calculator,
         exposure_controller=ExposureController(),
@@ -82,11 +91,19 @@ async def _async_main(settings: Settings) -> None:
     )
 
     derivative_pool = DerivativePool(event_bus, frame_store, settings.data_dir)
-    derivative_pool.register(KeogramWorker())
-    derivative_pool.register(MeteorDetectionWorker(process_pool=derivative_pool.process_pool))
 
-    plugin_loader = PluginLoader()  # no third-party plugins registered yet — see plugins/loader.py
-    derivative_pool.register_all(loaded.plugin for loaded in plugin_loader.load(config_manager.current))
+    # The two built-in workers go through the loader like anything else, so
+    # `enabled`, `order` and `settings` in AppConfig.plugins govern them —
+    # they are the proof that the extension point works, not exceptions to it.
+    plugin_loader = PluginLoader([KeogramWorker, MeteorDetectionWorker])
+
+    def reload_plugins(new_config: AppConfig) -> None:
+        loaded = plugin_loader.load(new_config)
+        derivative_pool.replace_all(lp.plugin for lp in loaded)
+        logger.info("Plugins loaded: %s", ", ".join(lp.id for lp in loaded) or "none")
+
+    reload_plugins(cfg)
+    config_manager.on_change(reload_plugins)
 
     app = create_app(static_dir=_LOCAL_WEB_DIST if _LOCAL_WEB_DIST.exists() else None)
     app.state.settings = settings
@@ -102,7 +119,7 @@ async def _async_main(settings: Settings) -> None:
     upload_worker.start()
     logger.info(
         "caelum starting: camera=%s http=%s:%d local-web=%s auth=%s",
-        backend_name,
+        settings.camera_backend_override or cfg.camera.backend,
         settings.http_host,
         settings.http_port,
         "bundled" if _LOCAL_WEB_DIST.exists() else "not built",

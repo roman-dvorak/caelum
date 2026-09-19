@@ -7,6 +7,7 @@ interface actually works rather than leaving it speculative.
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +38,14 @@ class DerivativeWorker:
     actually needed."""
 
     id: str
+
+    #: The shared ProcessPoolExecutor, injected by `DerivativePool.register()`
+    #: so a worker never has to be handed one at construction — which is what
+    #: lets every worker, built-in or third-party, be built uniformly from
+    #: nothing but its config block. Use it for genuinely heavy, *stateless*
+    #: computation (see meteor_detection.detect_streak); it is None until the
+    #: worker is registered, and in unit tests that never register one.
+    process_pool: Executor | None = None
 
     def on_frame(self, frame: ProcessedFrame) -> None:
         """Called for every captured frame, off the capture thread —

@@ -1,13 +1,39 @@
 from __future__ import annotations
 
+import glob
+
 from fastapi import APIRouter, Depends
 
-from caelum.api.deps import get_capture_worker
-from caelum.api.schemas import CameraModeRequest, ExposureOverrideRequest
+from caelum.api.deps import get_capture_worker, get_config_manager
+from caelum.api.schemas import CameraModeRequest, CameraOptionsResponse, ExposureOverrideRequest
 from caelum.capture.worker import CaptureWorker
+from caelum.config.manager import ConfigManager
 from caelum.control.exposure import ExposureTarget
 
 router = APIRouter()
+
+
+@router.get("/camera/options", response_model=CameraOptionsResponse)
+def get_camera_options(
+    worker: CaptureWorker = Depends(get_capture_worker),
+    config_manager: ConfigManager = Depends(get_config_manager),
+) -> CameraOptionsResponse:
+    """What can this host actually be pointed at?
+
+    Exists so choosing a camera in the web UI is a menu rather than a guess
+    at a device path. `active` is what the capture thread currently holds
+    open, which lags `config.camera` by up to one cycle after a change — the
+    difference is how the UI can tell "applied" from "requested".
+    """
+    active = worker.camera_config
+    return CameraOptionsResponse(
+        backends=["mock", "picamera2", "opencv"],
+        v4l2_devices=sorted(glob.glob("/dev/video*")),
+        configured=config_manager.current.camera,
+        active=active,
+        active_backend_class=worker.camera_backend_name,
+        applied=active is not None and active == config_manager.current.camera,
+    )
 
 
 @router.post("/camera/mode")

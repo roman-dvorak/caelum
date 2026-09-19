@@ -193,6 +193,24 @@ class PluginConfig(StrictModel):
     settings: dict = Field(default_factory=dict)
 
 
+def _default_plugins() -> dict[str, PluginConfig]:
+    """The two built-in derivative workers, seeded so they show up on the
+    Plugins page of a fresh install rather than appearing only once someone
+    knows to type their ids in by hand. They are loaded through the same
+    `PluginLoader` path as third-party plugins, so turning one off or
+    reordering it here genuinely takes effect.
+
+    `settings: {}` means "use the plugin's own declared defaults" — see each
+    worker's `config_schema`.
+    """
+    return {
+        # Keogram first: it only reads frames, so it cannot be affected by
+        # anything a later plugin does.
+        "keogram": PluginConfig(enabled=True, order=10),
+        "meteor_detection": PluginConfig(enabled=True, order=20),
+    }
+
+
 class AppConfig(StrictModel):
     config_version: int = 1
     camera: CameraConfig = Field(default_factory=CameraConfig)
@@ -204,4 +222,4 @@ class AppConfig(StrictModel):
     redis: RedisConfig = Field(default_factory=RedisConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     docs: DocsConfig = Field(default_factory=DocsConfig)
-    plugins: dict[str, PluginConfig] = Field(default_factory=dict)
+    plugins: dict[str, PluginConfig] = Field(default_factory=_default_plugins)

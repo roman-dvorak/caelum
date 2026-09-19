@@ -7,14 +7,14 @@ from tests.factories import make_processed_frame
 
 
 def test_no_derivative_before_live_flush_interval_elapses():
-    worker = KeogramWorker(live_flush_interval_s=999.0)
+    worker = KeogramWorker({"live_flush_interval_s": 999.0})
     frame = make_processed_frame(datetime(2026, 1, 1, 22, 0, tzinfo=UTC))
     worker.on_frame(frame)
     assert worker.create_derivative({"frame": frame}) is None
 
 
 def test_live_derivative_contains_one_column_per_accumulated_frame():
-    worker = KeogramWorker(column_width=2, strip_height=10, live_flush_interval_s=0.0)
+    worker = KeogramWorker({"column_width": 2, "strip_height": 10, "live_flush_interval_s": 0.0})
     base = datetime(2026, 1, 1, 22, 0, tzinfo=UTC)
     frame = None
     for i in range(4):
@@ -29,7 +29,7 @@ def test_live_derivative_contains_one_column_per_accumulated_frame():
 
 
 def test_date_rollover_flushes_previous_days_keogram_and_starts_fresh():
-    worker = KeogramWorker(column_width=2, strip_height=10, live_flush_interval_s=999.0)
+    worker = KeogramWorker({"column_width": 2, "strip_height": 10, "live_flush_interval_s": 999.0})
     day1 = datetime(2026, 1, 1, 23, 0, tzinfo=UTC)
     day2 = datetime(2026, 1, 2, 0, 30, tzinfo=UTC)
 
@@ -50,7 +50,7 @@ def test_date_rollover_flushes_previous_days_keogram_and_starts_fresh():
 
 
 def test_frame_that_triggers_rollover_is_not_lost():
-    worker = KeogramWorker(column_width=2, strip_height=10, live_flush_interval_s=0.0)
+    worker = KeogramWorker({"column_width": 2, "strip_height": 10, "live_flush_interval_s": 0.0})
     day1 = datetime(2026, 1, 1, 23, 59, tzinfo=UTC)
     day2 = datetime(2026, 1, 2, 0, 1, tzinfo=UTC)
 

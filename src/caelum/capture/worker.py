@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 
 from caelum.cameras.base import CameraBackend
 from caelum.config.manager import ConfigManager
+from caelum.config.schema import CameraConfig
 from caelum.control.exposure import ExposureController, ExposureTarget
 from caelum.control.skystate import SkyState, SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
@@ -67,9 +69,14 @@ class ManualExposureOverride:
 
 
 class CaptureWorker(threading.Thread):
+    """Owns the camera outright. Nothing else in the process may open, close
+    or reconfigure it — including a config change, which is why switching
+    cameras is handled here (see `_ensure_camera`) rather than by whoever
+    happened to write the config."""
+
     def __init__(
         self,
-        camera: CameraBackend,
+        camera_factory: Callable[[CameraConfig], CameraBackend],
         config_manager: ConfigManager,
         skystate_calculator: SkyStateCalculator,
         exposure_controller: ExposureController,
@@ -82,7 +89,9 @@ class CaptureWorker(threading.Thread):
         manual_exposure: ManualExposureOverride | None = None,
     ) -> None:
         super().__init__(name="CaptureWorker", daemon=True)
-        self._camera = camera
+        self._camera_factory = camera_factory
+        self._camera: CameraBackend | None = None
+        self._camera_config: CameraConfig | None = None
         self._config_manager = config_manager
         self._skystate_calculator = skystate_calculator
         self._exposure_controller = exposure_controller
@@ -105,13 +114,18 @@ class CaptureWorker(threading.Thread):
 
     @property
     def camera_backend_name(self) -> str:
-        return type(self._camera).__name__
+        return type(self._camera).__name__ if self._camera is not None else "none"
+
+    @property
+    def camera_config(self) -> CameraConfig | None:
+        """The config the *currently open* camera was built from, which can
+        lag `config.camera` by up to one capture cycle after a change."""
+        return self._camera_config
 
     def request_stop(self) -> None:
         self._stop_event.set()
 
     def run(self) -> None:
-        self._camera.open()
         try:
             while not self._stop_event.is_set():
                 try:
@@ -120,7 +134,45 @@ class CaptureWorker(threading.Thread):
                     logger.exception("Capture cycle failed — retrying after a short backoff")
                     self._stop_event.wait(_ERROR_BACKOFF_S)
         finally:
+            self._close_camera()
+
+    def _ensure_camera(self, camera_cfg: CameraConfig) -> CameraBackend:
+        """Open the camera, reopening it if the configuration changed.
+
+        Checked once per cycle instead of reacting to a config-change event:
+        a hardware open/close must happen on this thread (it is the only one
+        allowed to touch the device), and doing it between captures means a
+        switch can never land in the middle of an exposure.
+        """
+        if self._camera is not None and self._camera_config == camera_cfg:
+            return self._camera
+
+        if self._camera is not None:
+            logger.info(
+                "Camera configuration changed (%s -> %s) — reopening",
+                self._camera_config, camera_cfg,
+            )
+            self._close_camera()
+
+        camera = self._camera_factory(camera_cfg)
+        camera.open()
+        # Only recorded after a successful open, so a bad configuration is
+        # retried on the next cycle rather than latched as "current" and
+        # silently leaving the camera closed.
+        self._camera = camera
+        self._camera_config = camera_cfg
+        logger.info("Camera opened: %s (%s)", type(camera).__name__, camera_cfg.sensor_id)
+        return camera
+
+    def _close_camera(self) -> None:
+        if self._camera is None:
+            return
+        try:
             self._camera.close()
+        except Exception:
+            logger.exception("Error closing camera — continuing")
+        self._camera = None
+        self._camera_config = None
 
     def _refresh_sky_state(self) -> SkyState:
         now = time.monotonic()
@@ -132,6 +184,7 @@ class CaptureWorker(threading.Thread):
 
     def _run_cycle(self) -> None:
         cfg = self._config_manager.current
+        camera = self._ensure_camera(cfg.camera)
         sky_state = self._refresh_sky_state()
         preset = cfg.exposure_policy.preset_for(sky_state.period)
 
@@ -144,9 +197,9 @@ class CaptureWorker(threading.Thread):
                 sky_state, prev_stats, self._current_target, cfg.exposure_policy
             )
         self._current_target = target
-        self._camera.set_controls(target.exposure_us, target.analogue_gain)
+        camera.set_controls(target.exposure_us, target.analogue_gain)
 
-        raw = self._camera.capture_frame()
+        raw = camera.capture_frame()
         image = self._dark_library.apply_dark(raw.image, raw.exposure_us, raw.analogue_gain)
 
         frame_stats = stats_module.extract(image, saturation_value=preset.saturation_threshold)

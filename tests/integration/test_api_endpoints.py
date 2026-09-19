@@ -62,7 +62,7 @@ async def _build_harness(tmp_path, redis_url, key_prefix: str) -> _Harness:
     event_bus = EventBus()
     frame_store = FrameStore(loop=loop, event_bus=event_bus)
     worker = CaptureWorker(
-        camera=MockCameraBackend(),
+        camera_factory=lambda _cfg: MockCameraBackend(),
         config_manager=config_manager,
         skystate_calculator=SkyStateCalculator(lat=50.0755, lon=14.4378, elevation_m=200.0),
         exposure_controller=ExposureController(),
