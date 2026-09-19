@@ -9,6 +9,7 @@ import type {
   AppConfig,
   AuthContext,
   CameraModeResponse,
+  CameraOptions,
   DeepPartial,
   DeleteFramesRequest,
   DirectoryListing,
@@ -116,6 +117,10 @@ export class LocalApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patch }),
     })
+  }
+
+  getCameraOptions(): Promise<CameraOptions> {
+    return this.request<CameraOptions>('/camera/options')
   }
 
   setCameraMode(streamMode: boolean): Promise<CameraModeResponse> {

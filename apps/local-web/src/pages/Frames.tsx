@@ -279,6 +279,7 @@ function DateDetail({
             <FrameTile
               key={frame.time}
               frame={frame}
+              date={date}
               selected={selection.has(frame.time)}
               selectable={isAdmin}
               onToggle={() => toggle(frame.time)}
@@ -290,13 +291,43 @@ function DateDetail({
   )
 }
 
+/** One availability chip. Present parts are links to the actual file;
+ * missing ones stay visible but struck through, because "this capture has no
+ * raw" is itself the information you came to the page for — a chip that
+ * simply vanished would be indistinguishable from a layout quirk. */
+function AssetChip({ label, path, title }: { label: string; path: string | null; title: string }) {
+  const className = 'px-1 py-0.5 font-mono text-[0.6rem] tracking-wide border transition'
+
+  if (!path) {
+    return (
+      <span
+        title={`No ${title} for this capture`}
+        className={`${className} border-line-soft text-ink-faint line-through decoration-ink-faint/60`}
+      >
+        {label}
+      </span>
+    )
+  }
+  return (
+    <a
+      href={localApiClient.fileContentUrl(path, true)}
+      title={`Download ${title}`}
+      className={`${className} border-cyan-dim text-cyan hover:border-cyan hover:bg-cyan/10`}
+    >
+      {label}
+    </a>
+  )
+}
+
 function FrameTile({
   frame,
+  date,
   selected,
   selectable,
   onToggle,
 }: {
   frame: FrameEntry
+  date: string
   selected: boolean
   selectable: boolean
   onToggle: () => void
@@ -333,19 +364,31 @@ function FrameTile({
             className="absolute top-2 left-2 h-4 w-4 accent-amber"
           />
         ) : null}
-        {frame.raw ? (
-          <span className="absolute top-2 right-2 bg-void/85 px-1.5 py-0.5 font-mono text-[0.6rem] tracking-wide text-cyan">
-            RAW
+        {frame.raw === null && frame.thumbnail !== null ? (
+          <span className="absolute top-2 right-2 bg-void/85 px-1.5 py-0.5 font-mono text-[0.6rem] tracking-wide text-ink-faint">
+            thumb only
           </span>
         ) : null}
       </div>
-      <figcaption className="flex items-center justify-between gap-2 border-t border-line-soft px-2 py-1.5">
-        <span className="font-mono text-xs text-ink-dim tabular-nums">
-          {formatCaptureTime(frame.time)}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="font-mono text-[0.65rem] text-ink-faint">
+
+      <figcaption className="flex flex-col gap-1.5 border-t border-line-soft px-2 py-1.5">
+        {/* Which of the three files this capture actually has on disk.
+            Retention deletes raw frames long before thumbnails, so these
+            diverge as a night ages. */}
+        <div className="flex items-center gap-1">
+          <AssetChip label="IMG" path={frame.thumbnail} title="thumbnail" />
+          <AssetChip label="RAW" path={frame.raw} title="raw FITS frame" />
+          <AssetChip label="JSON" path={frame.metadata} title="metadata sidecar" />
+          <span className="ml-auto font-mono text-[0.65rem] text-ink-faint tabular-nums">
             {formatBytes(frame.total_bytes)}
+          </span>
+        </div>
+
+        {/* Full date, not just the time: these tiles get screenshotted and
+            pasted into reports, where a bare "13:41:32" means nothing. */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-xs text-ink-dim tabular-nums">
+            {date} {formatCaptureTime(frame.time)}
           </span>
           {frame.raw ? (
             <a
@@ -356,7 +399,7 @@ function FrameTile({
               <DownloadIcon size={14} />
             </a>
           ) : null}
-        </span>
+        </div>
       </figcaption>
     </figure>
   )

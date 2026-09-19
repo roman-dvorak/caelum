@@ -223,6 +223,20 @@ export interface CameraModeResponse {
   stream_mode: boolean
 }
 
+/** `GET /api/camera/options` — what this host can be pointed at. */
+export interface CameraOptions {
+  backends: string[]
+  /** Device nodes present on the host, for the opencv backend's sensor_id. */
+  v4l2_devices: string[]
+  configured: CameraConfig
+  /** What the capture thread currently has open. Null before the first
+   * successful open; differs from `configured` while a change is pending or
+   * if the new camera cannot be opened. */
+  active: CameraConfig | null
+  active_backend_class: string
+  applied: boolean
+}
+
 export interface ExposureOverrideRequest {
   exposure_us?: number
   analogue_gain?: number

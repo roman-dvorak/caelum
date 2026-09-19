@@ -2,21 +2,25 @@ import { useEffect, useState } from 'react'
 import { JsonEditor } from 'json-edit-react'
 import type { AppConfig } from '@caelum/api-client'
 import { Loading, Message, PageHeader } from '@caelum/ui'
+import { CameraPicker } from '../components/CameraPicker.tsx'
 import { localApiClient } from '../services/client.ts'
 
 /**
  * Sections a user should never structurally or value-edit from this tree:
- * `config_version` is server-managed; `camera` only takes effect on the
- * next process restart (editing it here would silently do nothing until
- * then, which is more confusing than just locking it); `redis` is a
- * connection setting, not a tunable parameter.
+ * `config_version` is server-managed, and `redis` is a connection setting
+ * that the process reads once at startup, not a tunable parameter.
  *
- * Note what is *not* locked: `auth`. Its policy flags (who may see the
- * preview, whether the terminal is on) are exactly the things an operator
- * needs to change here — and no credential material lives in this document
- * at all, because accounts are stored separately (see the Accounts page).
+ * `camera` is deliberately *not* locked any more: the capture thread now
+ * reopens the device when this changes (see capture/worker.py's
+ * `_ensure_camera`), so editing it here genuinely switches the camera. The
+ * page renders a picker above the tree for it, because guessing a device
+ * path is not a reasonable thing to ask of anyone.
+ *
+ * `auth` is not locked either — its policy flags are exactly what an
+ * operator needs to change, and no credential material lives in this
+ * document at all (accounts are stored separately; see the Accounts page).
  */
-const LOCKED_SECTIONS = new Set(['config_version', 'camera', 'redis'])
+const LOCKED_SECTIONS = new Set(['config_version', 'redis'])
 
 function isRawPeriodsPath(path: (string | number)[]): boolean {
   return path[0] === 'storage_policy' && path[1] === 'raw_periods'
@@ -71,7 +75,11 @@ export function Settings() {
 
       {message ? <Message kind="error">{message}</Message> : null}
 
-      <div className="mt-2 border border-line bg-panel p-2">
+      <div className="mt-2 mb-4">
+        <CameraPicker onConfigChange={setConfig} />
+      </div>
+
+      <div className="border border-line bg-panel p-2">
         <JsonEditor
           data={config}
           setData={(newData) => setConfig(newData as AppConfig)}
