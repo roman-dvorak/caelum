@@ -9,6 +9,7 @@ import {
   LiveIcon,
   Loading,
   LogoutIcon,
+  LogsIcon,
   Message,
   PuzzleIcon,
   SlidersIcon,
@@ -22,6 +23,7 @@ import { Files } from './pages/Files.tsx'
 import { Frames } from './pages/Frames.tsx'
 import { LiveStream } from './pages/LiveStream.tsx'
 import { Login } from './pages/Login.tsx'
+import { Logs } from './pages/Logs.tsx'
 import { Plugins } from './pages/Plugins.tsx'
 import { Users } from './pages/Users.tsx'
 
@@ -50,6 +52,7 @@ const ADMIN_SECTION: NavSection = {
     { to: '/settings', label: 'Settings', icon: SlidersIcon },
     { to: '/plugins', label: 'Plugins', icon: PuzzleIcon },
     { to: '/terminal', label: 'Terminal', icon: TerminalIcon },
+    { to: '/logs', label: 'Logs', icon: LogsIcon },
     { to: '/users', label: 'Accounts', icon: UsersIcon },
   ],
 }
@@ -132,6 +135,7 @@ export default function App() {
               path="/terminal"
               element={isAdmin ? <TerminalPage /> : <Navigate to="/" replace />}
             />
+            <Route path="/logs" element={isAdmin ? <Logs /> : <Navigate to="/" replace />} />
             <Route path="/users" element={isAdmin ? <Users /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

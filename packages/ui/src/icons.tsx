@@ -165,3 +165,22 @@ export const CameraIcon = (props: IconProps) => (
     <circle cx="11.5" cy="12.5" r="3.5" />
   </Icon>
 )
+
+export const LogsIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M5 4.5A1.5 1.5 0 016.5 3h8L19 7.5v13a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 015 20.5z" />
+    <path d="M14.5 3v3.5A1.5 1.5 0 0016 8h3M8 12h8M8 15.5h8M8 19h5" />
+  </Icon>
+)
+
+export const PauseIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M8 5.5v13M16 5.5v13" />
+  </Icon>
+)
+
+export const PlayIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M7 5v14l12-7z" fill="currentColor" stroke="none" />
+  </Icon>
+)

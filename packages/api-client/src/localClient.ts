@@ -18,6 +18,7 @@ import type {
   FrameListResponse,
   FrameMetadata,
   FrameDateSummary,
+  LogEntry,
   PluginConfig,
   PluginUpdateRequest,
   PluginsResponse,
@@ -240,6 +241,14 @@ export class LocalApiClient {
       body: JSON.stringify(body),
     })
   }
+
+  // ---- logs ----------------------------------------------------------
+
+  /** Snapshot of the in-memory ring buffer — what `/ws/logs` also sends as
+   * its first message. Useful on its own for a quick curl check. */
+  getLogs(): Promise<LogEntry[]> {
+    return this.request<LogEntry[]>('/logs')
+  }
 }
 
 // ---- /ws/stream ---------------------------------------------------------
@@ -399,4 +408,56 @@ export function connectTerminal(options: TerminalSessionOptions): TerminalSessio
     resize: (cols, rows) => post({ type: 'resize', cols, rows }),
     close: () => ws.close(),
   }
+}
+
+// ---- /ws/logs --------------------------------------------------------
+
+export interface LogStreamOptions {
+  /** Full ws:// or wss:// URL. Defaults to same-origin `/ws/logs`. */
+  url?: string
+  /** Sent once on connect with everything currently in the ring buffer. */
+  onBacklog: (entries: LogEntry[]) => void
+  /** Sent for every line logged after the connection opened. */
+  onEntry: (entry: LogEntry) => void
+  onOpen?: () => void
+  onClose?: (event: CloseEvent) => void
+  onError?: (event: Event) => void
+}
+
+export interface LogStreamHandle {
+  close: () => void
+}
+
+function defaultLogsUrl(): string {
+  if (typeof window === 'undefined') {
+    throw new Error('connectLogs() requires a browser environment or an explicit `url`')
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws/logs`
+}
+
+/**
+ * Connects to `/ws/logs` — admin-only, same session-cookie handshake as
+ * `connectTerminal`. The backend sends one `{"type": "backlog", entries}`
+ * message on connect, then one `{"type": "line", entry}` per line logged
+ * after that; a malformed message is dropped rather than crashing the view.
+ */
+export function connectLogs(options: LogStreamOptions): LogStreamHandle {
+  const ws = new WebSocket(options.url ?? defaultLogsUrl())
+
+  ws.onopen = () => options.onOpen?.()
+  ws.onerror = (event) => options.onError?.(event)
+  ws.onclose = (event) => options.onClose?.(event)
+  ws.onmessage = (event: MessageEvent<string>) => {
+    let message: { type?: string; entries?: LogEntry[]; entry?: LogEntry }
+    try {
+      message = JSON.parse(event.data) as typeof message
+    } catch {
+      return
+    }
+    if (message.type === 'backlog' && message.entries) options.onBacklog(message.entries)
+    else if (message.type === 'line' && message.entry) options.onEntry(message.entry)
+  }
+
+  return { close: () => ws.close() }
 }

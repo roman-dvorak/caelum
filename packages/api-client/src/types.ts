@@ -396,3 +396,12 @@ export interface DeleteFramesRequest {
   times?: string[]
   kinds?: ('raw' | 'thumbnails' | 'derivatives')[]
 }
+
+// ---- /api/logs, /ws/logs -------------------------------------------------
+
+export interface LogEntry {
+  timestamp: string
+  level: string
+  logger: string
+  message: string
+}
