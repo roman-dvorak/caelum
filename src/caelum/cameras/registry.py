@@ -11,11 +11,14 @@ from caelum.config.schema import CameraConfig
 
 from .base import CameraBackend
 from .mock_backend import MockCameraBackend
+from .opencv_backend import OpenCVBackend
 
 
 def create_camera_backend(cfg: CameraConfig) -> CameraBackend:
     if cfg.backend == "mock":
         return MockCameraBackend(cfg)
+    if cfg.backend == "opencv":
+        return OpenCVBackend(cfg)
     if cfg.backend == "picamera2":
         from .picamera2_backend import Picamera2Backend
 

@@ -33,7 +33,9 @@ class StrictModel(BaseModel):
 
 
 class CameraConfig(StrictModel):
-    backend: Literal["mock", "picamera2"] = "mock"
+    backend: Literal["mock", "picamera2", "opencv"] = "mock"
+    # For "opencv": doubles as the V4L2 device selector — a bare index like
+    # "0" opens /dev/video0, anything else is an explicit device path.
     sensor_id: str = "cam0"
     resolution: tuple[int, int] = (4056, 3040)
 
