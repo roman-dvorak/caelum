@@ -16,6 +16,7 @@ from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
 from caelum.events import EventBus
+from caelum.logging_conf import LogBuffer
 from caelum.settings import Settings
 
 ADMIN_PASSWORD = "admin-test-password"
@@ -98,6 +99,7 @@ async def _build_harness(tmp_path, redis_url, key_prefix: str) -> _Harness:
     app.state.frame_store = frame_store
     app.state.capture_worker = worker
     app.state.skystate_calculator = SkyStateCalculator(lat=50.0755, lon=14.4378, elevation_m=200.0)
+    app.state.log_buffer = LogBuffer()
 
     return _Harness(app, worker, config_manager, frame_store, data_dir)
 

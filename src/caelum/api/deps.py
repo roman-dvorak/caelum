@@ -12,6 +12,7 @@ from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
 from caelum.control.skystate import SkyStateCalculator
+from caelum.logging_conf import LogBuffer
 from caelum.settings import Settings
 
 
@@ -21,6 +22,10 @@ def get_config_manager(conn: HTTPConnection) -> ConfigManager:
 
 def get_settings(conn: HTTPConnection) -> Settings:
     return conn.app.state.settings
+
+
+def get_log_buffer(conn: HTTPConnection) -> LogBuffer:
+    return conn.app.state.log_buffer
 
 
 def get_frame_store(conn: HTTPConnection) -> FrameStore:

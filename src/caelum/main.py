@@ -40,7 +40,7 @@ _LOCAL_WEB_DIST = Path(__file__).resolve().parents[3] / "caelum-web" / "apps" / 
 
 
 async def _async_main(settings: Settings) -> None:
-    configure_logging(settings.log_level)
+    log_buffer = configure_logging(settings.log_level)
 
     config_manager = ConfigManager(
         disk_path=settings.config_file,
@@ -109,6 +109,7 @@ async def _async_main(settings: Settings) -> None:
     app.state.settings = settings
     app.state.config_manager = config_manager
     app.state.user_store = user_store
+    app.state.log_buffer = log_buffer
     app.state.frame_store = frame_store
     app.state.capture_worker = capture_worker
     app.state.skystate_calculator = skystate_calculator

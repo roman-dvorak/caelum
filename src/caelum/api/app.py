@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import auth, camera, config, files, frames, plugins, status, stream, terminal
+from .routes import auth, camera, config, files, frames, logs, plugins, status, stream, terminal
 from .security import require_admin, require_preview
 
 
@@ -46,6 +46,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     # HTTPException after the handshake has no way to reach the client.
     app.include_router(stream.router)  # paths are already fully qualified (/api/frame/*, /ws/*)
     app.include_router(terminal.router)
+    app.include_router(logs.router)  # paths are already fully qualified (/api/logs, /ws/logs)
 
     if static_dir is not None and static_dir.exists():
         # local-web's built assets — the Pi runs a single service, no nginx.

@@ -172,3 +172,22 @@ by the old `strip_height`, a detector's previous frame at the old `max_dim`)
 would not make sense under new settings, so it is rebuilt from scratch
 rather than patched in place. The one visible cost: an in-progress keogram
 restarts if its own settings change mid-night.
+
+## Logs
+
+The web UI's Logs page is a live tail of everything caelum has logged since
+it started — `journalctl -u caelum -f`, reachable from a browser instead of
+a shell. Backed by an in-memory ring buffer (`logging_conf.LogBuffer`,
+default 2000 lines) attached to the root logger, so it needs nothing beyond
+the process already running: no log file, no journald dependency. Restart
+the process and the buffer restarts empty — it is not a substitute for
+`journalctl`/a log file when you need history from before the last restart.
+
+`GET /api/logs` returns the current buffer as JSON (admin-only, handy for a
+quick `curl` check); `/ws/logs` streams the same backlog on connect and then
+every new line live. Plain HTTP request lines (`GET /api/status 200`, …) are
+deliberately excluded — uvicorn logs those through its own handler that
+doesn't propagate to the root logger, and the frontend's own polling would
+otherwise fill the buffer with noise within minutes. What you see is
+`caelum.*` application logging: capture cycles, config/plugin changes,
+terminal sessions, upload/retention activity.
