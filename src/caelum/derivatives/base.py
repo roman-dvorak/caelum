@@ -55,6 +55,17 @@ class DerivativeWorker:
         return []
 
     def modify_image(self, image: np.ndarray, frame: ProcessedFrame) -> np.ndarray:
+        """Return a modified copy of `image` (or `image` itself, unchanged).
+
+        Chained across every enabled worker in ascending `order` — see
+        `DerivativePool._run_modify_chain` — so this worker's output becomes
+        the next worker's `image` argument. `frame` is the original,
+        unmodified `ProcessedFrame` throughout the chain (its metadata,
+        stats and already-encoded thumbnail); only `image` accumulates
+        changes. Offload genuinely heavy work to `self.process_pool`
+        yourself (see meteor_detection.py's `_detect()`) — this hook runs
+        synchronously in the chain, so it blocks every worker after it.
+        """
         return image
 
     def create_derivative(self, context: dict[str, Any]) -> Derivative | None:
