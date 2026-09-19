@@ -7,16 +7,24 @@
 
 import type {
   AppConfig,
+  AuthContext,
   CameraModeResponse,
   DeepPartial,
+  DeleteFramesRequest,
+  DirectoryListing,
   ExposureOverrideRequest,
   ExposureOverrideResponse,
+  FrameListResponse,
   FrameMetadata,
+  FrameDateSummary,
   PluginConfig,
   PluginUpdateRequest,
   PluginsResponse,
+  Role,
   SkyStateResponse,
   StatusResponse,
+  UsageResponse,
+  UserSummary,
 } from './types.js'
 
 export interface LocalApiClientOptions {
@@ -53,9 +61,12 @@ export class LocalApiClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(this.apiUrl(path), init)
+    // `credentials: 'include'` so the session cookie travels even when a dev
+    // frontend points at a camera on another origin; same-origin requests
+    // are unaffected.
+    const res = await fetch(this.apiUrl(path), { credentials: 'include', ...init })
     if (!res.ok) {
-      const detail = await res.text().catch(() => '')
+      const detail = await this.errorDetail(res)
       throw new LocalApiClientError(
         `caelum API request failed: ${init?.method ?? 'GET'} ${path} -> ${res.status}${detail ? ` (${detail})` : ''}`,
         res.status,
@@ -63,6 +74,19 @@ export class LocalApiClient {
       )
     }
     return (await res.json()) as T
+  }
+
+  /** FastAPI errors are `{"detail": "..."}`; surface just that when present
+   * so the UI can show the backend's own wording rather than a JSON blob. */
+  private async errorDetail(res: Response): Promise<string> {
+    const text = await res.text().catch(() => '')
+    try {
+      const parsed = JSON.parse(text) as { detail?: unknown }
+      if (typeof parsed.detail === 'string') return parsed.detail
+    } catch {
+      /* not JSON — fall through to the raw body */
+    }
+    return text
   }
 
   private async postJson<T>(path: string, body: unknown): Promise<T> {
@@ -123,6 +147,93 @@ export class LocalApiClient {
    * fallback/poster image before the first WS frame arrives. */
   latestFrameUrl(): string {
     return this.apiUrl('/frame/latest.jpg')
+  }
+
+  // ---- auth --------------------------------------------------------------
+
+  /** Unauthenticated: what this deployment requires, and who we already are. */
+  getAuthContext(): Promise<AuthContext> {
+    return this.request<AuthContext>('/auth/context')
+  }
+
+  login(username: string, password: string): Promise<AuthContext> {
+    return this.postJson<AuthContext>('/auth/login', { username, password })
+  }
+
+  logout(): Promise<{ ok: boolean }> {
+    return this.postJson<{ ok: boolean }>('/auth/logout', {})
+  }
+
+  changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean }> {
+    return this.postJson<{ ok: boolean }>('/auth/password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+  }
+
+  listUsers(): Promise<UserSummary[]> {
+    return this.request<UserSummary[]>('/auth/users')
+  }
+
+  createUser(username: string, password: string, role: Role): Promise<UserSummary> {
+    return this.postJson<UserSummary>('/auth/users', { username, password, role })
+  }
+
+  updateUser(username: string, patch: { role?: Role; password?: string }): Promise<UserSummary> {
+    return this.request<UserSummary>(`/auth/users/${encodeURIComponent(username)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+  }
+
+  deleteUser(username: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`/auth/users/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // ---- stored output -----------------------------------------------------
+
+  listFiles(path = ''): Promise<DirectoryListing> {
+    return this.request<DirectoryListing>(`/files?path=${encodeURIComponent(path)}`)
+  }
+
+  getUsage(): Promise<UsageResponse> {
+    return this.request<UsageResponse>('/files/usage')
+  }
+
+  deletePath(path: string): Promise<{ deleted: string; files_removed: number }> {
+    return this.request(`/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' })
+  }
+
+  /** Direct URL for an `<img>`/`<a>` — these are plain GETs the browser
+   * makes itself, carrying the session cookie like any other request. */
+  fileContentUrl(path: string, download = false): string {
+    return this.apiUrl(`/files/content?path=${encodeURIComponent(path)}${download ? '&download=true' : ''}`)
+  }
+
+  /** Server-rendered PNG, the only way to see a FITS frame in a browser. */
+  filePreviewUrl(path: string, maxDim = 1024): string {
+    return this.apiUrl(`/files/preview?path=${encodeURIComponent(path)}&max_dim=${maxDim}`)
+  }
+
+  // ---- recordings --------------------------------------------------------
+
+  listFrameDates(): Promise<FrameDateSummary[]> {
+    return this.request<FrameDateSummary[]>('/frames/dates')
+  }
+
+  listFrames(date: string): Promise<FrameListResponse> {
+    return this.request<FrameListResponse>(`/frames?date=${encodeURIComponent(date)}`)
+  }
+
+  deleteFrames(body: DeleteFramesRequest): Promise<{ date: string; files_removed: number }> {
+    return this.request('/frames', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
   }
 }
 
@@ -221,5 +332,66 @@ export function connectFrameStream(options: FrameStreamOptions): FrameStreamHand
       revokeLast()
       ws.close()
     },
+  }
+}
+
+// ---- /ws/terminal --------------------------------------------------------
+
+export interface TerminalSessionOptions {
+  /** Full ws:// or wss:// URL. Defaults to same-origin `/ws/terminal`. */
+  url?: string
+  /** Raw PTY output. Bytes, not text: a UTF-8 sequence can straddle a read
+   * boundary on the backend, so decoding is xterm.js's job, not ours. */
+  onData: (chunk: Uint8Array) => void
+  onOpen?: () => void
+  onClose?: (event: CloseEvent) => void
+  onError?: (event: Event) => void
+}
+
+export interface TerminalSessionHandle {
+  /** Keystrokes from the terminal widget. */
+  send: (data: string) => void
+  /** Tell the PTY its new window size so full-screen programs reflow. */
+  resize: (cols: number, rows: number) => void
+  close: () => void
+}
+
+function defaultTerminalUrl(): string {
+  if (typeof window === 'undefined') {
+    throw new Error('connectTerminal() requires a browser environment or an explicit `url`')
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws/terminal`
+}
+
+/**
+ * Opens an interactive shell session on the backend.
+ *
+ * Note there is no token to pass: the browser attaches the session cookie to
+ * the WebSocket handshake automatically, and the backend rejects the upgrade
+ * with a 403 for anyone who is not an admin (or if the terminal is disabled
+ * in config), so a failure surfaces as `onClose`/`onError` rather than an
+ * open socket that then does nothing.
+ */
+export function connectTerminal(options: TerminalSessionOptions): TerminalSessionHandle {
+  const ws = new WebSocket(options.url ?? defaultTerminalUrl())
+  ws.binaryType = 'arraybuffer'
+
+  ws.onopen = () => options.onOpen?.()
+  ws.onerror = (event) => options.onError?.(event)
+  ws.onclose = (event) => options.onClose?.(event)
+  ws.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
+    if (typeof event.data === 'string') return
+    options.onData(new Uint8Array(event.data))
+  }
+
+  const post = (message: unknown) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message))
+  }
+
+  return {
+    send: (data) => post({ type: 'input', data }),
+    resize: (cols, rows) => post({ type: 'resize', cols, rows }),
+    close: () => ws.close(),
   }
 }

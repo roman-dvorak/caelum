@@ -1,6 +1,14 @@
-import { HashRouter, Link, Route, Routes } from 'react-router-dom'
+import { HashRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { AppShell, CameraIcon, ImagesIcon } from '@caelum/ui'
+import type { NavItem, NavSection } from '@caelum/ui'
+import { useCameras } from './hooks/useCameras.ts'
 import { CameraList } from './pages/CameraList.tsx'
 import { CameraDetail } from './pages/CameraDetail.tsx'
+
+// Where the public documentation is published. Unlike local-web, which
+// reads this from the backend config, this app has no backend at all — it
+// is static files on an Apache host — so it comes from the build env.
+const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'https://caelum.astrometers.eu'
 
 // This app is deployed as static files on an Apache host with zero backend
 // logic — there is no server-side rewrite to fall back arbitrary paths to
@@ -10,25 +18,54 @@ import { CameraDetail } from './pages/CameraDetail.tsx'
 export default function App() {
   return (
     <HashRouter>
-      <div className="flex min-h-svh flex-col">
-        <header className="sticky top-0 z-10 border-b border-line bg-void/95 backdrop-blur-sm">
-          <div className="mx-auto flex w-full max-w-6xl items-center px-4 py-3.5">
-            <Link
-              to="/"
-              className="flex items-center gap-2 text-sm font-semibold tracking-[0.2em] text-ink uppercase"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-amber shadow-[0_0_8px_var(--color-amber)]" />
-              caelum <span className="font-normal tracking-normal text-ink-faint normal-case">/ allsky network</span>
-            </Link>
-          </div>
-        </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-          <Routes>
-            <Route path="/" element={<CameraList />} />
-            <Route path="/camera/:slug" element={<CameraDetail />} />
-          </Routes>
-        </main>
-      </div>
+      <Shell />
     </HashRouter>
+  )
+}
+
+function Shell() {
+  const { cameras } = useCameras()
+
+  // Every published camera gets its own sidebar entry, so switching between
+  // them is one click rather than a trip back through the index — this site
+  // exists to compare several cameras, not to browse one.
+  const sections: NavSection[] = [
+    { items: [{ to: '/', label: 'All cameras', icon: ImagesIcon, end: true }] },
+    ...(cameras && cameras.cameras.length > 0
+      ? [
+          {
+            title: 'Cameras',
+            items: cameras.cameras.map((camera) => ({
+              to: `/camera/${camera.slug}`,
+              label: camera.name,
+              icon: CameraIcon,
+            })),
+          },
+        ]
+      : []),
+  ]
+
+  return (
+    <AppShell
+      sections={sections}
+      subtitle="allsky network"
+      docsUrl={DOCS_URL}
+      renderNavItem={renderNavItem}
+    >
+      <Routes>
+        <Route path="/" element={<CameraList />} />
+        <Route path="/camera/:slug" element={<CameraDetail />} />
+      </Routes>
+    </AppShell>
+  )
+}
+
+function renderNavItem(item: NavItem, className: (isActive: boolean) => string) {
+  const Icon = item.icon
+  return (
+    <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => className(isActive)}>
+      <Icon size={17} />
+      <span className="truncate">{item.label}</span>
+    </NavLink>
   )
 }

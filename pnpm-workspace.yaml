@@ -1,6 +1,10 @@
 packages:
   - "packages/*"
   - "apps/*"
+allowBuilds:
+  # VitePress pulls esbuild in; its postinstall fetches the platform-native
+  # binary, without which `vitepress build` cannot run at all.
+  esbuild: true
 minimumReleaseAgeExclude:
   - '@types/node@26.6.2'
   - eslint@10.11.0

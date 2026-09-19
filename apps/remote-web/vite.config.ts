@@ -7,4 +7,10 @@ import tailwindcss from '@tailwindcss/vite'
 // is no backend to proxy to, dev or prod.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Relative asset URLs, so the build works unchanged whether it lands at
+  // the web root or in some `/allsky/` subdirectory — the operator rsyncs
+  // the folder wherever it suits them and nothing needs rebuilding. Safe
+  // here specifically because the app uses HashRouter: every route lives
+  // under the one index.html, so relative paths always resolve from it.
+  base: './',
 })

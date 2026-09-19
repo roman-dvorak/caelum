@@ -177,6 +177,21 @@ export interface PluginConfig {
 
 export type PluginsResponse = Record<string, PluginConfig>
 
+/** Who may reach the read-only preview surface. Control endpoints are
+ * always admin-only regardless of this. */
+export type PreviewAccess = 'public' | 'viewer' | 'admin'
+
+export interface AuthConfig {
+  enabled: boolean
+  preview_access: PreviewAccess
+  session_ttl_hours: number
+  terminal_enabled: boolean
+}
+
+export interface DocsConfig {
+  base_url: string
+}
+
 export interface AppConfig {
   config_version: number
   camera: CameraConfig
@@ -186,6 +201,8 @@ export interface AppConfig {
   retention: RetentionConfig
   upload: UploadConfig
   redis: RedisConfig
+  auth: AuthConfig
+  docs: DocsConfig
   plugins: Record<string, PluginConfig>
 }
 
@@ -280,4 +297,88 @@ export interface DateIndexImageEntry {
 export interface DateIndex {
   date: string
   images: DateIndexImageEntry[]
+}
+
+// ---- /api/auth/* ---------------------------------------------------------
+
+export type Role = 'admin' | 'viewer'
+
+/** `GET /api/auth/context` — the SPA's unauthenticated bootstrap. */
+export interface AuthContext {
+  auth_enabled: boolean
+  preview_access: PreviewAccess
+  terminal_enabled: boolean
+  docs_url: string
+  authenticated: boolean
+  username: string | null
+  role: string | null
+}
+
+/** An account as the API reports it — never includes credential material. */
+export interface UserSummary {
+  username: string
+  role: Role
+  created_at: string
+  last_login_at: string | null
+}
+
+// ---- /api/files/* --------------------------------------------------------
+
+export type MediaKind = 'image' | 'fits' | 'json' | 'text' | 'other'
+
+export interface FileEntry {
+  name: string
+  /** Path relative to the data directory — what every /api/files call takes. */
+  path: string
+  kind: 'dir' | 'file'
+  size: number
+  modified_at: string
+  media: MediaKind
+}
+
+export interface DirectoryListing {
+  path: string
+  parent: string | null
+  entries: FileEntry[]
+  total_bytes: number
+}
+
+export interface UsageResponse {
+  by_subdir: Record<string, number>
+  total_bytes: number
+  disk_free_bytes: number
+  disk_total_bytes: number
+}
+
+// ---- /api/frames/* -------------------------------------------------------
+
+export interface FrameDateSummary {
+  date: string
+  thumbnails: number
+  raws: number
+  derivatives: number
+  total_bytes: number
+}
+
+/** One capture, with its up-to-three files resolved back into a single row. */
+export interface FrameEntry {
+  time: string
+  captured_at: string
+  thumbnail: string | null
+  raw: string | null
+  metadata: string | null
+  total_bytes: number
+}
+
+export interface FrameListResponse {
+  date: string
+  frames: FrameEntry[]
+  derivatives: FileEntry[]
+}
+
+export interface DeleteFramesRequest {
+  date: string
+  /** Empty (or omitted) means the whole date. */
+  times?: string[]
+  kinds?: ('raw' | 'thumbnails' | 'derivatives')[]
 }

@@ -1,8 +1,18 @@
 /* Shared design tokens for both apps — an instrument-panel aesthetic
- * deliberately distinct from generic dashboard-template dark mode: a warm,
- * near-black ground (not slate/navy), an amber "instrument glow" primary
- * accent, and a cool cyan secondary reserved for night-sky/moon data so the
- * two read as distinct signal colors rather than one generic "brand blue".
+ * deliberately distinct from generic dashboard-template chrome: a warm
+ * ground (not slate/navy), an amber "instrument glow" primary accent, and a
+ * cool cyan secondary reserved for night-sky/moon data so the two read as
+ * distinct signal colors rather than one generic "brand blue".
+ *
+ * Dark is the base palette — this is software for looking at the night sky,
+ * and it is what a camera's own screen shows at 2am. Light is a full
+ * override of the same token names further down.
+ *
+ * `ThemeProvider` (theme.tsx) always writes a resolved `data-theme` of
+ * exactly "dark" or "light" onto <html>; "follow the system" is resolved in
+ * JS rather than here, so the CSS never has to reason about a media query
+ * and an explicit choice at the same time.
+ *
  * Imported by each app's index.css via a relative path (packages/ui ships
  * raw source, no build step — see that package's README/exports).
  */
@@ -31,8 +41,47 @@
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Roboto Mono', Consolas, monospace;
 }
 
-:root {
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
+  /* Ambient glow behind the page, and the shadow under raised surfaces.
+   * Both have to flip with the theme, so they are tokens too. */
+  --glow: rgba(232, 161, 58, 0.05);
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --selection-bg: rgba(232, 161, 58, 0.25);
+}
+
+/* Light theme: the same roles, re-pitched for a paper ground. The accents
+ * are darkened rather than reused — #e8a13a on white is around 2:1 contrast
+ * and unreadable as text, so `--color-amber` becomes a deeper ochre and
+ * `--color-amber-bright` becomes *darker* still (it is the "stronger"
+ * variant in both themes, not literally the lighter one). */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-void: #f7f4ee;
+  --color-panel: #ffffff;
+  --color-panel-raised: #fbf8f2;
+  --color-line: #ddd5c5;
+  --color-line-soft: #ece7dc;
+
+  --color-ink: #1b1712;
+  --color-ink-dim: #5d5346;
+  --color-ink-faint: #8d8271;
+
+  --color-amber: #a9690f;
+  --color-amber-bright: #855009;
+  --color-amber-dim: #e0c79a;
+
+  --color-cyan: #276476;
+  --color-cyan-dim: #a4c6d0;
+
+  --color-danger: #b23a26;
+  --color-success: #3c7336;
+
+  --glow: rgba(169, 105, 15, 0.06);
+  --shadow-panel: 0 1px 2px rgba(64, 52, 32, 0.08);
+  --selection-bg: rgba(169, 105, 15, 0.18);
 }
 
 * {
@@ -43,17 +92,32 @@ body {
   margin: 0;
   min-height: 100svh;
   background: var(--color-void);
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 161, 58, 0.05), transparent);
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, var(--glow), transparent);
   color: var(--color-ink);
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Theme switches are instant by default, which reads as a harsh flash on
+   * a full-page color change. A short transition on the ground only (not on
+   * every element) softens it without making the UI feel laggy. */
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 #root {
   min-height: 100svh;
 }
 
+::selection {
+  background: var(--selection-bg);
+}
+
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbars default to the browser's light chrome inside dark panels;
+ * `color-scheme` above fixes that for the page, this covers the overflow
+ * containers (file browser, terminal, frame grid) that scroll internally. */
+* {
+  scrollbar-color: var(--color-line) transparent;
+  scrollbar-width: thin;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { JsonEditor } from 'json-edit-react'
 import type { AppConfig } from '@caelum/api-client'
+import { Loading, Message, PageHeader } from '@caelum/ui'
 import { localApiClient } from '../services/client.ts'
 
 /**
@@ -9,6 +10,11 @@ import { localApiClient } from '../services/client.ts'
  * next process restart (editing it here would silently do nothing until
  * then, which is more confusing than just locking it); `redis` is a
  * connection setting, not a tunable parameter.
+ *
+ * Note what is *not* locked: `auth`. Its policy flags (who may see the
+ * preview, whether the terminal is on) are exactly the things an operator
+ * needs to change here — and no credential material lives in this document
+ * at all, because accounts are stored separately (see the Accounts page).
  */
 const LOCKED_SECTIONS = new Set(['config_version', 'camera', 'redis'])
 
@@ -40,23 +46,32 @@ export function Settings() {
     }
   }, [])
 
-  if (loading) return <p className="text-sm text-ink-faint">Loading configuration…</p>
-  if (loadError) {
-    return <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{loadError}</p>
-  }
+  if (loading) return <Loading label="Loading configuration…" />
+  if (loadError) return <Message kind="error">{loadError}</Message>
   if (!config) return null
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold tracking-[0.2em] text-ink-dim uppercase">Settings</h1>
-        <span className="text-xs text-ink-faint">Changes save automatically</span>
-      </div>
-      {message ? (
-        <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>
-      ) : null}
+    <>
+      <PageHeader
+        title="Settings"
+        description="The live configuration document. Changes save as you make them; greyed-out sections are read-only."
+        actions={
+          config.docs.base_url ? (
+            <a
+              href={`${config.docs.base_url}/guide/concepts.html`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="border border-line px-3 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
+            >
+              What do these mean?
+            </a>
+          ) : null
+        }
+      />
 
-      <div className="border border-line bg-panel p-2">
+      {message ? <Message kind="error">{message}</Message> : null}
+
+      <div className="mt-2 border border-line bg-panel p-2">
         <JsonEditor
           data={config}
           setData={(newData) => setConfig(newData as AppConfig)}
@@ -80,30 +95,43 @@ export function Settings() {
           }}
         />
       </div>
-    </div>
+    </>
   )
 }
 
+/**
+ * json-edit-react takes inline style values, so every colour here is a
+ * `var(--color-*)` reference into the shared token set rather than a literal
+ * — that is what makes the editor follow the light/dark switch without this
+ * file knowing anything about which theme is active.
+ */
 const caelumJsonTheme = {
   displayName: 'caelum',
   styles: {
     container: { backgroundColor: 'transparent', fontFamily: 'var(--font-mono)', fontSize: '13px' },
-    property: '#ab9d89',
-    bracket: { color: '#6e6353', fontWeight: 'normal' },
-    itemCount: { color: '#6e6353', fontStyle: 'italic' },
-    string: '#6bb3c4',
-    number: '#e8a13a',
-    boolean: '#7cad76',
-    null: { color: '#de6a56', fontVariant: 'small-caps', fontWeight: 'bold' },
-    input: ['#f3ede1', { fontSize: '95%', backgroundColor: '#0b0a08', border: '1px solid #2f2a20' }],
-    inputHighlight: 'rgba(232, 161, 58, 0.25)',
-    error: { fontSize: '0.8em', color: '#de6a56', fontWeight: 'bold' },
-    iconCollection: '#6e6353',
-    iconEdit: '#e8a13a',
-    iconDelete: '#de6a56',
-    iconAdd: '#e8a13a',
-    iconCopy: '#6bb3c4',
-    iconOk: '#7cad76',
-    iconCancel: '#de6a56',
+    property: 'var(--color-ink-dim)',
+    bracket: { color: 'var(--color-ink-faint)', fontWeight: 'normal' },
+    itemCount: { color: 'var(--color-ink-faint)', fontStyle: 'italic' },
+    string: 'var(--color-cyan)',
+    number: 'var(--color-amber)',
+    boolean: 'var(--color-success)',
+    null: { color: 'var(--color-danger)', fontVariant: 'small-caps', fontWeight: 'bold' },
+    input: [
+      'var(--color-ink)',
+      {
+        fontSize: '95%',
+        backgroundColor: 'var(--color-void)',
+        border: '1px solid var(--color-line)',
+      },
+    ],
+    inputHighlight: 'var(--selection-bg)',
+    error: { fontSize: '0.8em', color: 'var(--color-danger)', fontWeight: 'bold' },
+    iconCollection: 'var(--color-ink-faint)',
+    iconEdit: 'var(--color-amber)',
+    iconDelete: 'var(--color-danger)',
+    iconAdd: 'var(--color-amber)',
+    iconCopy: 'var(--color-cyan)',
+    iconOk: 'var(--color-success)',
+    iconCancel: 'var(--color-danger)',
   },
 }

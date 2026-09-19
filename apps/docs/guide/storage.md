@@ -1,0 +1,200 @@
+# Local storage and retention
+
+Local disk is a rotating cache. The remote archive (see [Upload](/guide/upload))
+is the permanent copy. Everything on this page follows from that.
+
+## On-disk layout
+
+All managed files live under `CAELUM_DATA_DIR` in a single date-based
+convention shared by the storage writer, the retention sweeper and the
+uploader:
+
+```
+<data_dir>/<kind>/<YYYY-MM-DD>/<HHMMSS>[...].<ext>
+```
+
+A populated data directory looks like this:
+
+```
+data/
+  raw/
+    2026-09-19/
+      210431.fits
+      210431.json
+      210501.fits
+      210501.json
+  thumbnails/
+    2026-09-19/
+      210431.jpg
+      210431.json
+      210501.jpg
+      210501.json
+      index.json
+  derivatives/
+    2026-09-19/
+      235959_keogram_keogram.png
+      210433_meteor_detection_meteor_crop.jpg
+  darks/
+    dark_1000000us_4.0g_4056x3040.npy
+  manifest.json
+```
+
+Dates and times are UTC, taken from the frame's `captured_at`. The three
+managed subdirectories — `raw`, `thumbnails`, `derivatives` — are the ones
+retention sweeps. `darks` is a hand-curated calibration library and is never
+touched.
+
+Derivative filenames carry more than a time, because several workers may emit
+on the same second:
+
+```
+<HHMMSS>_<worker_id>_<kind>.<ext>
+```
+
+The extension is `png` for anything whose kind starts with `keogram`, and `jpg`
+otherwise. Retention reconstructs a file's capture time by splitting the stem
+on the first `_` and parsing `<parent dir name><time token>`, which is why the
+time component must come first.
+
+## Metadata sidecars
+
+Every stored image gets a JSON sidecar with the same stem and a `.json`
+extension — `210431.fits` and `210431.json`, `210431.jpg` and `210431.json`. It
+is the frame's `FrameMetadata` serialised with `indent=2`: capture time,
+exposure, gain, the full sky state, the focus score and the overlay elements.
+The identical document is written next to the raw file and next to the
+thumbnail.
+
+That redundancy is on purpose. The remote viewer reads a thumbnail and its
+sidecar and can render the complete overlay without any backend, and a raw FITS
+pulled off the archive months later carries its own provenance next to it.
+
+The raw FITS file additionally carries the key values in its header, so
+standard astronomy tools see them without reading the sidecar:
+
+```ini
+EXPOSURE = 4.0          / seconds
+GAIN     = 2.5          / analogue gain
+DATE-OBS = 2026-09-19T21:04:31.482913+00:00
+SUNALT   = -21.4        / degrees
+MOONALT  = 14.8         / degrees
+MOONILLU = 0.62         / fraction 0-1
+SKYPERD  = 'night'
+```
+
+The image data is stored in the FITS convention for a colour cube — axes
+reordered to `(channels, height, width)`.
+
+## When raw files are written
+
+Every captured frame produces a thumbnail plus a sidecar. Raw FITS files are
+conditional.
+
+`StoragePolicy.decide()` sets `save_raw` to true when the frame's sky period is
+listed in `storage_policy.raw_periods`, which defaults to:
+
+```json
+{
+  "storage_policy": {
+    "raw_periods": ["astronomical_twilight", "night"],
+    "thumbnail_max_dim": 1024,
+    "jpeg_quality": 85,
+    "night_capture_interval_s": 30.0,
+    "day_capture_interval_s": 60.0,
+    "realtime_stream_fps": 2.0
+  }
+}
+```
+
+So out of the box, daylight and the two brighter twilights produce thumbnails
+only, and astronomical twilight and night produce a full FITS file as well. The
+same flag also selects the capture cadence — `night_capture_interval_s` when
+raw is being saved, `day_capture_interval_s` otherwise.
+
+Thumbnails are encoded in memory at `thumbnail_max_dim` on the longest side
+(1024 px by default) at `jpeg_quality`. No temporary files are involved at any
+point in the pipeline.
+
+The actual writing happens in `StorageWriter`, which subscribes to
+`frame_captured` and immediately submits to a two-thread pool — the capture
+thread never blocks on disk. A write failure is logged with a traceback and
+dropped; it never propagates back into the capture loop.
+
+::: tip Sizing the disk
+A 4056×3040 RGB frame is roughly 35 MB uncompressed. At the default 30 s night
+cadence that is about 4 GB per hour of raw data. Either keep
+`retention.max_age_days` short, keep the uplink fast, or narrow `raw_periods`
+to `["night"]`.
+:::
+
+## The retention sweeper
+
+`RetentionSweeper` is a daemon thread that runs a sweep, waits
+`retention.sweep_interval_s`, and repeats. It re-reads the config at the top of
+every iteration, so changes apply without a restart.
+
+```json
+{
+  "retention": {
+    "max_age_days": 14,
+    "min_free_space_mb": 1024,
+    "sweep_interval_s": 3600.0
+  }
+}
+```
+
+Each sweep:
+
+1. **Collect candidates.** Walk `raw/`, `thumbnails/` and `derivatives/`
+   recursively. Skip `.json` files — sidecars are never candidates in their own
+   right, they are deleted alongside their image. Skip anything whose capture
+   time cannot be reconstructed from its path. Record time, path and size.
+2. **Apply the upload filter.** See below.
+3. **Sort oldest first.**
+4. **Delete by age.** Anything older than `now - max_age_days` is deleted,
+   along with its sidecar.
+5. **Delete by space pressure.** While free space on the data directory's
+   filesystem is below `min_free_space_mb`, pop the oldest remaining candidate
+   and delete it. Free space is re-checked after each deletion, so the sweep
+   stops as soon as it has made enough room.
+
+The sweep logs a summary when it deletes anything:
+
+```
+Retention sweep deleted 412 file(s), freed 1834.6 MB
+```
+
+## Files not yet uploaded are exempt
+
+This is the rule that makes the "local disk is a cache" claim true rather than
+aspirational.
+
+When `upload.enabled` is true, the candidate list is filtered down to files
+older than the uploader's confirmed-upload watermark:
+
+```python
+if upload_cfg.enabled:
+    candidates = [c for c in candidates if uploaded_before is not None and c[0] < uploaded_before]
+```
+
+`uploaded_before` is the timestamp of the last *successful full reconciliation
+pass* — not the last incremental push, which only ever proves that today's
+directories are covered. Until a reconciliation has completed successfully at
+least once since startup, `uploaded_before` is `None` and the filter removes
+**every** candidate: nothing is deleted at all.
+
+The consequence is deliberate and worth stating plainly: a disk that is
+genuinely full while upload is lagging far behind will not free space until
+upload catches up. caelum will let the disk fill rather than delete the only
+copy of a frame. If that is not the trade you want, set `upload.enabled` to
+false — retention then runs on age and space alone, because the local copy is
+by definition the only copy that will ever exist, and that is your own
+configuration choice.
+
+::: warning
+Running with `upload.enabled: true` against a remote that is permanently
+unreachable is the worst of both worlds — nothing gets archived and nothing
+gets rotated. Check the log for repeated `rsync failed` warnings, and watch
+whether `Running full upload reconciliation pass` is ever followed by a
+successful sweep.
+:::
