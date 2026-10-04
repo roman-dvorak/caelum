@@ -13,6 +13,7 @@ development: sun/moon altitude agreed to within ~0.05°).
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -109,20 +110,34 @@ class SkyStateCalculator:
         rather than a closed-form sunrise formula: this reuses the exact
         `get_body`/`AltAz` transform `compute()` uses, so a sunrise and a
         `compute()` period boundary can never silently disagree.
+
+        `after` defaults to "now" *outside* the cached helper below — "now"
+        must never itself be a cache key, or the very first call would wrongly
+        pin every later "now" to that one stale result. Every concrete `after`
+        this app actually passes (from `frames.py`'s date-boundary walks)
+        recurs across repeated page loads, so caching on the exact value is
+        what turns a slow correct answer into an instant one on a rerequest.
         """
         after = after or datetime.now(UTC)
         if after.tzinfo is None:
             after = after.replace(tzinfo=UTC)
+        return self._next_sunrise_cached(after)
 
-        prev_t = after
-        prev_alt = self._sun_altitude_deg(prev_t)
+    @functools.lru_cache(maxsize=1024)  # noqa: B019 - `self` is a long-lived singleton, not a per-call object
+    def _next_sunrise_cached(self, after: datetime) -> datetime:
+        # One vectorized transform for the whole coarse grid instead of one
+        # Python-level astropy call per 4-minute step: on a Raspberry Pi's
+        # CPU the fixed per-call overhead so dominates that computing the
+        # worst-case 720-point grid one point at a time cost ~20s measured
+        # on hardware, against ~5s for the same grid computed as one array.
         steps = int(_CROSSING_SEARCH_WINDOW / _CROSSING_STEP)
-        for _ in range(steps):
-            t = prev_t + _CROSSING_STEP
-            alt = self._sun_altitude_deg(t)
-            if prev_alt <= _DAY_THRESHOLD < alt:
-                return self._bisect_sunrise(prev_t, t)
-            prev_t, prev_alt = t, alt
+        offsets = [after + _CROSSING_STEP * i for i in range(steps + 1)]
+        times = Time(offsets, scale="utc")
+        altitudes = self._altaz("sun", times).alt.deg
+
+        for i in range(steps):
+            if altitudes[i] <= _DAY_THRESHOLD < altitudes[i + 1]:
+                return self._bisect_sunrise(offsets[i], offsets[i + 1])
 
         raise RuntimeError(
             f"No sunrise found within {_CROSSING_SEARCH_WINDOW} of {after.isoformat()} — "

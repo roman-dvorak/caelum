@@ -68,6 +68,28 @@ class ManualExposureOverride:
             return self._target
 
 
+class WhiteBalanceOverride:
+    """Thread-safe one-shot white-balance request — like `ManualExposureOverride`,
+    but applied once (white balance gains stick on the sensor until changed,
+    unlike exposure/gain which the closed-loop controller may want to revisit
+    every cycle) rather than re-read every cycle. See
+    `POST /api/camera/white-balance`."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._pending: tuple[float, float, bool] | None = None
+
+    def request(self, red_gain: float, blue_gain: float, auto: bool = False) -> None:
+        with self._lock:
+            self._pending = (red_gain, blue_gain, auto)
+
+    def take_pending(self) -> tuple[float, float, bool] | None:
+        with self._lock:
+            pending = self._pending
+            self._pending = None
+            return pending
+
+
 class CaptureWorker(threading.Thread):
     """Owns the camera outright. Nothing else in the process may open, close
     or reconfigure it — including a config change, which is why switching
@@ -84,12 +106,15 @@ class CaptureWorker(threading.Thread):
         dark_library: DarkLibrary,
         frame_store: FrameStore,
         event_bus: EventBus,
+        resolve_camera_config: Callable[[CameraConfig], CameraConfig] | None = None,
         sky_state_refresh_interval_s: float = 30.0,
         stream_mode: StreamModeController | None = None,
         manual_exposure: ManualExposureOverride | None = None,
+        white_balance_override: WhiteBalanceOverride | None = None,
     ) -> None:
         super().__init__(name="CaptureWorker", daemon=True)
         self._camera_factory = camera_factory
+        self._resolve_camera_config = resolve_camera_config or (lambda cfg: cfg)
         self._camera: CameraBackend | None = None
         self._camera_config: CameraConfig | None = None
         self._config_manager = config_manager
@@ -102,6 +127,7 @@ class CaptureWorker(threading.Thread):
         self._sky_state_refresh_interval_s = sky_state_refresh_interval_s
         self.stream_mode = stream_mode or StreamModeController()
         self.manual_exposure = manual_exposure or ManualExposureOverride()
+        self.white_balance_override = white_balance_override or WhiteBalanceOverride()
 
         self._stop_event = threading.Event()
         self._sky_state: SkyState | None = None
@@ -143,14 +169,23 @@ class CaptureWorker(threading.Thread):
         a hardware open/close must happen on this thread (it is the only one
         allowed to touch the device), and doing it between captures means a
         switch can never land in the middle of an exposure.
+
+        `resolve_camera_config` lets a deployment-level override (e.g.
+        `CAELUM_CAMERA_BACKEND`) rewrite what actually gets built — see
+        `main.py`'s `camera_factory`. Comparing and recording the *resolved*
+        config here (not the raw requested one) is what keeps `camera_config`
+        — and therefore `GET /api/camera/options`' `active`/`applied` fields —
+        honest about which backend is genuinely open, instead of echoing back
+        a selection the override silently replaced.
         """
-        if self._camera is not None and self._camera_config == camera_cfg:
+        resolved_cfg = self._resolve_camera_config(camera_cfg)
+        if self._camera is not None and self._camera_config == resolved_cfg:
             return self._camera
 
         if self._camera is not None:
             logger.info(
                 "Camera configuration changed (%s -> %s) — reopening",
-                self._camera_config, camera_cfg,
+                self._camera_config, resolved_cfg,
             )
             self._close_camera()
 
@@ -160,8 +195,8 @@ class CaptureWorker(threading.Thread):
         # retried on the next cycle rather than latched as "current" and
         # silently leaving the camera closed.
         self._camera = camera
-        self._camera_config = camera_cfg
-        logger.info("Camera opened: %s (%s)", type(camera).__name__, camera_cfg.sensor_id)
+        self._camera_config = resolved_cfg
+        logger.info("Camera opened: %s (%s)", type(camera).__name__, resolved_cfg.sensor_id)
         return camera
 
     def _close_camera(self) -> None:
@@ -185,6 +220,12 @@ class CaptureWorker(threading.Thread):
     def _run_cycle(self) -> None:
         cfg = self._config_manager.current
         camera = self._ensure_camera(cfg.camera)
+
+        wb_request = self.white_balance_override.take_pending()
+        if wb_request is not None:
+            red_gain, blue_gain, auto = wb_request
+            camera.set_white_balance(red_gain, blue_gain, auto)
+
         sky_state = self._refresh_sky_state()
         preset = cfg.exposure_policy.preset_for(sky_state.period)
 

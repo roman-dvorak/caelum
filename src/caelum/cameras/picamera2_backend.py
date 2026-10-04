@@ -34,6 +34,9 @@ class Picamera2Backend(CameraBackend):
             ) from _import_error
         self.capabilities = CameraCapabilities(max_resolution=cfg.resolution, supports_streaming=True)
         self._resolution = cfg.resolution
+        self._wb_auto = cfg.wb_auto
+        self._wb_red_gain = cfg.wb_red_gain
+        self._wb_blue_gain = cfg.wb_blue_gain
         self._picam2: Picamera2 | None = None
 
     def open(self) -> None:
@@ -41,6 +44,7 @@ class Picamera2Backend(CameraBackend):
         config = self._picam2.create_still_configuration(main={"size": self._resolution})
         self._picam2.configure(config)
         self._picam2.start()
+        self.set_white_balance(self._wb_red_gain, self._wb_blue_gain, auto=self._wb_auto)
 
     def close(self) -> None:
         if self._picam2 is not None:
@@ -50,6 +54,9 @@ class Picamera2Backend(CameraBackend):
 
     def configure(self, cfg: CameraConfig) -> None:
         self._resolution = cfg.resolution
+        self._wb_auto = cfg.wb_auto
+        self._wb_red_gain = cfg.wb_red_gain
+        self._wb_blue_gain = cfg.wb_blue_gain
         if self._picam2 is not None:
             self.close()
             self.open()
@@ -63,6 +70,16 @@ class Picamera2Backend(CameraBackend):
                 "AnalogueGain": analogue_gain,
             }
         )
+
+    def set_white_balance(self, red_gain: float, blue_gain: float, auto: bool = False) -> None:
+        assert self._picam2 is not None, "set_white_balance() called before open()"
+        self._wb_auto = auto
+        self._wb_red_gain = red_gain
+        self._wb_blue_gain = blue_gain
+        if auto:
+            self._picam2.set_controls({"AwbEnable": True})
+        else:
+            self._picam2.set_controls({"AwbEnable": False, "ColourGains": (red_gain, blue_gain)})
 
     def capture_frame(self) -> RawFrame:
         assert self._picam2 is not None, "capture_frame() called before open()"

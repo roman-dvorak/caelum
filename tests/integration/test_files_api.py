@@ -27,7 +27,11 @@ def _seed(data_dir, date: str = "2026-03-14") -> None:
         (thumbnails / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff" + b"0" * 64)
         (thumbnails / f"{stem}.json").write_text('{"exposure_us": 1000}')
     (raws / f"{stem_date}-203000.fits").write_bytes(b"SIMPLE  =" + b" " * 100)
-    (derivatives / "keogram.png").write_bytes(b"\x89PNG" + b"0" * 32)
+    keogram_dir = derivatives / "keogram"
+    keogram_dir.mkdir(parents=True, exist_ok=True)
+    keogram_stem = f"{stem_date}-235959_keogram_keogram"
+    (keogram_dir / f"{keogram_stem}.png").write_bytes(b"\x89PNG" + b"0" * 32)
+    (keogram_dir / f"{keogram_stem}_thumb.jpg").write_bytes(b"\xff\xd8\xff" + b"0" * 16)
 
 
 async def test_directory_listing_and_usage(tmp_path, redis_url):
@@ -148,7 +152,9 @@ async def test_frames_manager_groups_and_deletes_captures(tmp_path, redis_url):
             dates = (await client.get("/api/frames/dates")).json()
             assert len(dates) == 1
             assert dates[0]["date"] == "2026-03-14"
-            assert (dates[0]["thumbnails"], dates[0]["raws"], dates[0]["derivatives"]) == (2, 1, 1)
+            # 2: the full keogram plus its companion thumbnail — both count
+            # as derivative files for this summary.
+            assert (dates[0]["thumbnails"], dates[0]["raws"], dates[0]["derivatives"]) == (2, 1, 2)
 
             listing = (await client.get("/api/frames", params={"date": "2026-03-14"})).json()
             frames = {f["time"]: f for f in listing["frames"]}
@@ -159,7 +165,17 @@ async def test_frames_manager_groups_and_deletes_captures(tmp_path, redis_url):
             assert frames["20260314-203000"]["metadata"] == "thumbnails/2026/03/14/20260314-203000.json"
             assert frames["20260314-201500"]["raw"] is None
             assert frames["20260314-203000"]["captured_at"].startswith("2026-03-14T20:30:00")
-            assert [d["name"] for d in listing["derivatives"]] == ["keogram.png"]
+
+            kinds = (await client.get("/api/frames/derivative-kinds", params={"date": "2026-03-14"})).json()
+            assert kinds == [{"kind": "keogram", "count": 1}]
+
+            derivatives = (
+                await client.get("/api/frames/derivatives", params={"date": "2026-03-14", "kind": "keogram"})
+            ).json()
+            assert derivatives["total"] == 1
+            entry = derivatives["entries"][0]
+            assert entry["full"] == "derivatives/2026/03/14/keogram/20260314-235959_keogram_keogram.png"
+            assert entry["thumbnail"] == "derivatives/2026/03/14/keogram/20260314-235959_keogram_keogram_thumb.jpg"
 
             single = await client.request(
                 "DELETE", "/api/frames", json={"times": ["20260314-201500"]}
@@ -169,7 +185,7 @@ async def test_frames_manager_groups_and_deletes_captures(tmp_path, redis_url):
             assert (harness.data_dir / "thumbnails/2026/03/14/20260314-203000.jpg").exists()
 
             whole_day = await client.request("DELETE", "/api/frames", json={"date": "2026-03-14"})
-            assert whole_day.json()["files_removed"] == 4
+            assert whole_day.json()["files_removed"] == 5
             assert (await client.get("/api/frames/dates")).json() == []
 
             assert (

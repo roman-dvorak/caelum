@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from caelum.config.schema import RetentionConfig, UploadConfig
+from caelum.config.schema import AppConfig, PluginConfig, RetentionConfig, UploadConfig
 from caelum.storage import retention
 
 
@@ -106,3 +106,83 @@ def test_free_space_floor_deletes_oldest_first_until_satisfied(tmp_path):
     assert not p2.exists()
     assert p3.exists()
     assert result.deleted_files == 2
+
+
+def test_sweep_timelapses_deletes_only_files_older_than_cutoff(tmp_path):
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    old = tmp_path / "timelapses" / "2026" / "01" / "01" / "20260101-060000_day_clean.mp4"
+    new = tmp_path / "timelapses" / "2026" / "01" / "09" / "20260109-060000_day_clean.mp4"
+    _touch(old)
+    _touch(new)
+
+    result = retention.sweep_timelapses(tmp_path, retention_days=5, now=now)
+
+    assert not old.exists()
+    assert new.exists()
+    assert result.deleted_files == 1
+
+
+def test_sweep_timelapses_zero_retention_days_keeps_everything(tmp_path):
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    old = tmp_path / "timelapses" / "2026" / "01" / "01" / "20260101-060000_day_clean.mp4"
+    _touch(old)
+
+    result = retention.sweep_timelapses(tmp_path, retention_days=0, now=now)
+
+    assert old.exists()
+    assert result.deleted_files == 0
+
+
+def test_sweep_timelapses_ignores_files_outside_the_timelapses_dir(tmp_path):
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    old_raw = tmp_path / "raw" / "2026" / "01" / "01" / "20260101-060000.fits"
+    _touch(old_raw)
+
+    result = retention.sweep_timelapses(tmp_path, retention_days=1, now=now)
+
+    assert old_raw.exists()
+    assert result.deleted_files == 0
+
+
+def test_sweep_timelapses_missing_directory_is_a_no_op(tmp_path):
+    result = retention.sweep_timelapses(tmp_path, retention_days=5)
+    assert result.deleted_files == 0
+
+
+class _StubConfigManager:
+    def __init__(self, config: AppConfig) -> None:
+        self.current = config
+
+
+def test_retention_sweeper_run_sweep_runs_both_sweeps_and_returns_live_interval(tmp_path):
+    old_thumb = tmp_path / "thumbnails" / "2020" / "01" / "01" / "20200101-060000.jpg"
+    old_timelapse = tmp_path / "timelapses" / "2020" / "01" / "01" / "20200101-060000_day_clean.mp4"
+    _touch(old_thumb)
+    _touch(old_timelapse)
+
+    config = AppConfig()
+    config.retention = RetentionConfig(max_age_days=1, min_free_space_mb=0, sweep_interval_s=42.0)
+    config.upload = UploadConfig(enabled=False)
+    config.plugins["timelapse"] = PluginConfig(enabled=True, order=50, settings={"retention_days": 1})
+
+    sweeper = retention.RetentionSweeper(_StubConfigManager(config), tmp_path)
+    next_delay = sweeper._run_sweep()
+
+    assert not old_thumb.exists()
+    assert not old_timelapse.exists()
+    assert next_delay == 42.0
+
+
+def test_retention_sweeper_run_sweep_skips_timelapse_sweep_when_plugin_unconfigured(tmp_path):
+    old_thumb = tmp_path / "thumbnails" / "2020" / "01" / "01" / "20200101-060000.jpg"
+    _touch(old_thumb)
+
+    config = AppConfig()
+    config.retention = RetentionConfig(max_age_days=1, min_free_space_mb=0)
+    config.upload = UploadConfig(enabled=False)
+    config.plugins.pop("timelapse", None)
+
+    sweeper = retention.RetentionSweeper(_StubConfigManager(config), tmp_path)
+    sweeper._run_sweep()  # must not raise even with no "timelapse" plugin entry
+
+    assert not old_thumb.exists()

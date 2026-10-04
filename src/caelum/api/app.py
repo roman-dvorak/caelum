@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import auth, camera, config, files, frames, logs, plugins, status, stream, terminal
+from .routes import auth, camera, config, files, frames, logs, overlay, plugins, status, stream, system, terminal
 from .security import require_admin, require_preview
 
 
@@ -39,9 +39,11 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     app.include_router(config.router, prefix="/api", dependencies=admin_only)
     app.include_router(camera.router, prefix="/api", dependencies=admin_only)
     app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
-    # files/frames declare per-route levels: reads are preview, deletes admin.
+    app.include_router(system.router, prefix="/api", dependencies=admin_only)
+    # files/frames/overlay declare per-route levels: reads are preview, writes admin.
     app.include_router(files.router, prefix="/api")
     app.include_router(frames.router, prefix="/api")
+    app.include_router(overlay.router, prefix="/api")
     # Websocket routers authorize inside the handler — a dependency raising
     # HTTPException after the handshake has no way to reach the client.
     app.include_router(stream.router)  # paths are already fully qualified (/api/frame/*, /ws/*)

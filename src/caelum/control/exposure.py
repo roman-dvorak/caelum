@@ -42,6 +42,25 @@ class ExposureTarget:
     analogue_gain: float
 
 
+@dataclass(frozen=True)
+class ExposureDiagnostics:
+    """A snapshot of what the controller sees and would do next — exposed
+    read-only via `GET /api/status` for the Dashboard, entirely separate
+    from `compute_target`'s own control-flow use of the same numbers so
+    that reporting can never affect what the capture loop actually does."""
+
+    sky_period: str
+    target_mean_adu: float
+    #: None only on the very first cycle, before any frame has been measured.
+    measured_mean: float | None
+    error_adu: float | None
+    raw_correction_factor: float | None
+    correction_factor: float | None
+    within_deadband: bool
+    deadband_pct: float
+    max_step_pct: float
+
+
 class ExposureController:
     def compute_target(
         self,
@@ -59,15 +78,63 @@ class ExposureController:
             gain = math.sqrt(preset.gain_min * preset.gain_max)
             return ExposureTarget(exposure_us=int(round(exposure_us)), analogue_gain=float(gain))
 
-        measured_mean = max(prev_stats.mean, 1e-3)
-        correction_factor = _clamp(preset.target_mean_adu / measured_mean, _MIN_CORRECTION, _MAX_CORRECTION)
-        if prev_stats.p99 > preset.saturation_threshold:
-            correction_factor = min(correction_factor, _HIGHLIGHT_GUARD_CORRECTION)
+        diagnostics = self._diagnose(preset, prev_stats)
+        assert diagnostics.correction_factor is not None  # prev_stats is not None here
 
-        new_product = current.exposure_us * current.analogue_gain * correction_factor
+        new_product = current.exposure_us * current.analogue_gain * diagnostics.correction_factor
         exposure_us, gain = self._split_exposure_first(new_product, preset)
 
         return ExposureTarget(exposure_us=int(round(exposure_us)), analogue_gain=float(gain))
+
+    def diagnose(
+        self,
+        sky_state: SkyState,
+        prev_stats: FrameStats | None,
+        policy: ExposurePolicyConfig,
+    ) -> ExposureDiagnostics:
+        """Read-only: what the controller measured last cycle and what
+        correction it would apply next — never called from `compute_target`'s
+        own path, so a reporting bug here can't perturb the capture loop."""
+        preset = policy.preset_for(sky_state.period)
+        if prev_stats is None:
+            return ExposureDiagnostics(
+                sky_period=sky_state.period,
+                target_mean_adu=preset.target_mean_adu,
+                measured_mean=None,
+                error_adu=None,
+                raw_correction_factor=None,
+                correction_factor=None,
+                within_deadband=False,
+                deadband_pct=preset.deadband_pct,
+                max_step_pct=preset.max_step_pct,
+            )
+        return self._diagnose(preset, prev_stats, sky_period=sky_state.period)
+
+    @staticmethod
+    def _diagnose(preset: ExposurePreset, prev_stats: FrameStats, sky_period: str = "") -> ExposureDiagnostics:
+        measured_mean = max(prev_stats.mean, 1e-3)
+        raw_factor = _clamp(preset.target_mean_adu / measured_mean, _MIN_CORRECTION, _MAX_CORRECTION)
+        if prev_stats.p99 > preset.saturation_threshold:
+            raw_factor = min(raw_factor, _HIGHLIGHT_GUARD_CORRECTION)
+
+        # Hysteresis: ignore small swings outright, then cap how far a single
+        # cycle may move even when it does react. The fixed 0.5-2.0x clamp
+        # above always applies too — this only ever tightens it further.
+        within_deadband = abs(raw_factor - 1.0) < preset.deadband_pct
+        correction_factor = 1.0 if within_deadband else raw_factor
+        correction_factor = _clamp(correction_factor, 1.0 - preset.max_step_pct, 1.0 + preset.max_step_pct)
+
+        return ExposureDiagnostics(
+            sky_period=sky_period,
+            target_mean_adu=preset.target_mean_adu,
+            measured_mean=prev_stats.mean,
+            error_adu=preset.target_mean_adu - prev_stats.mean,
+            raw_correction_factor=raw_factor,
+            correction_factor=correction_factor,
+            within_deadband=within_deadband,
+            deadband_pct=preset.deadband_pct,
+            max_step_pct=preset.max_step_pct,
+        )
 
     @staticmethod
     def _split_exposure_first(product: float, preset: ExposurePreset) -> tuple[float, float]:

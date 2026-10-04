@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import shutil
-import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -22,6 +21,8 @@ from pathlib import Path
 
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import RetentionConfig, UploadConfig
+from caelum.derivatives.timelapse import TimelapseSettings
+from caelum.scheduling.decorators import on_interval
 
 from . import paths
 
@@ -98,33 +99,69 @@ def sweep(
     return RetentionResult(deleted_files=deleted, freed_bytes=freed)
 
 
-class RetentionSweeper(threading.Thread):
+def sweep_timelapses(data_dir: Path, retention_days: int, now: datetime | None = None) -> RetentionResult:
+    """Age-only sweep of `data_dir/timelapses/` — independent of
+    `RetentionConfig` and of upload-confirmation gating, since timelapse
+    files aren't tracked by the per-file upload manifest system.
+    `retention_days <= 0` means keep forever (no sweep). Takes a plain int
+    rather than `TimelapseSettings` so this module doesn't need a
+    `storage -> derivatives` import for its own sake — see
+    `RetentionSweeper._run_sweep` for where that config gets unpacked."""
+    if retention_days <= 0:
+        return RetentionResult(deleted_files=0, freed_bytes=0)
+    now = now or datetime.now(UTC)
+    base = data_dir / "timelapses"
+    if not base.exists():
+        return RetentionResult(deleted_files=0, freed_bytes=0)
+
+    cutoff = now - timedelta(days=retention_days)
+    deleted = 0
+    freed = 0
+    for path in base.rglob("*.mp4"):
+        when = paths.capture_time_of(path)
+        if when is not None and when < cutoff:
+            freed += _delete(path)
+            deleted += 1
+    return RetentionResult(deleted_files=deleted, freed_bytes=freed)
+
+
+class RetentionSweeper:
+    """Registered with a shared `scheduling.IntervalScheduler` (see
+    `main.py`) rather than owning its own thread — `_run_sweep` runs on that
+    scheduler's single background thread, on the cadence given by its
+    `@on_interval` default, self-adjusting to `RetentionConfig.sweep_interval_s`
+    via its return value (see `scheduling.decorators.on_interval`)."""
+
     def __init__(
         self,
         config_manager: ConfigManager,
         data_dir: Path,
         get_uploaded_before: Callable[[], datetime | None] = lambda: None,
     ) -> None:
-        super().__init__(name="RetentionSweeper", daemon=True)
         self._config_manager = config_manager
         self._data_dir = data_dir
         self._get_uploaded_before = get_uploaded_before
-        self._stop_event = threading.Event()
 
-    def request_stop(self) -> None:
-        self._stop_event.set()
+    @on_interval(seconds=3600)  # initial default only; overridden by the return value below
+    def _run_sweep(self) -> float:
+        cfg = self._config_manager.current
+        result = sweep(self._data_dir, cfg.retention, cfg.upload, self._get_uploaded_before())
+        if result.deleted_files:
+            logger.info(
+                "Retention sweep deleted %d file(s), freed %.1f MB",
+                result.deleted_files,
+                result.freed_bytes / (1024 * 1024),
+            )
 
-    def run(self) -> None:
-        while not self._stop_event.is_set():
-            cfg = self._config_manager.current
-            try:
-                result = sweep(self._data_dir, cfg.retention, cfg.upload, self._get_uploaded_before())
-                if result.deleted_files:
-                    logger.info(
-                        "Retention sweep deleted %d file(s), freed %.1f MB",
-                        result.deleted_files,
-                        result.freed_bytes / (1024 * 1024),
-                    )
-            except Exception:
-                logger.exception("Retention sweep failed")
-            self._stop_event.wait(cfg.retention.sweep_interval_s)
+        timelapse_cfg = cfg.plugins.get("timelapse")
+        if timelapse_cfg is not None:
+            settings = TimelapseSettings.model_validate(timelapse_cfg.settings)
+            timelapse_result = sweep_timelapses(self._data_dir, settings.retention_days)
+            if timelapse_result.deleted_files:
+                logger.info(
+                    "Timelapse retention sweep deleted %d file(s), freed %.1f MB",
+                    timelapse_result.deleted_files,
+                    timelapse_result.freed_bytes / (1024 * 1024),
+                )
+
+        return cfg.retention.sweep_interval_s

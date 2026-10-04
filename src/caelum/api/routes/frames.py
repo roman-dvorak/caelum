@@ -47,7 +47,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from caelum.api.deps import get_config_manager, get_settings, get_skystate_calculator
 from caelum.api.schemas import (
     DeleteFramesRequest,
-    FileEntry,
+    DerivativeEntry,
+    DerivativeKindSummary,
+    DerivativeListResponse,
     FrameDateSummary,
     FrameEntry,
     FrameListResponse,
@@ -56,6 +58,7 @@ from caelum.api.schemas import (
 from caelum.api.security import Principal, require_admin, require_preview
 from caelum.config.manager import ConfigManager
 from caelum.control.skystate import SkyStateCalculator
+from caelum.derivatives.pool import thumbnail_path_for
 from caelum.settings import Settings
 from caelum.storage import browse, paths
 
@@ -247,16 +250,34 @@ def _utc_dates_between(start: datetime, end: datetime) -> list[str]:
     return dates
 
 
-def _gather_frames(
-    data_dir: Path, utc_dates: list[str], window: tuple[datetime, datetime] | None
-) -> tuple[list[dict], list[Path]]:
+def _resolve_period(
+    date: str | None,
+    night: str | None,
+    config_manager: ConfigManager,
+    calculator: SkyStateCalculator,
+) -> tuple[list[str], tuple[datetime, datetime] | None, str]:
+    """Shared by every endpoint that takes `?date=` xor `?night=`: resolves
+    either into the same `(utc_dates, window, label)` shape `list_frames`
+    has always used, so the derivative endpoints below group frames into a
+    "day" exactly the same way the capture listing does."""
+    if (date is None) == (night is None):
+        raise HTTPException(status_code=400, detail="Pass exactly one of `date` or `night`")
+    if date is not None:
+        _validate_iso_date(date)
+        return [date], None, date
+    _validate_iso_date(night)
+    tz = _site_timezone(config_manager)
+    window = _night_window(calculator, night, tz)
+    return _utc_dates_between(*window), window, night
+
+
+def _gather_frames(data_dir: Path, utc_dates: list[str], window: tuple[datetime, datetime] | None) -> list[dict]:
     """Collects capture entries from the given UTC date directories,
     optionally restricted to a `[start, end)` UTC window (night mode) —
     date mode passes `window=None` and gets everything under that one date.
     Keyed by the full `YYYYMMDD-HHMMSS` stem, which is self-sufficient (see
     module docstring), not by date + a bare time token."""
     by_stem: dict[str, dict] = {}
-    derivative_dirs = []
 
     for iso_date in utc_dates:
         thumbnails_dir = paths.date_dir_for_iso(data_dir, "thumbnails", iso_date)
@@ -292,11 +313,7 @@ def _gather_frames(
                 entry["total_bytes"] += child.stat().st_size
                 entry["raw"] = browse.relative_to(data_dir, child)
 
-        derivatives_dir = paths.date_dir_for_iso(data_dir, "derivatives", iso_date)
-        if derivatives_dir.is_dir():
-            derivative_dirs.append(derivatives_dir)
-
-    return sorted(by_stem.values(), key=lambda e: e["captured_at"]), derivative_dirs
+    return sorted(by_stem.values(), key=lambda e: e["captured_at"])
 
 
 @router.get("/frames", response_model=FrameListResponse)
@@ -310,23 +327,10 @@ def list_frames(
     config_manager: ConfigManager = Depends(get_config_manager),
     calculator: SkyStateCalculator = Depends(get_skystate_calculator),
 ) -> FrameListResponse:
-    if (date is None) == (night is None):
-        raise HTTPException(status_code=400, detail="Pass exactly one of `date` or `night`")
-
+    utc_dates, window, label = _resolve_period(date, night, config_manager, calculator)
     data_dir = settings.data_dir
-    if date is not None:
-        _validate_iso_date(date)
-        utc_dates = [date]
-        window = None
-        label = date
-    else:
-        _validate_iso_date(night)  # same YYYY-MM-DD shape, just a different meaning
-        tz = _site_timezone(config_manager)
-        window = _night_window(calculator, night, tz)
-        utc_dates = _utc_dates_between(*window)
-        label = night
 
-    entries, derivative_dirs = _gather_frames(data_dir, utc_dates, window)
+    entries = _gather_frames(data_dir, utc_dates, window)
     total = len(entries)
     page = entries[offset : offset + limit]
 
@@ -342,25 +346,115 @@ def list_frames(
         for e in page
     ]
 
-    derivatives = sorted(
-        (
-            FileEntry(**browse.describe(data_dir, child))
-            for derivatives_dir in derivative_dirs
-            for child in derivatives_dir.rglob("*")
-            if child.is_file()
-        ),
-        key=lambda f: f.name,
-    )
-
     return FrameListResponse(
         date=label,
         frames=frames,
-        derivatives=derivatives,
         total_frames=total,
         limit=limit,
         offset=offset,
         utc_dates=utc_dates,
     )
+
+
+@router.get("/frames/derivative-kinds", response_model=list[DerivativeKindSummary])
+def list_derivative_kinds(
+    date: str | None = Query(None, description="UTC calendar date, YYYY-MM-DD"),
+    night: str | None = Query(None, description="Observation night (local date the night started), YYYY-MM-DD"),
+    _: Principal = Depends(require_preview),
+    settings: Settings = Depends(get_settings),
+    config_manager: ConfigManager = Depends(get_config_manager),
+    calculator: SkyStateCalculator = Depends(get_skystate_calculator),
+) -> list[DerivativeKindSummary]:
+    """What derivative kinds (keogram, keogram_live, meteor_crop, ...) exist
+    for this period, and how many of each — drives the sub-tab bar in the
+    Recordings UI's Derivatives view. Each kind is its own subdirectory
+    (see `derivatives/pool.py::_derivative_dir`), so this is a cheap
+    top-level directory listing, not a walk of every file."""
+    utc_dates, window, _label = _resolve_period(date, night, config_manager, calculator)
+    data_dir = settings.data_dir
+
+    counts: dict[str, int] = {}
+    for iso_date in utc_dates:
+        derivatives_dir = paths.date_dir_for_iso(data_dir, "derivatives", iso_date)
+        if not derivatives_dir.is_dir():
+            continue
+        for kind_dir in derivatives_dir.iterdir():
+            if not kind_dir.is_dir():
+                continue
+            count = sum(
+                1
+                for child in kind_dir.iterdir()
+                if child.is_file()
+                and not child.stem.endswith("_thumb")
+                and _within_window(paths.capture_time_of(child), window)
+            )
+            if count:
+                counts[kind_dir.name] = counts.get(kind_dir.name, 0) + count
+
+    return [DerivativeKindSummary(kind=kind, count=count) for kind, count in sorted(counts.items())]
+
+
+def _within_window(captured: datetime | None, window: tuple[datetime, datetime] | None) -> bool:
+    if captured is None:
+        return False
+    return window is None or (window[0] <= captured < window[1])
+
+
+@router.get("/frames/derivatives", response_model=DerivativeListResponse)
+def list_derivatives(
+    kind: str = Query(..., description="Derivative kind, e.g. 'keogram' or 'meteor_crop'"),
+    date: str | None = Query(None, description="UTC calendar date, YYYY-MM-DD"),
+    night: str | None = Query(None, description="Observation night (local date the night started), YYYY-MM-DD"),
+    limit: int = Query(_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
+    offset: int = Query(0, ge=0),
+    _: Principal = Depends(require_preview),
+    settings: Settings = Depends(get_settings),
+    config_manager: ConfigManager = Depends(get_config_manager),
+    calculator: SkyStateCalculator = Depends(get_skystate_calculator),
+) -> DerivativeListResponse:
+    """Paginated, one kind at a time — a busy meteor-detection night can
+    produce hundreds of crops, which is exactly the case `GET /api/frames`
+    used to embed unpaginated (and slowly) before this endpoint existed."""
+    utc_dates, window, _label = _resolve_period(date, night, config_manager, calculator)
+    data_dir = settings.data_dir
+
+    found: list[dict] = []
+    for iso_date in utc_dates:
+        kind_dir = paths.date_dir_for_iso(data_dir, "derivatives", iso_date) / kind
+        if not kind_dir.is_dir():
+            continue
+        for child in kind_dir.iterdir():
+            if not child.is_file() or child.stem.endswith("_thumb"):
+                continue
+            captured = paths.capture_time_of(child)
+            if not _within_window(captured, window):
+                continue
+            thumb = thumbnail_path_for(child)
+            found.append(
+                {
+                    "stem": child.stem,
+                    "captured_at": captured,
+                    "full": browse.relative_to(data_dir, child),
+                    "thumbnail": browse.relative_to(data_dir, thumb) if thumb.is_file() else None,
+                    "size": child.stat().st_size,
+                }
+            )
+
+    found.sort(key=lambda e: e["captured_at"])
+    total = len(found)
+    page = found[offset : offset + limit]
+
+    entries = [
+        DerivativeEntry(
+            stem=e["stem"],
+            captured_at=e["captured_at"].isoformat(),
+            thumbnail=e["thumbnail"],
+            full=e["full"],
+            size=e["size"],
+        )
+        for e in page
+    ]
+    return DerivativeListResponse(kind=kind, entries=entries, total=total, limit=limit, offset=offset)
 
 
 def _stem_to_iso_date(stem: str) -> str | None:

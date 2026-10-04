@@ -9,6 +9,18 @@ from caelum.capture.stats import FrameStats
 from caelum.config.schema import CameraConfig
 
 
+class ExposureDiagnosticsResponse(BaseModel):
+    sky_period: str
+    target_mean_adu: float
+    measured_mean: float | None
+    error_adu: float | None
+    raw_correction_factor: float | None
+    correction_factor: float | None
+    within_deadband: bool
+    deadband_pct: float
+    max_step_pct: float
+
+
 class StatusResponse(BaseModel):
     camera_backend: str
     capturing: bool
@@ -19,6 +31,10 @@ class StatusResponse(BaseModel):
     last_capture_at: str | None
     last_stats: FrameStats | None
     last_save_raw: bool | None
+    #: What the exposure controller measured last cycle and would do next —
+    #: None only if sky state can't be computed (should not happen in
+    #: practice; the calculator has no failure mode today).
+    exposure_diagnostics: ExposureDiagnosticsResponse | None = None
     #: IANA name from `location.timezone` (e.g. "Europe/Prague") — every
     #: timestamp elsewhere in the API is UTC; this is what the frontend
     #: converts to and labels, so "what timezone am I looking at" is never
@@ -56,12 +72,36 @@ class CameraOptionsResponse(BaseModel):
     active: CameraConfig | None
     active_backend_class: str
     applied: bool
+    #: Set when `CAELUM_CAMERA_BACKEND` is pinning the backend regardless of
+    #: `configured`/`active` — the UI shows this so a selection that never
+    #: seems to "apply" is explained rather than left looking broken.
+    backend_override: str | None = None
 
 
 class ExposureOverrideRequest(BaseModel):
     exposure_us: int | None = None
     analogue_gain: float | None = None
     clear: bool = False
+
+
+class WhiteBalanceRequest(BaseModel):
+    red_gain: float = Field(ge=0.1, le=8.0)
+    blue_gain: float = Field(ge=0.1, le=8.0)
+
+
+class WhiteBalanceResponse(BaseModel):
+    red_gain: float
+    blue_gain: float
+    auto: bool
+
+
+class WhiteBalanceAutoCalibrateRequest(BaseModel):
+    #: Fractional (0..1) patch over the latest frame — should cover a
+    #: neutral gray/white surface for the derived gains to be meaningful.
+    x: float = Field(ge=0.0, le=1.0)
+    y: float = Field(ge=0.0, le=1.0)
+    w: float = Field(gt=0.0, le=1.0)
+    h: float = Field(gt=0.0, le=1.0)
 
 
 class PluginUpdateRequest(BaseModel):
@@ -159,7 +199,6 @@ class FrameListResponse(BaseModel):
     #: Echoes whichever of `date`/`night` the request used.
     date: str
     frames: list[FrameEntry]
-    derivatives: list[FileEntry]
     #: Total frames in this date/night before `limit`/`offset` were applied
     #: — what the UI needs to render "51-100 of 1200" and page count.
     total_frames: int
@@ -170,6 +209,35 @@ class FrameListResponse(BaseModel):
     #: night correctly (one DELETE per UTC date) without needing every page
     #: of results loaded first to know which dates are involved.
     utc_dates: list[str]
+
+
+class DerivativeKindSummary(BaseModel):
+    """One row per derivative kind (keogram, keogram_live, meteor_crop, ...)
+    present in a date/night — drives the Recordings UI's derivative sub-tabs."""
+
+    kind: str
+    count: int
+
+
+class DerivativeEntry(BaseModel):
+    #: The derivative file's own stem (`<YYYYMMDD-HHMMSS>_<worker_id>_<kind>`)
+    #: — a unique id for this one derivative, since more than one worker
+    #: could in principle produce output in the same second.
+    stem: str
+    captured_at: str
+    #: Small backend-generated JPEG for the gallery grid; None only if the
+    #: thumbnail write somehow failed while the full file succeeded.
+    thumbnail: str | None
+    full: str
+    size: int
+
+
+class DerivativeListResponse(BaseModel):
+    kind: str
+    entries: list[DerivativeEntry]
+    total: int
+    limit: int
+    offset: int
 
 
 class ObservationNightSummary(BaseModel):
@@ -183,6 +251,56 @@ class ObservationNightSummary(BaseModel):
     raws: int
     derivatives: int
     total_bytes: int
+
+
+# ---- overlay assets --------------------------------------------------------
+
+
+class OverlayAssetInfo(BaseModel):
+    name: str
+    size: int
+
+
+# ---- system ----------------------------------------------------------------
+
+
+class DiskUsageInfo(BaseModel):
+    path: str
+    total_bytes: int
+    used_bytes: int
+    free_bytes: int
+    percent: float
+
+
+class NetworkInterfaceInfo(BaseModel):
+    name: str
+    is_up: bool
+    #: None when the driver doesn't report a link speed (common for loopback
+    #: and virtual interfaces, and for a down link).
+    speed_mbps: int | None
+    addresses: list[str]
+
+
+class SystemInfoResponse(BaseModel):
+    hostname: str
+    uptime_s: float
+    cpu_percent: float
+    cpu_count: int
+    #: 1/5/15-minute load average. None on platforms without one (Windows).
+    load_avg: tuple[float, float, float] | None
+    mem_total_bytes: int
+    mem_used_bytes: int
+    mem_percent: float
+    disks: list[DiskUsageInfo]
+    #: Sensor label -> degrees Celsius. Empty where the platform exposes none
+    #: (e.g. no `/sys/class/thermal`, or running outside Linux).
+    temperatures_c: dict[str, float]
+    network: list[NetworkInterfaceInfo]
+
+
+class SystemActionResponse(BaseModel):
+    ok: bool
+    message: str
 
 
 class DeleteFramesRequest(BaseModel):

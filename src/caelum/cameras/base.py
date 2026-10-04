@@ -48,6 +48,12 @@ class CameraBackend(ABC):
     @abstractmethod
     def set_controls(self, exposure_us: int, analogue_gain: float) -> None: ...
 
+    def set_white_balance(self, red_gain: float, blue_gain: float, auto: bool = False) -> None:  # noqa: B027
+        """Default no-op for backends without white-balance control (mock,
+        opencv/V4L2). Deliberately not `@abstractmethod` and kept separate
+        from `set_controls()` — that method is on the per-cycle exposure
+        control path, and this must never be called from there."""
+
     @abstractmethod
     def capture_frame(self) -> RawFrame:
         """Blocking. Called only from the owning CaptureWorker's thread."""

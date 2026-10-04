@@ -120,7 +120,7 @@ def usage(root: Path, subdirs: tuple[str, ...]) -> dict:
 # ---- previews ------------------------------------------------------------
 
 
-def _autostretch(data: np.ndarray) -> np.ndarray:
+def autostretch(data: np.ndarray) -> np.ndarray:
     """Percentile stretch to 8-bit.
 
     Raw night frames are mostly near-black with a few bright stars, so a
@@ -137,7 +137,7 @@ def _autostretch(data: np.ndarray) -> np.ndarray:
     return (scaled * 255.0).astype(np.uint8)
 
 
-def _fits_to_bgr(path: Path) -> np.ndarray:
+def fits_to_bgr(path: Path) -> np.ndarray:
     from astropy.io import fits  # imported lazily: slow, and rarely needed
 
     with fits.open(path) as hdul:
@@ -155,10 +155,16 @@ def _fits_to_bgr(path: Path) -> np.ndarray:
     elif data.ndim != 2:
         raise ValueError(f"Unsupported FITS shape {data.shape}")
 
-    stretched = _autostretch(data)
+    stretched = autostretch(data)
     if stretched.ndim == 2:
         return cv2.cvtColor(stretched, cv2.COLOR_GRAY2BGR)
     return cv2.cvtColor(stretched, cv2.COLOR_RGB2BGR)
+
+
+# Back-compat aliases — kept in case anything still imports the old private
+# names; trivially removable once nothing does.
+_autostretch = autostretch
+_fits_to_bgr = fits_to_bgr
 
 
 def render_preview(path: Path, max_dim: int = 1024) -> bytes:
@@ -169,7 +175,7 @@ def render_preview(path: Path, max_dim: int = 1024) -> bytes:
     """
     media = classify(path)
     if media == "fits":
-        image = _fits_to_bgr(path)
+        image = fits_to_bgr(path)
     elif media == "image":
         image = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if image is None:

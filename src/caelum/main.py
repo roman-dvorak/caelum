@@ -24,10 +24,14 @@ from caelum.control.skystate import SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
 from caelum.derivatives.keogram import KeogramWorker
 from caelum.derivatives.meteor_detection import MeteorDetectionWorker
+from caelum.derivatives.overlay import OverlayWorker
 from caelum.derivatives.pool import DerivativePool
+from caelum.derivatives.telescope_position import TelescopePositionWorker
+from caelum.derivatives.timelapse import TimelapseWorker
 from caelum.events import EventBus
 from caelum.logging_conf import configure_logging
 from caelum.plugins.loader import PluginLoader
+from caelum.scheduling.interval_scheduler import IntervalScheduler
 from caelum.settings import Settings, load_settings
 from caelum.storage.retention import RetentionSweeper
 from caelum.storage.writer import StorageWriter
@@ -62,20 +66,27 @@ async def _async_main(settings: Settings) -> None:
     event_bus = EventBus()
     frame_store = FrameStore(loop=loop, event_bus=event_bus)
 
+    def resolve_camera_config(camera_cfg: CameraConfig) -> CameraConfig:
+        """The env override still wins when it is set — it exists precisely
+        to pin a dev/CI machine to the mock backend regardless of config.
+        Shared by `camera_factory` (what actually gets built) and
+        `CaptureWorker` (what it records as genuinely open), so the two can
+        never disagree about which backend is really running."""
+        if settings.camera_backend_override:
+            return camera_cfg.model_copy(update={"backend": settings.camera_backend_override})
+        return camera_cfg
+
     def camera_factory(camera_cfg: CameraConfig) -> CameraBackend:
         """Built fresh each time the camera config changes, so switching
-        backend or device from the web UI takes effect without a restart.
-        The env override still wins when it is set — it exists precisely to
-        pin a dev/CI machine to the mock backend regardless of config."""
-        if settings.camera_backend_override:
-            camera_cfg = camera_cfg.model_copy(update={"backend": settings.camera_backend_override})
-        return create_camera_backend(camera_cfg)
+        backend or device from the web UI takes effect without a restart."""
+        return create_camera_backend(resolve_camera_config(camera_cfg))
 
     dark_library = DarkLibrary(darks_dir=settings.data_dir / "darks")
 
     capture_worker = CaptureWorker(
         camera_factory=camera_factory,
         config_manager=config_manager,
+        resolve_camera_config=resolve_camera_config,
         skystate_calculator=skystate_calculator,
         exposure_controller=ExposureController(),
         storage_policy=StoragePolicy(),
@@ -89,13 +100,17 @@ async def _async_main(settings: Settings) -> None:
     retention_sweeper = RetentionSweeper(
         config_manager, settings.data_dir, get_uploaded_before=upload_worker.uploaded_before
     )
+    interval_scheduler = IntervalScheduler()
+    interval_scheduler.register(retention_sweeper)
 
-    derivative_pool = DerivativePool(event_bus, frame_store, settings.data_dir)
+    derivative_pool = DerivativePool(event_bus, frame_store, settings.data_dir, config_manager=config_manager)
 
     # The two built-in workers go through the loader like anything else, so
     # `enabled`, `order` and `settings` in AppConfig.plugins govern them —
     # they are the proof that the extension point works, not exceptions to it.
-    plugin_loader = PluginLoader([KeogramWorker, MeteorDetectionWorker])
+    plugin_loader = PluginLoader(
+        [KeogramWorker, MeteorDetectionWorker, OverlayWorker, TelescopePositionWorker, TimelapseWorker]
+    )
 
     def reload_plugins(new_config: AppConfig) -> None:
         loaded = plugin_loader.load(new_config)
@@ -116,7 +131,7 @@ async def _async_main(settings: Settings) -> None:
     app.state.plugin_loader = plugin_loader
 
     capture_worker.start()
-    retention_sweeper.start()
+    interval_scheduler.start()
     upload_worker.start()
     logger.info(
         "caelum starting: camera=%s http=%s:%d local-web=%s auth=%s",
@@ -137,10 +152,10 @@ async def _async_main(settings: Settings) -> None:
     finally:
         logger.info("caelum shutting down")
         capture_worker.request_stop()
-        retention_sweeper.request_stop()
+        interval_scheduler.request_stop()
         upload_worker.request_stop()
         capture_worker.join(timeout=5)
-        retention_sweeper.join(timeout=5)
+        interval_scheduler.join(timeout=5)
         upload_worker.join(timeout=5)
         storage_writer.shutdown()
         derivative_pool.shutdown()

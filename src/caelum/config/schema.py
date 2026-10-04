@@ -32,12 +32,39 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class LensConfig(StrictModel):
+    """Fisheye lens calibration — lets a pixel position in a captured frame
+    be converted to an alt/az sky position (see
+    `caelum.derivatives.projection.fraction_to_altaz`). Deliberately mirrors
+    `TelescopePositionSettings`'s field shapes (same physical projection,
+    see `projection.py`'s module docstring for why they stay separate
+    config objects). Manual entry only for now — `center_x`/`center_y`/
+    `radius` are meant to eventually be filled in by a visual, star-based
+    calibration tool instead of typed by hand."""
+
+    projection: Literal["equidistant_fisheye"] = "equidistant_fisheye"
+    #: Fractional (0..1) zenith pixel — where straight up lands in the frame.
+    center_x: float = Field(default=0.5, ge=0.0, le=1.0)
+    center_y: float = Field(default=0.5, ge=0.0, le=1.0)
+    #: Fractional (0..1) radius from zenith to the horizon.
+    radius: float = Field(default=0.48, ge=0.0, le=1.0)
+    #: Corrects for the camera's rotation relative to true north.
+    azimuth_offset_deg: float = 0.0
+    #: Flip east/west — needed when the lens/mirror mirrors the sky.
+    mirror: bool = False
+
+
 class CameraConfig(StrictModel):
     backend: Literal["mock", "picamera2", "opencv"] = "mock"
     # For "opencv": doubles as the V4L2 device selector — a bare index like
     # "0" opens /dev/video0, anything else is an explicit device path.
     sensor_id: str = "cam0"
     resolution: tuple[int, int] = (4056, 3040)
+    lens: LensConfig = Field(default_factory=LensConfig)
+    #: White balance — auto (camera-driven AWB) or fixed manual gains.
+    wb_auto: bool = True
+    wb_red_gain: float = Field(default=1.0, ge=0.1, le=8.0)
+    wb_blue_gain: float = Field(default=1.0, ge=0.1, le=8.0)
 
 
 class LocationConfig(StrictModel):
@@ -54,6 +81,15 @@ class ExposurePreset(StrictModel):
     gain_max: float = 4.0
     target_mean_adu: float = 128.0
     saturation_threshold: float = 250.0
+    #: Skip correction entirely when the measured deviation is within this
+    #: fraction of the target (e.g. 0.05 = ignore a <5% swing) — damps
+    #: reacting to ordinary frame-to-frame noise.
+    deadband_pct: float = Field(default=0.05, ge=0.0, le=0.5)
+    #: Clamps how far `correction_factor` may move from 1.0 in a single
+    #: cycle (e.g. 0.15 = at most ±15%) — tighter than, and applied before,
+    #: the controller's fixed 0.5-2.0x absolute safety clamp, which always
+    #: stays in effect regardless of this value.
+    max_step_pct: float = Field(default=0.15, ge=0.0, le=1.0)
 
 
 def _default_exposure_policy() -> dict[SkyPeriod, ExposurePreset]:
@@ -194,7 +230,7 @@ class PluginConfig(StrictModel):
 
 
 def _default_plugins() -> dict[str, PluginConfig]:
-    """The two built-in derivative workers, seeded so they show up on the
+    """The built-in derivative workers, seeded so they show up on the
     Plugins page of a fresh install rather than appearing only once someone
     knows to type their ids in by hand. They are loaded through the same
     `PluginLoader` path as third-party plugins, so turning one off or
@@ -208,6 +244,17 @@ def _default_plugins() -> dict[str, PluginConfig]:
         # anything a later plugin does.
         "keogram": PluginConfig(enabled=True, order=10),
         "meteor_detection": PluginConfig(enabled=True, order=20),
+        # Disabled by default: both require the admin to configure them
+        # (elements to draw, a calibrated projection) before they should
+        # show anything — an empty mask or a fake telescope marker
+        # appearing unasked would be a bad default.
+        "overlay": PluginConfig(
+            enabled=False,
+            order=30,
+            settings={"templates": [{"name": "Default", "elements": []}], "active_template": "Default"},
+        ),
+        "telescope_position": PluginConfig(enabled=False, order=40),
+        "timelapse": PluginConfig(enabled=False, order=50),
     }
 
 

@@ -39,6 +39,32 @@ indoors; either widen that preset for a local test config, or use
 `POST /api/camera/exposure-override` with something like
 `{"exposure_us": 100000}` to see a normally-lit room.
 
+### Deploying to a real Raspberry Pi (picamera2)
+
+Raspberry Pi OS's camera stack (`python3-picamera2` + `python3-libcamera` from
+apt) is compiled against the *system* Python (3.11 on Bookworm) and the
+*system* numpy (1.24.x) — there is no PyPI wheel for `libcamera` itself, so
+this is the only way to get it. That drives the whole install recipe:
+
+```bash
+sudo apt install -y python3-picamera2 redis-server
+python3.11 -m venv --system-site-packages .venv   # sees apt's picamera2/libcamera
+.venv/bin/pip install -e . 'numpy==1.24.2' 'astropy==6.1.7'  # match the system ABI
+```
+
+`numpy>=2.1`/current `astropy` (this project's normal floors, fine on a dev
+machine) will *import* but crash with a `numpy.dtype size changed` ABI error
+the moment `picamera2` pulls in `simplejpeg` — numpy changed its C struct
+layout in 2.0, and the apt-compiled extensions were built against 1.24's.
+Pinning both to versions compatible with the system numpy (6.1.x is the
+newest astropy still numpy-1.x-compatible) resolves it; `--no-deps` when
+installing caelum itself avoids pip immediately undoing the pin by pulling
+newer defaults back in.
+
+`requires-python = ">=3.11"` in `pyproject.toml` reflects this too — 3.13
+would be preferable in isolation, but Bookworm's picamera2 forces 3.11, and
+that's this project's actual deployment target.
+
 ### Local systemd service (optional)
 
 There's no systemd unit active anywhere by default — local dev just runs

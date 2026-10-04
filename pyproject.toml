@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Roman Dvorak", email = "romandvorak@mlab.cz" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -16,6 +16,9 @@ dependencies = [
     "opencv-python-headless>=4.10",
     "astropy>=6.1",
     "python-dotenv>=1.0",
+    "psutil>=6.1",
+    "python-multipart>=0.0.12",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -40,7 +43,7 @@ build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 120
-target-version = "py313"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

@@ -166,6 +166,52 @@ async def test_camera_mode_and_exposure_override_endpoints(tmp_path, redis_url):
         await harness.config_manager.stop()
 
 
+async def test_white_balance_endpoints(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "apitest3wb")
+    try:
+        async with harness.client() as client:
+            await login(client)
+
+            manual_resp = await client.post(
+                "/api/camera/white-balance", json={"red_gain": 1.5, "blue_gain": 2.0}
+            )
+            assert manual_resp.status_code == 200
+            assert manual_resp.json() == {"red_gain": 1.5, "blue_gain": 2.0, "auto": False}
+            assert harness.config_manager.current.camera.wb_red_gain == 1.5
+            assert harness.worker.white_balance_override.take_pending() == (1.5, 2.0, False)
+
+            # No captured frame yet — the mock backend hasn't started producing
+            # one — so auto-calibrate must fail cleanly rather than crash.
+            no_frame_resp = await client.post(
+                "/api/camera/white-balance/auto-calibrate", json={"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}
+            )
+            assert no_frame_resp.status_code == 409
+    finally:
+        await harness.config_manager.stop()
+
+
+async def test_white_balance_auto_calibrate_from_a_captured_frame(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "apitest3wbauto")
+    harness.worker.start()
+    try:
+        assert _wait_until(lambda: harness.frame_store.get_latest() is not None)
+        async with harness.client() as client:
+            await login(client)
+            resp = await client.post(
+                "/api/camera/white-balance/auto-calibrate", json={"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["auto"] is False
+            assert 0.1 <= body["red_gain"] <= 8.0
+            assert 0.1 <= body["blue_gain"] <= 8.0
+            assert harness.config_manager.current.camera.wb_red_gain == body["red_gain"]
+    finally:
+        harness.worker.request_stop()
+        harness.worker.join(timeout=2)
+        await harness.config_manager.stop()
+
+
 async def test_plugins_endpoints(tmp_path, redis_url):
     harness = await _build_harness(tmp_path, redis_url, "apitest4")
     try:
