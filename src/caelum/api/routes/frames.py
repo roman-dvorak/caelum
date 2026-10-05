@@ -503,6 +503,11 @@ def delete_frames(
                 if child.is_file():
                     child.unlink()
                     removed += 1
+            # A capture set's other members (see paths.set_dir_name).
+            members = directory / f"{stem}_set"
+            if re.fullmatch(r"\d{8}-\d{6}", stem) and members.is_dir() and not members.is_symlink():
+                removed += sum(1 for child in members.rglob("*") if child.is_file())
+                shutil.rmtree(members)
 
     logger.info("Deleted %d file(s) (%d selected) via the recordings manager", removed, len(body.times))
     return {"date": body.date, "files_removed": removed}

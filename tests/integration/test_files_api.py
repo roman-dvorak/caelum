@@ -177,10 +177,15 @@ async def test_frames_manager_groups_and_deletes_captures(tmp_path, redis_url):
             assert entry["full"] == "derivatives/2026/03/14/keogram/20260314-235959_keogram_keogram.png"
             assert entry["thumbnail"] == "derivatives/2026/03/14/keogram/20260314-235959_keogram_keogram_thumb.jpg"
 
+            # A capture set's other members, hidden from the listing above.
+            members = harness.data_dir / "thumbnails/2026/03/14/20260314-201500_set"
+            members.mkdir()
+            (members / "20260314-201500_m00.webp").write_bytes(b"x")
             single = await client.request(
                 "DELETE", "/api/frames", json={"times": ["20260314-201500"]}
             )
-            assert single.json()["files_removed"] == 2  # jpg + json sidecar
+            assert single.json()["files_removed"] == 3  # jpg + json sidecar + set member
+            assert not members.exists()
             assert not (harness.data_dir / "thumbnails/2026/03/14/20260314-201500.jpg").exists()
             assert (harness.data_dir / "thumbnails/2026/03/14/20260314-203000.jpg").exists()
 

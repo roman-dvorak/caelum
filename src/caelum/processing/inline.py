@@ -62,7 +62,7 @@ class InlineFrameSink:
             )
             metadata = pipeline.build_metadata(info, stats)
             if self._data_dir is not None:
-                pipeline.persist_thumbnail(self._data_dir, metadata, webp)
+                pipeline.persist_thumbnail(self._data_dir, metadata, webp, info)
                 timer.lap("write_thumbnail")
         except Exception:
             logger.exception("Processing frame captured at %s failed", info.captured_at)
@@ -70,15 +70,16 @@ class InlineFrameSink:
                 self._failed += 1
             return True
 
-        processed = ProcessedFrame(
-            image=calibrated,
-            thumbnail_jpeg=live_jpeg,
-            stats=stats,
-            metadata=metadata,
-            save_raw=submission.save_raw,
-        )
-        self._frame_store.update(processed)
-        self._event_bus.publish(FRAME_CAPTURED, processed)
+        if not info.is_hidden_member:  # only a set's representative is published
+            processed = ProcessedFrame(
+                image=calibrated,
+                thumbnail_jpeg=live_jpeg,
+                stats=stats,
+                metadata=metadata,
+                save_raw=submission.save_raw,
+            )
+            self._frame_store.update(processed)
+            self._event_bus.publish(FRAME_CAPTURED, processed)
 
         raw = submission.raw.raw_bayer
         if submission.save_raw and raw is not None and info.raw_config is not None and self._data_dir is not None:
@@ -90,4 +91,9 @@ class InlineFrameSink:
         with self._lock:
             self._processed += 1
             self._last_timings = timer.timings_ms
+        return True
+
+    def submit_set(self, submissions: list[FrameSubmission]) -> bool:
+        for submission in submissions:
+            self.submit(submission)
         return True

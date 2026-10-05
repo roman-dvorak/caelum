@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -61,12 +62,25 @@ def build_metadata(info: FrameInfo, stats: FrameStats) -> FrameMetadata:
         focus_score=stats.focus_score,
         exposure_control=info.exposure_control,
         capture_settings=info.capture_settings,
+        provenance=info.provenance,
+        capture_set=info.capture_set,
+        annotations=info.annotations or None,
     )
     return metadata.model_copy(update={"overlay_elements": default_overlay_elements(metadata)})
 
 
-def persist_thumbnail(data_dir: Path, metadata: FrameMetadata, webp: bytes) -> Path:
-    thumb_path = paths.thumbnail_path(data_dir, metadata.captured_at)
+def _file_path(data_dir: Path, info: FrameInfo, subdir: str, suffix: str) -> Path:
+    if info.is_hidden_member:
+        return paths.member_path(data_dir, subdir, info.set_time, int(info.capture_set["index"]), suffix)
+    when = info.set_time
+    return paths.date_dir(data_dir, subdir, when) / f"{paths.timestamp_stem(when)}{suffix}"
+
+
+def persist_thumbnail(data_dir: Path, metadata: FrameMetadata, webp: bytes, info: FrameInfo | None = None) -> Path:
+    if info is None:
+        thumb_path = paths.thumbnail_path(data_dir, metadata.captured_at)
+    else:
+        thumb_path = _file_path(data_dir, info, "thumbnails", paths.THUMBNAIL_SUFFIXES[0])
     thumb_path.parent.mkdir(parents=True, exist_ok=True)
     thumb_path.write_bytes(webp)
     paths.sidecar_path(thumb_path).write_text(metadata.model_dump_json(indent=2))
@@ -100,6 +114,37 @@ def _xmp_fields(info: FrameInfo, metadata: FrameMetadata, stats: FrameStats) -> 
         "target_ev": info.settings.target_ev,
         "focus_score": round(stats.focus_score, 3),
         **_capture_settings_xmp(info.capture_settings),
+        **_provenance_xmp(info.provenance),
+        **_capture_set_xmp(info.capture_set),
+    }
+
+
+def _provenance_xmp(provenance: dict[str, Any] | None) -> dict[str, Any]:
+    if not provenance:
+        return {}
+    caps = provenance.get("camera_capabilities")
+    params = provenance.get("params")
+    return {
+        "capture_program": provenance.get("capture_program"),
+        "capture_program_sha256": provenance.get("capture_program_sha256"),
+        "capture_program_origin": provenance.get("capture_program_origin"),
+        "capture_program_params": json.dumps(params, sort_keys=True) if params else None,
+        "caelum_version": provenance.get("caelum_version"),
+        "camera_backend": provenance.get("camera_backend"),
+        "camera_capabilities": json.dumps(caps, sort_keys=True, separators=(",", ":")) if caps else None,
+        "config_sha256": provenance.get("config_sha256"),
+    }
+
+
+def _capture_set_xmp(capture_set: dict[str, Any] | None) -> dict[str, Any]:
+    if not capture_set:
+        return {}
+    return {
+        "capture_set_id": capture_set.get("id"),
+        "capture_set_kind": capture_set.get("kind"),
+        "capture_set_index": capture_set.get("index"),
+        "capture_set_count": capture_set.get("count"),
+        "capture_set_representative": capture_set.get("representative"),
     }
 
 
@@ -138,7 +183,8 @@ def persist_raw(
         xmp_fields=_xmp_fields(info, metadata, stats),
         compress=info.settings.dng_compress,
     )
-    raw_path = paths.raw_path(data_dir, metadata.captured_at)
+    raw_path = _file_path(data_dir, info, "raw", paths.RAW_SUFFIXES[0])
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
     dng_writer.write(raw_path, data)
     paths.sidecar_path(raw_path).write_text(metadata.model_dump_json(indent=2))
     return raw_path

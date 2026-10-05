@@ -125,20 +125,21 @@ def child_main(job_q: Any, result_q: Any, data_dir: str, darks_dir: str, log_lev
                 if calibrated is not rgb:
                     rgb[...] = calibrated  # the main process copies the calibrated frame out of the slot
                 metadata = pipeline.build_metadata(info, stats)
-                thumb_path = pipeline.persist_thumbnail(data_path, metadata, webp)
+                thumb_path = pipeline.persist_thumbnail(data_path, metadata, webp, info)
                 timer.lap("write_thumbnail")
-                result_q.put(
-                    (
-                        "frame",
-                        FrameResult(
-                            job_id=job.job_id,
-                            stats=stats,
-                            live_jpeg=live_jpeg,
-                            metadata_json=metadata.model_dump_json(),
-                            thumbnail_path=str(thumb_path),
-                        ),
+                if not info.is_hidden_member:  # only a set's representative is published
+                    result_q.put(
+                        (
+                            "frame",
+                            FrameResult(
+                                job_id=job.job_id,
+                                stats=stats,
+                                live_jpeg=live_jpeg,
+                                metadata_json=metadata.model_dump_json(),
+                                thumbnail_path=str(thumb_path),
+                            ),
+                        )
                     )
-                )
 
                 raw_path = None
                 if info.save_raw and raw is not None and info.raw_config is not None:

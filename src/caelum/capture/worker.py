@@ -14,6 +14,7 @@ how busy the rest of the system is.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import math
 import os
@@ -21,8 +22,9 @@ import threading
 import time
 from collections.abc import Callable
 
+from caelum import __version__
 from caelum.cameras.base import CameraBackend, CameraStalled, CaptureRequest, RawFrame
-from caelum.capture_runtime import CaptureContext, CaptureProgramError, LoadedProgram, builtin_program
+from caelum.capture_runtime import CaptureContext, CaptureProgramError, CaptureSet, LoadedProgram, builtin_program
 from caelum.capture_runtime.context import Overrides
 from caelum.capture_runtime.errors import ProgramStopped
 from caelum.capture_runtime.runner import DEFAULT_MAX_CAPTURES, run_once, timeout_for
@@ -36,6 +38,7 @@ from caelum.control.exposure import (
 from caelum.control.skystate import SkyState, SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
 from caelum.processing.jobs import FrameSink, FrameSubmission, ProcessingSettings
+from caelum.storage import paths
 
 from .metadata import SkyStateModel
 
@@ -478,12 +481,12 @@ class CaptureWorker(threading.Thread):
         hard_limit.daemon = True
         hard_limit.start()
         try:
-            frames = run_once(self._loop, program, ctx, timeout_s)
+            capture_set = run_once(self._loop, program, ctx, timeout_s)
         except ProgramStopped:
             return
         except CaptureProgramError as exc:
             self._program_failed(program, exc, cfg)
-            frames = []
+            capture_set = None
         else:
             self._program_failures = 0
         finally:
@@ -496,18 +499,91 @@ class CaptureWorker(threading.Thread):
             self._next_due = self._wait_for_slot(interval_s, 0.0) + interval_s
         self._frame_period(cfg, sky_state, self._commanded)
 
-        for frame in frames:
-            decision = self._storage_policy.decide(frame.sky, cfg.storage_policy)
-            self._frame_sink.submit(
-                FrameSubmission(
-                    raw=frame.raw,
-                    sky_state=SkyStateModel.from_skystate(frame.sky),
-                    save_raw=decision.save_raw,
-                    settings=ProcessingSettings.from_config(cfg, frame.sky.period),
-                    brightness=frame.brightness,
-                    exposure_control=frame.exposure_control,
-                )
+        if capture_set is not None:
+            self._submit(cfg, capture_set, self._provenance(cfg, program, ctx.params, camera))
+
+    def _provenance(self, cfg: AppConfig, program: LoadedProgram, params: dict, camera: CameraBackend) -> dict:
+        """What produced a frame — enough to reproduce or audit it."""
+        caps = camera.capabilities
+        return {
+            "capture_program": program.name,
+            "capture_program_sha256": program.sha256,
+            "capture_program_origin": program.origin,
+            "capture_program_fallback": self._fallback_active,
+            "params": params,
+            "caelum_version": __version__,
+            "camera_model": caps.model or None,
+            "camera_backend": type(camera).__name__,
+            "camera_capabilities": caps.to_dict(),
+            "config_sha256": hashlib.sha256(cfg.model_dump_json().encode()).hexdigest(),
+        }
+
+    def _submit(self, cfg: AppConfig, capture_set: CaptureSet, provenance: dict) -> None:
+        submissions = build_submissions(cfg, capture_set, provenance, self._storage_policy)
+        if len(submissions) == 1:
+            self._frame_sink.submit(submissions[0])
+        else:
+            self._frame_sink.submit_set(submissions)
+
+
+def build_submissions(
+    cfg: AppConfig, capture_set: CaptureSet, provenance: dict, storage_policy: StoragePolicy
+) -> list[FrameSubmission]:
+    """One `FrameSubmission` per frame of the set; with more than one frame
+    each carries its `capture_set` record (see `FrameMetadata.capture_set`)."""
+    primary = capture_set.primary
+    single = len(capture_set.frames) == 1
+    set_time = primary.raw.captured_at
+    common = {
+        "id": capture_set.id,
+        "kind": capture_set.kind,
+        "count": len(capture_set.frames),
+        "representative": capture_set.representative,
+        "representative_captured_at": set_time.isoformat(),
+    }
+    submissions = []
+    for position, frame in enumerate(capture_set.frames):
+        is_primary = frame is primary
+        entry = None
+        if not single:
+            entry = {**common, "index": position, "role": "representative" if is_primary else "member"}
+            if is_primary:
+                entry["members"] = [
+                    _member_summary(f, i, f is primary, set_time) for i, f in enumerate(capture_set.frames)
+                ]
+        annotations = dict(frame.annotations)
+        if is_primary and capture_set.annotations:
+            annotations["set"] = dict(capture_set.annotations)
+        decision = storage_policy.decide(frame.sky, cfg.storage_policy)
+        submissions.append(
+            FrameSubmission(
+                raw=frame.raw,
+                sky_state=SkyStateModel.from_skystate(frame.sky),
+                save_raw=decision.save_raw,
+                settings=ProcessingSettings.from_config(cfg, frame.sky.period),
+                brightness=frame.brightness,
+                exposure_control=frame.exposure_control,
+                provenance=provenance,
+                capture_set=entry,
+                annotations=annotations or None,
             )
+        )
+    return submissions
+
+
+def _member_summary(frame, position: int, is_primary: bool, set_time) -> dict:
+    if is_primary:
+        stem = paths.timestamp_stem(set_time)
+    else:
+        stem = f"{paths.set_dir_name(set_time)}/{paths.member_stem(set_time, position)}"
+    return {
+        "index": position,
+        "file_stem": stem,
+        "captured_at": frame.raw.captured_at.isoformat(),
+        "exposure_us": frame.raw.exposure_us,
+        "analogue_gain": frame.raw.analogue_gain,
+        "brightness_median": frame.brightness.median,
+    }
 
 
 _BUILTIN_DEFAULT: LoadedProgram | None = None

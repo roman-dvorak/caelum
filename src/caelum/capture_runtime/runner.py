@@ -7,6 +7,7 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 
+from .capture_set import CaptureSet
 from .context import CaptureContext, CapturedFrame
 from .errors import CaptureProgramError, ProgramStopped, ProgramTimeout
 from .program import LoadedProgram
@@ -24,23 +25,29 @@ def timeout_for(program: LoadedProgram, interval_s: float, longest_exposure_s: f
     return max(4 * interval_s, 2 * longest_exposure_s + 30.0, 30.0)
 
 
-def collect_frames(result: Any, ctx: CaptureContext) -> list[CapturedFrame]:
-    """What a program returned, as frames to keep: a frame, a list of
-    frames, or None (= keep nothing). Anything else is a program error."""
+def collect_frames(result: Any, kind: str = "series") -> CaptureSet | None:
+    """What a program returned, as the set to keep: a `CaptureSet`, a frame
+    (a set of one), a list of frames (a set of `kind`, first frame
+    representative), or None (= keep nothing). Anything else is a program
+    error."""
     if result is None:
-        return []
+        return None
+    if isinstance(result, CaptureSet):
+        return result
     if isinstance(result, CapturedFrame):
-        return [result]
+        return CaptureSet(frames=[result], kind="single")
     if isinstance(result, Iterable) and not isinstance(result, (str, bytes, dict)):
         frames = list(result)
         if all(isinstance(f, CapturedFrame) for f in frames):
-            return frames
-    raise CaptureProgramError(f"capture() returned {type(result).__name__}; expected frame(s) or None")
+            if not frames:
+                return None
+            return CaptureSet(frames=frames, kind="single" if len(frames) == 1 else kind)
+    raise CaptureProgramError(f"capture() returned {type(result).__name__}; expected frame(s), a set or None")
 
 
 def run_once(loop: asyncio.AbstractEventLoop, program: LoadedProgram, ctx: CaptureContext, timeout_s: float):
     """Run `program.capture(ctx)` to completion on `loop` and return the
-    frames to keep. Raises `ProgramStopped` on shutdown, the camera's own
+    set to keep (or None). Raises `ProgramStopped` on shutdown, the camera's own
     exception if the camera failed (even if the program caught it), or a
     `CaptureProgramError` (incl. any program exception) otherwise."""
 
@@ -65,4 +72,7 @@ def run_once(loop: asyncio.AbstractEventLoop, program: LoadedProgram, ctx: Captu
         raise CaptureProgramError(f"{program.name} raised {exc!r}") from exc
     if ctx.camera_error is not None:
         raise ctx.camera_error
-    return collect_frames(result, ctx)
+    try:
+        return collect_frames(result, kind=str(program.meta.get("kind", "series")))
+    except ValueError as exc:
+        raise CaptureProgramError(f"{program.name}: {exc}") from exc

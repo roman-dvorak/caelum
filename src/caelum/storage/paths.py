@@ -59,6 +59,25 @@ def thumbnail_path(data_dir: Path, when: datetime) -> Path:
     return date_dir(data_dir, "thumbnails", when) / f"{timestamp_stem(when)}{THUMBNAIL_SUFFIXES[0]}"
 
 
+def member_stem(when: datetime, index: int) -> str:
+    """A capture-set member's stem: the representative's stem plus `_mNN`
+    (so `capture_time_of` still reads the set's time from it)."""
+    return f"{timestamp_stem(when)}_m{index:02d}"
+
+
+def set_dir_name(when: datetime) -> str:
+    """Members of a capture set other than its representative live in this
+    subdirectory of the day directory — out of sight of everything that
+    lists one capture per file, still found by recursive walks (retention)."""
+    return f"{timestamp_stem(when)}_set"
+
+
+def member_path(data_dir: Path, subdir: str, when: datetime, index: int, suffix: str) -> Path:
+    """`<data_dir>/<subdir>/YYYY/MM/DD/<stem>_set/<stem>_mNN<suffix>`, `when`
+    being the representative's capture time."""
+    return date_dir(data_dir, subdir, when) / set_dir_name(when) / f"{member_stem(when, index)}{suffix}"
+
+
 def sidecar_path(image_path: Path) -> Path:
     return image_path.with_suffix(".json")
 

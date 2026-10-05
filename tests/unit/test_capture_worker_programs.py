@@ -14,8 +14,25 @@ from caelum.control.storage_policy import StoragePolicy
 from .test_capture_timing import _Config, _config, _RecordingSink, _Sky
 
 
+class _SetSink(_RecordingSink):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sets: list[list] = []
+        self.submissions: list = []
+
+    def submit(self, submission) -> bool:
+        self.submissions.append(submission)
+        return super().submit(submission)
+
+    def submit_set(self, submissions) -> bool:
+        self.sets.append(list(submissions))
+        for submission in submissions:
+            super().submit(submission)
+        return True
+
+
 def _run(program, frames: int, timeout: float = 10.0):
-    sink = _RecordingSink()
+    sink = _SetSink()
     worker = CaptureWorker(
         camera_factory=lambda _cfg: MockCameraBackend(),
         config_manager=_Config(_config(0.1)),
@@ -46,6 +63,13 @@ def test_user_program_frames_are_submitted():
     )
     worker, sink = _run(program, 4)
     assert len(sink.times) >= 4
+    members = sink.sets[0]
+    assert [m.capture_set["role"] for m in members] == ["representative", "member"]
+    assert members[0].capture_set["count"] == 2
+    assert [m["exposure_us"] for m in members[0].capture_set["members"]] == [1000, 2000]
+    assert members[1].capture_set["representative_captured_at"] == members[0].raw.captured_at.isoformat()
+    assert members[0].provenance["capture_program"] == "pair.py"
+    assert members[0].provenance["capture_program_sha256"] == program.sha256
     status = worker.program_status
     assert status["name"] == "pair.py" and status["origin"] == "user"
     assert not status["fallback_active"]
@@ -59,3 +83,8 @@ def test_failing_program_falls_back_to_default():
     assert status["fallback_active"]
     assert status["name"] == "default.py"
     assert "nope" in status["last_error"]
+    provenance = sink.submissions[-1].provenance
+    assert provenance["capture_program"] == "default.py"
+    assert provenance["capture_program_fallback"] is True
+    assert provenance["camera_capabilities"]["model"] == "mock"
+    assert sink.submissions[-1].capture_set is None

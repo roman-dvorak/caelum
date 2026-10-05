@@ -98,7 +98,7 @@ def _program(cfg: AppConfig) -> list[tuple[ExposureTarget, dict | None]]:
                 overrides=Overrides(manual_exposure=MANUAL.get(slot)), stream_mode=False, interval_s=60.0,
                 slot=slot, max_captures=16,
             )
-            [frame] = run_once(loop, program, ctx, 5.0)
+            [frame] = run_once(loop, program, ctx, 5.0).frames
             commanded = ctx.commanded
             out.append((commanded, frame.exposure_control))
     finally:

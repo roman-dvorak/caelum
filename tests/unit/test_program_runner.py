@@ -91,12 +91,41 @@ async def capture(ctx):
     frames = [await ctx.capture(exposure_us=1000 * (i + 1)) for i in range(ctx.params["n"])]
     return frames[1:]
 '''
-    frames, ctx, driver = _run(loop, source)
+    result, ctx, driver = _run(loop, source)
     assert [align for _, align in driver.calls] == [True, False, False]
-    assert [f.index for f in frames] == [1, 2]
-    assert frames[0].requested.exposure_us == 2000
-    assert frames[0].brightness.median == pytest.approx(51.0)
+    assert [f.index for f in result.frames] == [1, 2]
+    assert result.kind == "series" and result.representative == 0
+    assert result.frames[0].requested.exposure_us == 2000
+    assert result.frames[0].brightness.median == pytest.approx(51.0)
     assert ctx.captures == 3
+
+
+def test_single_frame_is_a_set_of_one(loop):
+    result, _, _ = _run(loop, "async def capture(ctx):\n    return await ctx.capture(exposure_us=100)\n")
+    assert result.kind == "single" and len(result.frames) == 1
+
+
+def test_capture_set_with_representative_and_annotations(loop):
+    source = '''
+async def capture(ctx):
+    frames = [await ctx.capture(exposure_us=e) for e in (100, 1000, 10000)]
+    return ctx.capture_set(frames, kind="hdr", representative=frames[1], ev_step=2)
+'''
+    result, _, _ = _run(loop, source)
+    assert result.kind == "hdr"
+    assert result.representative == 1
+    assert result.primary.requested.exposure_us == 1000
+    assert result.annotations == {"ev_step": 2}
+
+
+def test_bad_representative_is_program_error(loop):
+    source = '''
+async def capture(ctx):
+    frame = await ctx.capture(exposure_us=100)
+    return ctx.capture_set([frame], representative=5)
+'''
+    with pytest.raises(CaptureProgramError, match="representative"):
+        _run(loop, source)
 
 
 def test_state_survives_between_runs(loop):
@@ -106,8 +135,8 @@ async def capture(ctx):
 '''
     state: dict = {}
     for _ in range(3):
-        frames, _, _ = _run(loop, source, state=state)
-        assert frames == []
+        result, _, _ = _run(loop, source, state=state)
+        assert result is None
     assert state["runs"] == 3
 
 

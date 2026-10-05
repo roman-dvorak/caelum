@@ -11,6 +11,7 @@ The worker keeps owning the camera, the capture grid, stall recovery and the
 frame pipeline; a program only decides *what* to capture.
 """
 
+from .capture_set import CaptureSet
 from .context import CaptureContext, CapturedFrame
 from .errors import CaptureProgramError, ProgramLoadError, ProgramTimeout, TooManyCaptures
 from .program import LoadedProgram, builtin_program, load_program
@@ -18,6 +19,7 @@ from .program import LoadedProgram, builtin_program, load_program
 __all__ = [
     "CaptureContext",
     "CaptureProgramError",
+    "CaptureSet",
     "CapturedFrame",
     "LoadedProgram",
     "ProgramLoadError",

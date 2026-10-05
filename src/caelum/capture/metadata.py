@@ -61,6 +61,15 @@ class FrameMetadata(BaseModel):
     #: clamped to its ranges, options it lacks ignored (see
     #: `CameraBackend.apply_request`). None for frames from before this.
     capture_settings: dict[str, Any] | None = None
+    #: What produced this frame: capture program (+ sha256), caelum version,
+    #: camera and its capabilities, config hash.
+    provenance: dict[str, Any] | None = None
+    #: Membership in a capture set (several frames from one program run):
+    #: id, kind, this frame's index and role; on the representative also
+    #: every member's file and settings. None for a plain single frame.
+    capture_set: dict[str, Any] | None = None
+    #: Free-form notes the capture program attached to the frame / its set.
+    annotations: dict[str, Any] | None = None
 
 
 def default_overlay_elements(metadata_without_elements: FrameMetadata) -> list[OverlayElement]:

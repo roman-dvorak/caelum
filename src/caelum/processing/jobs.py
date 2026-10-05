@@ -60,6 +60,11 @@ class FrameSubmission:
     #: `control.exposure.exposure_control_snapshot` of the loop's cycle on
     #: this frame.
     exposure_control: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
+    #: See `FrameMetadata.capture_set`; members other than the
+    #: representative are stored under `<stem>_set/` and never published.
+    capture_set: dict[str, Any] | None = None
+    annotations: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,21 @@ class FrameInfo:
     brightness_median: float | None
     exposure_control: dict[str, Any] | None = None
     capture_settings: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
+    capture_set: dict[str, Any] | None = None
+    annotations: dict[str, Any] | None = None
+
+    @property
+    def is_hidden_member(self) -> bool:
+        """A capture-set member that isn't the representative."""
+        return bool(self.capture_set) and self.capture_set.get("role") == "member"
+
+    @property
+    def set_time(self) -> datetime:
+        """The capture time files are named after — the representative's."""
+        if self.capture_set and self.capture_set.get("representative_captured_at"):
+            return datetime.fromisoformat(self.capture_set["representative_captured_at"])
+        return self.captured_at
 
     @classmethod
     def from_submission(cls, submission: FrameSubmission) -> FrameInfo:
@@ -97,6 +117,9 @@ class FrameInfo:
             brightness_median=submission.brightness.median if submission.brightness else None,
             exposure_control=submission.exposure_control,
             capture_settings=raw.capture_settings,
+            provenance=submission.provenance,
+            capture_set=submission.capture_set,
+            annotations=submission.annotations,
         )
 
 
@@ -144,6 +167,10 @@ class FrameSink(Protocol):
     def submit(self, submission: FrameSubmission) -> bool:
         """Hand one capture off. Must not block on processing; returns False
         if the frame was dropped instead."""
+        ...
+
+    def submit_set(self, submissions: list[FrameSubmission]) -> bool:
+        """Hand off all members of a capture set — all or nothing."""
         ...
 
     @property

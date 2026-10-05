@@ -204,60 +204,74 @@ class ProcessingClient:
     # ---- capture-thread side --------------------------------------------
 
     def submit(self, submission: FrameSubmission) -> bool:
-        raw_frame = submission.raw
-        rgb = np.ascontiguousarray(raw_frame.image, dtype=np.uint8)
-        raw = raw_frame.raw_bayer
-        if raw is not None:
-            raw = np.ascontiguousarray(raw, dtype=np.uint8)
-        raw_offset = -(-rgb.nbytes // _RAW_ALIGN) * _RAW_ALIGN
-        needed = raw_offset + (raw.nbytes if raw is not None else 0)
+        return self.submit_set([submission])
+
+    def submit_set(self, submissions: list[FrameSubmission]) -> bool:
+        """All frames get a slot, or none does: a capture set is processed
+        whole or dropped whole (with more members than slots, always)."""
+        prepared = []
+        for submission in submissions:
+            rgb = np.ascontiguousarray(submission.raw.image, dtype=np.uint8)
+            raw = submission.raw.raw_bayer
+            if raw is not None:
+                raw = np.ascontiguousarray(raw, dtype=np.uint8)
+            raw_offset = -(-rgb.nbytes // _RAW_ALIGN) * _RAW_ALIGN
+            prepared.append((submission, rgb, raw, raw_offset))
+        needed = max(off + (raw.nbytes if raw is not None else 0) for _, _, raw, off in prepared)
+        what = "frame" if len(prepared) == 1 else f"capture set of {len(prepared)}"
 
         with self._lock:
             if not self._ready:
-                return self._drop_locked("processing worker is not running")
+                return self._drop_locked("processing worker is not running", what)
+            if len(prepared) > self._slot_count:
+                return self._drop_locked(f"more frames than the {self._slot_count} slots", what)
             if needed > self._segment_size:
                 if self._in_flight:
-                    return self._drop_locked("reallocating frame slots for a larger frame")
+                    return self._drop_locked("reallocating frame slots for a larger frame", what)
                 self._allocate_segments(needed)
-            if not self._free:
-                return self._drop_locked("all frame slots busy")
-            slot = self._free.pop()
-            job_id = next(self._job_ids)
+            if len(self._free) < len(prepared):
+                return self._drop_locked("all frame slots busy", what)
             generation = self._generation
-            segment = self._segments[slot]
-            self._in_flight[job_id] = _InFlight(
-                slot=slot,
-                generation=generation,
-                submitted_at=time.monotonic(),
-                rgb_shape=tuple(rgb.shape),
-                save_raw=submission.save_raw,
-            )
-            self._submitted += 1
             job_q = self._job_q
+            reserved = []
+            for submission, rgb, _, _ in prepared:
+                slot = self._free.pop()
+                job_id = next(self._job_ids)
+                self._in_flight[job_id] = _InFlight(
+                    slot=slot,
+                    generation=generation,
+                    submitted_at=time.monotonic(),
+                    rgb_shape=tuple(rgb.shape),
+                    save_raw=submission.save_raw,
+                )
+                reserved.append((job_id, self._segments[slot]))
+            self._submitted += len(prepared)
 
-        # The capture thread is the only submitter, and the slot is ours
-        # until JobDone (or a restart reclaims it) — no lock needed to fill it.
-        np.ndarray(rgb.shape, dtype=np.uint8, buffer=segment.buf)[...] = rgb
-        if raw is not None:
-            np.ndarray(raw.shape, dtype=np.uint8, buffer=segment.buf, offset=raw_offset)[...] = raw
-        job = ProcessingJob(
-            job_id=job_id,
-            generation=generation,
-            slot_name=segment.name,
-            rgb_shape=tuple(rgb.shape),
-            raw_shape=tuple(raw.shape) if raw is not None else None,
-            raw_offset=raw_offset,
-            info=FrameInfo.from_submission(submission),
-        )
-        job_q.put(job)
+        # The capture thread is the only submitter, and the slots are ours
+        # until JobDone (or a restart reclaims them) — no lock needed to fill them.
+        for (submission, rgb, raw, raw_offset), (job_id, segment) in zip(prepared, reserved, strict=True):
+            np.ndarray(rgb.shape, dtype=np.uint8, buffer=segment.buf)[...] = rgb
+            if raw is not None:
+                np.ndarray(raw.shape, dtype=np.uint8, buffer=segment.buf, offset=raw_offset)[...] = raw
+            job_q.put(
+                ProcessingJob(
+                    job_id=job_id,
+                    generation=generation,
+                    slot_name=segment.name,
+                    rgb_shape=tuple(rgb.shape),
+                    raw_shape=tuple(raw.shape) if raw is not None else None,
+                    raw_offset=raw_offset,
+                    info=FrameInfo.from_submission(submission),
+                )
+            )
         return True
 
-    def _drop_locked(self, reason: str) -> bool:
+    def _drop_locked(self, reason: str, what: str = "frame") -> bool:
         self._dropped += 1
         now = time.monotonic()
         if now - self._last_drop_warning >= _DROP_WARN_INTERVAL_S:
             self._last_drop_warning = now
-            logger.warning("Dropping frame from processing: %s (%d dropped so far)", reason, self._dropped)
+            logger.warning("Dropping %s from processing: %s (%d dropped so far)", what, reason, self._dropped)
         return False
 
     # ---- shared memory ---------------------------------------------------

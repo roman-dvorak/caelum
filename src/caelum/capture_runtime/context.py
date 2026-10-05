@@ -147,6 +147,27 @@ class CaptureContext:
         sample = measure(frame_raw.image, self.config.exposure_policy.brightness_roi_diameter_frac)
         return CapturedFrame(raw=frame_raw, brightness=sample, sky=sky, requested=req, index=index)
 
+    def capture_set(
+        self,
+        frames: list[CapturedFrame],
+        kind: str = "series",
+        representative: CapturedFrame | int | None = None,
+        **annotations: Any,
+    ):
+        """Group frames into one capture set — return it from `capture()`.
+        `representative` (a frame or its position in `frames`, default the
+        first) stands for the set wherever one frame per slot is shown."""
+        from .capture_set import CaptureSet
+
+        frames = list(frames)
+        if isinstance(representative, CapturedFrame):
+            index = next((i for i, f in enumerate(frames) if f is representative), None)
+            if index is None:
+                raise ValueError("representative is not one of the frames")
+        else:
+            index = representative or 0
+        return CaptureSet(frames=frames, kind=kind, representative=index, annotations=annotations)
+
     async def sleep(self, seconds: float) -> None:
         deadline = time.monotonic() + max(0.0, seconds)
         while (remaining := deadline - time.monotonic()) > 0:
