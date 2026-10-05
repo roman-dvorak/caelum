@@ -6,7 +6,21 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import auth, camera, config, files, frames, logs, overlay, plugins, status, stream, system, terminal
+from .routes import (
+    auth,
+    camera,
+    config,
+    files,
+    frames,
+    logs,
+    overlay,
+    plugins,
+    raw_white_balance,
+    status,
+    stream,
+    system,
+    terminal,
+)
 from .security import require_admin, require_preview
 
 
@@ -27,6 +41,8 @@ def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = (
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # The raw white-balance pixel buffer says its size in these.
+        expose_headers=["X-Width", "X-Height"],
     )
 
     # Auth routes handle their own access levels (login must stay reachable
@@ -42,6 +58,7 @@ def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = (
     app.include_router(camera.router, prefix="/api", dependencies=admin_only)
     app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
     app.include_router(system.router, prefix="/api", dependencies=admin_only)
+    app.include_router(raw_white_balance.router, prefix="/api", dependencies=admin_only)
     # files/frames/overlay declare per-route levels: reads are preview, writes admin.
     app.include_router(files.router, prefix="/api")
     app.include_router(frames.router, prefix="/api")
