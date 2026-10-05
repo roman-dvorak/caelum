@@ -18,7 +18,7 @@ from caelum.capture.calibration import DarkLibrary
 from caelum.capture.metadata import FrameMetadata, SkyStateModel, default_overlay_elements
 from caelum.capture.stats import FrameStats
 from caelum.config.schema import adu_to_ev
-from caelum.storage import dng_writer, paths
+from caelum.storage import dng_multi, dng_writer, paths
 
 from .jobs import FrameInfo
 
@@ -185,6 +185,65 @@ def persist_raw(
     )
     raw_path = _file_path(data_dir, info, "raw", paths.RAW_SUFFIXES[0])
     raw_path.parent.mkdir(parents=True, exist_ok=True)
+    dng_writer.write(raw_path, data)
+    paths.sidecar_path(raw_path).write_text(metadata.model_dump_json(indent=2))
+    return raw_path
+
+
+def _frame_record(info: FrameInfo, stats: FrameStats) -> dict[str, Any]:
+    """One frame's entry in a multi-frame DNG's `caelum:frames`."""
+    meta = info.camera_metadata
+    gains = meta.get("ColourGains")
+    record = {
+        "role": (info.capture_set or {}).get("role"),
+        "captured_at": info.captured_at.isoformat(),
+        "exposure_us": info.exposure_us,
+        "analogue_gain": round(info.analogue_gain, 4),
+        "digital_gain": meta.get("DigitalGain"),
+        "colour_gains": ",".join(f"{g:.4f}" for g in gains) if gains else None,
+        "sensor_timestamp_ns": info.sensor_timestamp_ns,
+        "sensor_temperature_c": meta.get("SensorTemperature"),
+        "brightness_median": round(info.brightness_median, 2) if info.brightness_median is not None else None,
+        "focus_score": round(stats.focus_score, 3),
+        **_capture_settings_xmp(info.capture_settings),
+    }
+    if info.annotations:
+        record["annotations"] = json.dumps(info.annotations, sort_keys=True, default=str)
+    return record
+
+
+def persist_raw_set(
+    data_dir: Path,
+    members: list[tuple[FrameInfo, FrameMetadata, FrameStats, np.ndarray]],
+) -> Path:
+    """A capture set's raw frames as one multi-frame DNG under the set's
+    plain stem (see storage/dng_multi.py), with the representative's
+    sidecar next to it."""
+    primary = next(i for i, (info, *_rest) in enumerate(members) if not info.is_hidden_member)
+    info, metadata, stats, _ = members[primary]
+    sky = metadata.sky_state
+    frames = [
+        dng_multi.MultiFrame(
+            raw=raw, raw_config=member_info.raw_config, camera_metadata=member_info.camera_metadata,
+            captured_at=member_info.captured_at, exposure_us=member_info.exposure_us,
+            analogue_gain=member_info.analogue_gain, xmp=_frame_record(member_info, member_stats),
+        )
+        for member_info, _, member_stats, raw in members
+    ]
+    kind = (info.capture_set or {}).get("kind", "set")
+    data = dng_multi.build_multi_dng(
+        frames,
+        primary,
+        camera_model=info.camera_model,
+        software=info.settings.software,
+        description=(
+            f"caelum allsky {kind} set of {len(frames)}, {sky.period}, primary exp {info.exposure_us / 1e6:.6g} s, "
+            f"gain {info.analogue_gain:.2f}, sun {sky.sun_altitude_deg:.1f} deg"
+        ),
+        xmp_fields=_xmp_fields(info, metadata, stats),
+        compress=info.settings.dng_compress,
+    )
+    raw_path = _file_path(data_dir, info, "raw", paths.RAW_SUFFIXES[0])
     dng_writer.write(raw_path, data)
     paths.sidecar_path(raw_path).write_text(metadata.model_dump_json(indent=2))
     return raw_path

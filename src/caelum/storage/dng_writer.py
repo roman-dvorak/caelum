@@ -35,18 +35,35 @@ def _ascii(text: str) -> str:
     return text.encode("ascii", "replace").decode("ascii")
 
 
-def _xmp_packet(fields: dict[str, Any]) -> bytes:
-    attrs = "\n".join(
-        f'    caelum:{key}="{escape(str(value), {chr(34): "&quot;"})}"'
+def _xmp_attrs(fields: dict[str, Any], indent: str) -> str:
+    return "\n".join(
+        f'{indent}caelum:{key}="{escape(str(value), {chr(34): "&quot;"})}"'
         for key, value in fields.items()
         if value is not None
     )
+
+
+def _xmp_packet(fields: dict[str, Any], frames: list[dict[str, Any]] | None = None) -> bytes:
+    """`frames`: one record per frame of a multi-frame DNG, written as the
+    ordered list `caelum:frames` (rdf:Seq of structs) — see
+    docs/dng-capture-sets.md."""
+    head = f'  <rdf:Description rdf:about="" xmlns:caelum="{_XMP_NS}"\n{_xmp_attrs(fields, "    ")}'
+    if frames:
+        items = "\n".join(
+            f"      <rdf:li>\n       <rdf:Description\n{_xmp_attrs(frame, '        ')}/>\n      </rdf:li>"
+            for frame in frames
+        )
+        body = (
+            f"{head}>\n    <caelum:frames>\n     <rdf:Seq>\n{items}\n     </rdf:Seq>\n"
+            "    </caelum:frames>\n  </rdf:Description>\n"
+        )
+    else:
+        body = f"{head}/>\n"
     xml = (
         '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
         '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
         ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
-        f'  <rdf:Description rdf:about="" xmlns:caelum="{_XMP_NS}"\n'
-        f"{attrs}/>\n"
+        f"{body}"
         " </rdf:RDF>\n"
         "</x:xmpmeta>\n"
         '<?xpacket end="w"?>'
@@ -84,8 +101,35 @@ def build_dng(
     """`compress`: lossless JPEG (LJ92), the standard DNG compression every
     raw developer reads — about a third smaller for night frames, ~0.5 s of
     CPU per full-size frame on a Pi 4."""
-    from pidng.camdefs import Picamera2Camera
     from pidng.core import PICAM2DNG
+    from pidng.dng import Tag
+
+    camera = prepare_camera(
+        raw_config, camera_metadata, captured_at=captured_at, exposure_us=exposure_us,
+        analogue_gain=analogue_gain, camera_model=camera_model, software=software, description=description,
+    )
+    if xmp_fields:
+        camera.tags.set(Tag.XMP_Metadata, list(_xmp_packet(xmp_fields)))
+    converter = PICAM2DNG(camera)
+    converter.options(compress=compress)
+    return bytes(converter.convert(np.ascontiguousarray(raw), ""))
+
+
+def prepare_camera(
+    raw_config: dict[str, Any],
+    camera_metadata: dict[str, Any],
+    *,
+    captured_at: datetime,
+    exposure_us: int,
+    analogue_gain: float,
+    camera_model: str = "",
+    software: str = "caelum",
+    description: str = "",
+):
+    """PiDNG's camera profile for one frame, with caelum's corrections and
+    additions (see the module docstring) — its `.tags` are the frame's DNG
+    tags, its `.fmt` the raw layout."""
+    from pidng.camdefs import Picamera2Camera
     from pidng.dng import Tag
 
     fmt = {
@@ -114,12 +158,7 @@ def build_dng(
     tags.set(Tag.Software, _ascii(software))
     if description:
         tags.set(Tag.ImageDescription, _ascii(description))
-    if xmp_fields:
-        tags.set(Tag.XMP_Metadata, list(_xmp_packet(xmp_fields)))
-
-    converter = PICAM2DNG(camera)
-    converter.options(compress=compress)
-    return bytes(converter.convert(np.ascontiguousarray(raw), ""))
+    return camera
 
 
 def write(path: Path, data: bytes) -> None:

@@ -20,7 +20,7 @@ from caelum.control.storage_policy import StoragePolicy
 from caelum.events import EventBus
 from caelum.processing.client import ProcessingClient
 from caelum.processing.inline import InlineFrameSink
-from caelum.storage import paths
+from caelum.storage import dng_reader, paths
 from tests.factories import make_image, make_raw_frame
 from tests.integration.test_processing import _Collector, _wait_until
 from tests.tiff_tags import read_ifd0
@@ -86,20 +86,35 @@ def test_inline_sink_stores_set_and_publishes_only_representative(tmp_path):
     xmp = read_ifd0(dng.read_bytes())[700]
     assert b'caelum:capture_program="hdr.py"' in xmp
     assert b'caelum:capture_set_kind="hdr"' in xmp
-    assert paths.member_path(tmp_path, "raw", T0, 2, ".dng").exists()
+    _assert_multi_dng(dng)
+
+
+def _assert_multi_dng(dng):
+    data = dng.read_bytes()
+    assert len(dng_reader.list_raw_ifds(data)) == 3  # primary in IFD0, two SubIFDs
+    xmp = read_ifd0(data)[700]
+    assert xmp.count(b"<rdf:li>") == 3
+    assert b'caelum:ifd="IFD0"' in xmp and b'caelum:ifd="SubIFD1"' in xmp
+    assert b'caelum:exposure_us="100000"' in xmp
+    assert not paths.member_path(dng.parents[4], "raw", T0, 2, ".dng").exists()
+    # IFD0 is the representative (10 ms); the others are in set order.
+    exposures = [dng_reader.parse(dng_reader.standalone_frame(data, i)) for i in range(3)]
+    assert all(info.width == 64 for info in exposures)
 
 
 def test_process_sink_stores_set_and_publishes_only_representative(tmp_path):
+    pytest.importorskip("pidng")
     bus = EventBus()
     collected = _Collector(bus)
     client = ProcessingClient(FrameStore(), bus, tmp_path, slots=3, job_timeout_s=60.0)
     client.start()
     try:
-        assert client.submit_set(_submissions(with_raw=False)) is True
+        assert client.submit_set(_submissions()) is True
         assert _wait_until(lambda: client.stats["processed"] == 3)
         assert len(collected) == 1
         assert collected.frames[0].metadata.capture_set["role"] == "representative"
         _assert_layout(tmp_path)
+        _assert_multi_dng(paths.raw_path(tmp_path, T0))
     finally:
         client.stop()
 

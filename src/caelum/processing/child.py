@@ -89,13 +89,13 @@ def child_main(job_q: Any, result_q: Any, data_dir: str, darks_dir: str, log_lev
 
     from caelum.capture.calibration import DarkLibrary
 
-    from . import pipeline
-    from .jobs import FrameResult, JobDone, ProcessingJob
+    from .jobs import ProcessingJob, ProcessingSetJob
 
     parent_pid = os.getppid()
     data_path = Path(data_dir)
     dark_library = DarkLibrary(darks_dir=Path(darks_dir))
     slots = _SlotCache()
+    ctx = _ChildContext(result_q, data_path, dark_library, slots)
     logger.info("Processing worker started (pid %d)", os.getpid())
 
     try:
@@ -112,49 +112,88 @@ def child_main(job_q: Any, result_q: Any, data_dir: str, darks_dir: str, log_lev
             if job is None:
                 return
 
-            info = job.info
-            timer = pipeline.Timer()
-            rgb = raw = calibrated = None
-            try:
-                segment = slots.get(job.slot_name, job.generation)
-                rgb = np.ndarray(job.rgb_shape, dtype=np.uint8, buffer=segment.buf)
-                if job.raw_shape is not None:
-                    raw = np.ndarray(job.raw_shape, dtype=np.uint8, buffer=segment.buf, offset=job.raw_offset)
-
-                calibrated, stats, live_jpeg, webp = pipeline.analyze(rgb, info, dark_library, timer)
-                if calibrated is not rgb:
-                    rgb[...] = calibrated  # the main process copies the calibrated frame out of the slot
-                metadata = pipeline.build_metadata(info, stats)
-                thumb_path = pipeline.persist_thumbnail(data_path, metadata, webp, info)
-                timer.lap("write_thumbnail")
-                if not info.is_hidden_member:  # only a set's representative is published
-                    result_q.put(
-                        (
-                            "frame",
-                            FrameResult(
-                                job_id=job.job_id,
-                                stats=stats,
-                                live_jpeg=live_jpeg,
-                                metadata_json=metadata.model_dump_json(),
-                                thumbnail_path=str(thumb_path),
-                            ),
-                        )
-                    )
-
-                raw_path = None
-                if info.save_raw and raw is not None and info.raw_config is not None:
-                    raw_path = pipeline.persist_raw(data_path, info, metadata, stats, raw)
-                    timer.lap("write_raw")
-                result_q.put(
-                    ("done", JobDone(job_id=job.job_id, raw_path=str(raw_path) if raw_path else None,
-                                     timings_ms=timer.timings_ms))
-                )
-            except Exception as exc:  # noqa: BLE001 - one bad frame must not kill the worker
-                logger.error("Processing frame captured at %s failed:\n%s", info.captured_at, traceback.format_exc())
-                result_q.put(("done", JobDone(job_id=job.job_id, error=repr(exc), timings_ms=timer.timings_ms)))
-            finally:
-                # Views into the segment must be gone before it can ever be closed.
-                del rgb, raw, calibrated
+            if isinstance(job, ProcessingSetJob):
+                _process_set(job, ctx)
+            else:
+                _process_set(ProcessingSetJob(jobs=(job,)), ctx)
     finally:
         slots.close()
         logger.info("Processing worker stopped")
+
+
+class _ChildContext:
+    def __init__(self, result_q: Any, data_dir: Path, dark_library: Any, slots: _SlotCache) -> None:
+        self.result_q = result_q
+        self.data_dir = data_dir
+        self.dark_library = dark_library
+        self.slots = slots
+
+
+def _process_set(set_job: Any, ctx: _ChildContext) -> None:
+    """Process one frame, or all members of a capture set: per member the
+    thumbnail and sidecar (and the live frame for the one that is
+    published), then the raw — one DNG per frame, or one multi-frame DNG
+    for a set. Every job's slot is released with its own JobDone."""
+    from . import pipeline
+    from .jobs import FrameResult, JobDone
+
+    jobs = set_job.jobs
+    timers = {job.job_id: pipeline.Timer() for job in jobs}
+    views: dict[int, tuple[Any, Any]] = {}
+    done: dict[int, JobDone] = {}
+    members = []
+    try:
+        for job in jobs:
+            info, timer = job.info, timers[job.job_id]
+            try:
+                segment = ctx.slots.get(job.slot_name, job.generation)
+                rgb = np.ndarray(job.rgb_shape, dtype=np.uint8, buffer=segment.buf)
+                raw = None
+                if job.raw_shape is not None:
+                    raw = np.ndarray(job.raw_shape, dtype=np.uint8, buffer=segment.buf, offset=job.raw_offset)
+                views[job.job_id] = (rgb, raw)
+
+                calibrated, stats, live_jpeg, webp = pipeline.analyze(rgb, info, ctx.dark_library, timer)
+                if calibrated is not rgb:
+                    rgb[...] = calibrated  # the main process copies the calibrated frame out of the slot
+                del calibrated
+                metadata = pipeline.build_metadata(info, stats)
+                thumb_path = pipeline.persist_thumbnail(ctx.data_dir, metadata, webp, info)
+                timer.lap("write_thumbnail")
+                if not info.is_hidden_member:  # only a set's representative is published
+                    ctx.result_q.put(("frame", FrameResult(
+                        job_id=job.job_id, stats=stats, live_jpeg=live_jpeg,
+                        metadata_json=metadata.model_dump_json(), thumbnail_path=str(thumb_path),
+                    )))
+                members.append((job, info, metadata, stats, raw))
+            except Exception as exc:  # noqa: BLE001 - one bad frame must not kill the worker
+                logger.error("Processing frame captured at %s failed:\n%s", info.captured_at, traceback.format_exc())
+                done[job.job_id] = JobDone(job_id=job.job_id, error=repr(exc), timings_ms=timer.timings_ms)
+
+        raw_paths: dict[int, str] = {}
+        with_raw = [m for m in members if m[1].save_raw and m[4] is not None and m[1].raw_config is not None]
+        try:
+            if len(jobs) == 1 and with_raw:
+                job, info, metadata, stats, raw = with_raw[0]
+                raw_paths[job.job_id] = str(pipeline.persist_raw(ctx.data_dir, info, metadata, stats, raw))
+                timers[job.job_id].lap("write_raw")
+            elif len(jobs) > 1:
+                # Whatever members made it, as long as the primary did.
+                primary = next((m for m in with_raw if not m[1].is_hidden_member), None)
+                if primary is not None:
+                    path = pipeline.persist_raw_set(ctx.data_dir, [(i, md, st, r) for _, i, md, st, r in with_raw])
+                    raw_paths[primary[0].job_id] = str(path)
+                    timers[primary[0].job_id].lap("write_raw_set")
+        except Exception:  # noqa: BLE001
+            logger.error("Writing the raw DNG failed:\n%s", traceback.format_exc())
+
+        for job in jobs:
+            if job.job_id not in done:
+                done[job.job_id] = JobDone(job_id=job.job_id, raw_path=raw_paths.get(job.job_id),
+                                           timings_ms=timers[job.job_id].timings_ms)
+    finally:
+        # Views into the segments must be gone before they can ever be closed.
+        members.clear()
+        views.clear()
+        for job in jobs:
+            ctx.result_q.put(("done", done.get(job.job_id) or JobDone(job_id=job.job_id, error="not processed")))

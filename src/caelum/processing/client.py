@@ -39,7 +39,7 @@ from caelum.capture.metadata import FrameMetadata
 from caelum.events import FRAME_CAPTURED, EventBus
 
 from .child import child_main
-from .jobs import FrameInfo, FrameResult, FrameSubmission, JobDone, ProcessingJob
+from .jobs import FrameInfo, FrameResult, FrameSubmission, JobDone, ProcessingJob, ProcessingSetJob
 
 logger = logging.getLogger(__name__)
 
@@ -249,11 +249,12 @@ class ProcessingClient:
 
         # The capture thread is the only submitter, and the slots are ours
         # until JobDone (or a restart reclaims them) — no lock needed to fill them.
+        jobs = []
         for (submission, rgb, raw, raw_offset), (job_id, segment) in zip(prepared, reserved, strict=True):
             np.ndarray(rgb.shape, dtype=np.uint8, buffer=segment.buf)[...] = rgb
             if raw is not None:
                 np.ndarray(raw.shape, dtype=np.uint8, buffer=segment.buf, offset=raw_offset)[...] = raw
-            job_q.put(
+            jobs.append(
                 ProcessingJob(
                     job_id=job_id,
                     generation=generation,
@@ -264,6 +265,7 @@ class ProcessingClient:
                     info=FrameInfo.from_submission(submission),
                 )
             )
+        job_q.put(jobs[0] if len(jobs) == 1 else ProcessingSetJob(jobs=tuple(jobs)))
         return True
 
     def _drop_locked(self, reason: str, what: str = "frame") -> bool:

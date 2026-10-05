@@ -1,8 +1,9 @@
 """Reading our own DNGs back, and re-tagging their white balance in place.
 
-Covers exactly what `dng_writer` (PiDNG) produces — a little-endian TIFF
-with the raw CFA image in IFD0, uncompressed, 12-bit packed or 16-bit — not
-DNG in general. Pillow can't open a 12-bit CFA DNG at all, and nothing else
+Covers exactly what `dng_writer` (PiDNG) and `dng_multi` produce — a
+little-endian TIFF with the raw CFA image in IFD0 (and, for a capture set,
+further frames in SubIFDs), uncompressed 12-bit packed / 16-bit or LJ92 —
+not DNG in general. Pillow can't open a 12-bit CFA DNG at all, and nothing else
 in the dependency tree reads them.
 
 White balance lives in `AsShotNeutral` (tag 50728): one value per colour
@@ -181,6 +182,70 @@ def parse(data: bytes) -> DngInfo:
         strips=tuple(zip((int(o) for o in offsets), (int(c) for c in counts), strict=True)),
         compression=compression,
     )
+
+
+_TAG_NEW_SUBFILE_TYPE = 254
+_TAG_SUB_IFDS = 330
+
+
+def _raw_entries(data: bytes, offset: int) -> dict[int, tuple[int, int, bytes]]:
+    """Every entry of the IFD at `offset` as (type, count, value bytes)."""
+    count = struct.unpack_from("<H", data, offset)[0]
+    entries = {}
+    for i in range(count):
+        pos = offset + 2 + 12 * i
+        tag, typ, n, value = struct.unpack_from("<HHLL", data, pos)
+        size = _SIZES.get(typ, 4 if typ == 13 else 0) * n
+        start = pos + 8 if size <= 4 else value
+        entries[tag] = (typ, n, bytes(data[start:start + size]))
+    return entries
+
+
+def list_raw_ifds(data: bytes) -> list[int]:
+    """Offsets of the raw frames in file order: IFD0 first, then its
+    SubIFDs (the frames of a multi-frame DNG, see docs/dng-capture-sets.md).
+    A single-frame DNG has just IFD0."""
+    if data[:4] != b"II*\x00":
+        raise DngFormatError("Not a little-endian TIFF/DNG")
+    ifd0 = struct.unpack_from("<L", data, 4)[0]
+    offsets = [ifd0]
+    sub = _raw_entries(data, ifd0).get(_TAG_SUB_IFDS)
+    if sub is not None:
+        offsets += list(struct.unpack(f"<{sub[1]}L", sub[2]))
+    return offsets
+
+
+def standalone_frame(data: bytes, index: int) -> bytes:
+    """Frame `index` (in `list_raw_ifds` order) of a multi-frame DNG as a
+    single-frame DNG: the IFD0 profile with that frame's raw structure,
+    per-frame tags and pixel data."""
+    from . import tiff_writer as tw
+
+    offsets = list_raw_ifds(data)
+    if not 0 <= index < len(offsets):
+        raise DngFormatError(f"no raw frame {index} (file has {len(offsets)})")
+
+    def entries_of(offset: int) -> dict[int, tw.Entry]:
+        return {
+            tag: tw.Entry(tag, typ, n, value)
+            for tag, (typ, n, value) in _raw_entries(data, offset).items()
+            if typ in tw.TYPE_SIZE and typ != 13 and tag not in (_TAG_SUB_IFDS, 34665)
+        }
+
+    merged = entries_of(offsets[0])
+    frame = _raw_entries(data, offsets[index])
+    merged.update(entries_of(offsets[index]))
+    strip_offsets = struct.unpack(f"<{frame[_TAG_STRIP_OFFSETS][1]}L", _widen(frame[_TAG_STRIP_OFFSETS]))
+    strip_counts = struct.unpack(f"<{frame[_TAG_STRIP_BYTE_COUNTS][1]}L", _widen(frame[_TAG_STRIP_BYTE_COUNTS]))
+    strips = [bytes(data[o:o + n]) for o, n in zip(strip_offsets, strip_counts, strict=True)]
+    return tw.write_tiff(tw.IFD(entries=list(merged.values()), strips=strips))
+
+
+def _widen(entry: tuple[int, int, bytes]) -> bytes:
+    typ, n, value = entry
+    if typ == 3:  # SHORT offsets/counts
+        return struct.pack(f"<{n}L", *struct.unpack(f"<{n}H", value))
+    return value
 
 
 def read_info(path: Path) -> DngInfo:

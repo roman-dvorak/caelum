@@ -138,6 +138,15 @@ class ProcessingJob:
 
 
 @dataclass(frozen=True)
+class ProcessingSetJob:
+    """All members of a capture set, processed together so their raw frames
+    can go into one multi-frame DNG (each still frees its slot with its own
+    `JobDone`)."""
+
+    jobs: tuple[ProcessingJob, ...]
+
+
+@dataclass(frozen=True)
 class FrameResult:
     """Processing process -> main, as soon as the frame is viewable (before
     the slow raw write): the calibrated RGB is back in the slot by then."""

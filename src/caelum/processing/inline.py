@@ -54,6 +54,10 @@ class InlineFrameSink:
             }
 
     def submit(self, submission: FrameSubmission) -> bool:
+        self._process(submission, write_raw=True)
+        return True
+
+    def _process(self, submission: FrameSubmission, write_raw: bool):
         info = FrameInfo.from_submission(submission)
         timer = pipeline.Timer()
         try:
@@ -68,7 +72,7 @@ class InlineFrameSink:
             logger.exception("Processing frame captured at %s failed", info.captured_at)
             with self._lock:
                 self._failed += 1
-            return True
+            return None
 
         if not info.is_hidden_member:  # only a set's representative is published
             processed = ProcessedFrame(
@@ -82,7 +86,8 @@ class InlineFrameSink:
             self._event_bus.publish(FRAME_CAPTURED, processed)
 
         raw = submission.raw.raw_bayer
-        if submission.save_raw and raw is not None and info.raw_config is not None and self._data_dir is not None:
+        if (write_raw and submission.save_raw and raw is not None and info.raw_config is not None
+                and self._data_dir is not None):
             try:
                 pipeline.persist_raw(self._data_dir, info, metadata, stats, raw)
                 timer.lap("write_raw")
@@ -91,9 +96,18 @@ class InlineFrameSink:
         with self._lock:
             self._processed += 1
             self._last_timings = timer.timings_ms
-        return True
+        return info, metadata, stats, raw
 
     def submit_set(self, submissions: list[FrameSubmission]) -> bool:
+        members = []
         for submission in submissions:
-            self.submit(submission)
+            member = self._process(submission, write_raw=False)
+            if member is not None:
+                members.append(member)
+        with_raw = [m for m in members if m[0].save_raw and m[3] is not None and m[0].raw_config is not None]
+        if self._data_dir is not None and any(not m[0].is_hidden_member for m in with_raw):
+            try:
+                pipeline.persist_raw_set(self._data_dir, with_raw)
+            except Exception:
+                logger.exception("Writing the multi-frame DNG failed")
         return True
