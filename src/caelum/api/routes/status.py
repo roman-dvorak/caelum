@@ -44,6 +44,7 @@ def get_status(
         timezone=config_manager.current.location.timezone,
         processing=frame_sink.stats if frame_sink is not None else None,
         frame_period_s=worker.frame_period_s,
+        capture_program=worker.program_status,
     )
 
 

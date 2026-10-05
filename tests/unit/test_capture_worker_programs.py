@@ -88,3 +88,73 @@ def test_failing_program_falls_back_to_default():
     assert provenance["capture_program_fallback"] is True
     assert provenance["camera_capabilities"]["model"] == "mock"
     assert sink.submissions[-1].capture_set is None
+
+
+def _store_worker(store, cfg_holder, sink):
+    return CaptureWorker(
+        camera_factory=lambda _cfg: MockCameraBackend(),
+        config_manager=cfg_holder,
+        skystate_calculator=_Sky(),
+        exposure_controller=ExposureController(),
+        storage_policy=StoragePolicy(),
+        frame_sink=sink,
+        program_store=store,
+    )
+
+
+def _activate(cfg_holder, name, sha):
+    cfg = cfg_holder.current
+    cfg_holder.current = cfg.model_copy(
+        update={"capture": cfg.capture.model_copy(update={"active_program": name, "active_sha256": sha})}
+    )
+
+
+def _wait(predicate, timeout=10.0):
+    deadline = time.monotonic() + timeout
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    return predicate()
+
+
+def test_crash_marker_starts_in_fallback_until_another_version_is_activated(tmp_path):
+    from caelum.capture_runtime.store import ProgramStore
+
+    store = ProgramStore(tmp_path)
+    source = "async def capture(ctx):\n    return await ctx.capture(exposure_us=1000)\n"
+    sha = store.archive(source)
+    store.mark_crashed(store.load("hung.py", sha))
+    holder = _Config(_config(0.05))
+    _activate(holder, "hung.py", sha)
+    sink = _SetSink()
+    worker = _store_worker(store, holder, sink)
+    worker.start()
+    try:
+        assert _wait(lambda: len(sink.submissions) >= 1)
+        status = worker.program_status
+        assert status["name"] == "default.py" and status["fallback_active"]
+        assert "hung" in status["last_error"]
+        # A new version gets its chance.
+        sha2 = store.archive(source + "# v2\n")
+        _activate(holder, "hung.py", sha2)
+        assert _wait(lambda: worker.program_status["sha256"] == sha2)
+        assert not worker.program_status["fallback_active"]
+    finally:
+        worker.request_stop()
+        worker.join(2)
+
+
+def test_unloadable_program_runs_default(tmp_path):
+    from caelum.capture_runtime.store import ProgramStore
+
+    holder = _Config(_config(0.05))
+    _activate(holder, "missing.py", "0" * 64)
+    sink = _SetSink()
+    worker = _store_worker(ProgramStore(tmp_path), holder, sink)
+    worker.start()
+    try:
+        assert _wait(lambda: len(sink.submissions) >= 1)
+        assert worker.program_status["fallback_active"]
+        assert "cannot load missing.py" in worker.program_status["last_error"]
+    finally:
+        worker.request_stop()
+        worker.join(2)

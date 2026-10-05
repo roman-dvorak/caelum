@@ -98,6 +98,10 @@ class CaptureContext:
         #: are clamped/ignored and recorded with the frame.
         self.capabilities = capabilities
         self.log = logging.getLogger(f"caelum.capture_program.{program_name.removesuffix('.py')}")
+        if self.log.level == logging.NOTSET:
+            # A program's own messages are always wanted (in the journal and
+            # in Check/Test reports), whatever the app's log level.
+            self.log.setLevel(logging.INFO)
         self._max_captures = max_captures
         self._captures = 0
         #: A camera failure inside `capture()` — re-raised by the worker even

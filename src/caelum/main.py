@@ -19,6 +19,7 @@ from caelum.cameras.registry import create_camera_backend
 from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
+from caelum.capture_runtime.store import ProgramStore
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import AppConfig, CameraConfig
 from caelum.control.exposure import ExposureController
@@ -103,6 +104,7 @@ async def _async_main(settings: Settings) -> None:
             job_timeout_s=cfg.processing.job_timeout_s,
         )
 
+    program_store = ProgramStore(settings.capture_programs_dir)
     capture_worker = CaptureWorker(
         camera_factory=camera_factory,
         config_manager=config_manager,
@@ -111,6 +113,7 @@ async def _async_main(settings: Settings) -> None:
         exposure_controller=ExposureController(),
         storage_policy=StoragePolicy(),
         frame_sink=frame_sink,
+        program_store=program_store,
     )
 
     upload_worker = UploadWorker(config_manager, event_bus, settings.data_dir)
@@ -150,6 +153,7 @@ async def _async_main(settings: Settings) -> None:
     app.state.skystate_calculator = skystate_calculator
     app.state.plugin_loader = plugin_loader
     app.state.frame_sink = frame_sink
+    app.state.program_store = program_store
 
     frame_sink.start()
     capture_worker.start()

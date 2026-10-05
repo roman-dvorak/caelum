@@ -229,7 +229,17 @@ class ProcessingConfig(StrictModel):
 
 
 class CaptureProgramConfig(StrictModel):
-    """Which capture program runs (see caelum.capture_runtime)."""
+    """Which capture program runs (see caelum.capture_runtime).
+
+    A user program runs from its archived version `active_sha256` — editing
+    the file changes nothing until it is activated again."""
+
+    active_program: str = "default.py"
+    #: The archived version of a user program; None for a built-in.
+    active_sha256: str | None = None
+    #: Lets admins create, edit, test and activate programs through the API.
+    #: Programs are arbitrary Python running with the service's rights.
+    editing_enabled: bool = True
 
     #: Parameters per program, by name without `.py` — `ctx.params`.
     params: dict[str, dict] = Field(default_factory=dict)

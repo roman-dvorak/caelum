@@ -256,6 +256,15 @@ class ExposureController:
         self._diagnostics: ExposureDiagnostics | None = None
         self.reset()
 
+    def clone(self) -> ExposureController:
+        """An independent copy with the same state (for test runs that must
+        not disturb the production regulator)."""
+        other = ExposureController()
+        with self._lock:
+            state = {k: v for k, v in self.__dict__.items() if k != "_lock"}
+        other.__dict__.update(state)
+        return other
+
     def reset(self) -> None:
         """Forget all loop state; the next `step` starts from whatever the
         measured frame was actually taken with."""

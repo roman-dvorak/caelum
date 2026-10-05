@@ -34,6 +34,13 @@ class Settings:
     #: static caelum-viewer on GitHub Pages reading frames straight off the
     #: camera. Comma-separated in CAELUM_CORS_ORIGINS.
     cors_origins: tuple[str, ...] = ()
+    #: User capture programs (CAELUM_CAPTURE_PROGRAMS_DIR); None means
+    #: `<data_dir>/capture-programs`.
+    capture_programs_dir_override: Path | None = None
+
+    @property
+    def capture_programs_dir(self) -> Path:
+        return self.capture_programs_dir_override or self.data_dir / "capture-programs"
 
     @property
     def config_file(self) -> Path:
@@ -56,6 +63,9 @@ def load_settings() -> Settings:
         # auto-detect on real hardware. Unset by default.
         camera_backend_override=os.environ.get("CAELUM_CAMERA_BACKEND"),
         log_level=os.environ.get("CAELUM_LOG_LEVEL", "INFO"),
+        capture_programs_dir_override=(
+            _env_path("CAELUM_CAPTURE_PROGRAMS_DIR", "") if os.environ.get("CAELUM_CAPTURE_PROGRAMS_DIR") else None
+        ),
         cors_origins=tuple(
             o.strip().rstrip("/")
             for o in os.environ.get("CAELUM_CORS_ORIGINS", "https://roman-dvorak.github.io").split(",")

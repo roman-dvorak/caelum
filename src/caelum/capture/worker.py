@@ -24,10 +24,18 @@ from collections.abc import Callable
 
 from caelum import __version__
 from caelum.cameras.base import CameraBackend, CameraStalled, CaptureRequest, RawFrame
-from caelum.capture_runtime import CaptureContext, CaptureProgramError, CaptureSet, LoadedProgram, builtin_program
+from caelum.capture_runtime import (
+    CaptureContext,
+    CaptureProgramError,
+    CaptureSet,
+    LoadedProgram,
+    builtin_program,
+    testrun,
+)
 from caelum.capture_runtime.context import Overrides
 from caelum.capture_runtime.errors import ProgramStopped
 from caelum.capture_runtime.runner import DEFAULT_MAX_CAPTURES, run_once, timeout_for
+from caelum.capture_runtime.store import ProgramStore
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import AppConfig, CameraConfig
 from caelum.control.exposure import (
@@ -151,6 +159,7 @@ class CaptureWorker(threading.Thread):
         manual_exposure: ManualExposureOverride | None = None,
         white_balance_override: WhiteBalanceOverride | None = None,
         program_provider: Callable[[AppConfig], LoadedProgram] | None = None,
+        program_store: ProgramStore | None = None,
     ) -> None:
         super().__init__(name="CaptureWorker", daemon=True)
         self._camera_factory = camera_factory
@@ -180,13 +189,23 @@ class CaptureWorker(threading.Thread):
         self._start_latency_s = _INITIAL_START_LATENCY_S
 
         # The capture program (see caelum.capture_runtime) and its state.
-        self._program_provider = program_provider or _builtin_default_provider
+        self._program_store = program_store
+        if program_provider is None:
+            program_provider = program_store.active if program_store is not None else _builtin_default_provider
+        self._program_provider = program_provider
         self._program: LoadedProgram | None = None
         self._program_state: dict = {}
         self._program_runs = 0
         self._program_failures = 0
         self._program_last_error: str | None = None
-        self._fallback_active = False
+        #: (name, sha256) of the program replaced by default.py after
+        #: failing — until a different program is activated.
+        self._fallback_for: tuple[str, str] | None = None
+        #: The configured program couldn't even be loaded.
+        self._load_failed = False
+        self._test_lock = threading.Lock()
+        self._pending_test: testrun.TestRequest | None = None
+        self._running_test: str | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         # Per run: the interval of the grid and the slot the run is aimed at.
         self._run_interval_s = 0.0
@@ -207,7 +226,25 @@ class CaptureWorker(threading.Thread):
             "consecutive_failures": self._program_failures,
             "last_error": self._program_last_error,
             "fallback_active": self._fallback_active,
+            "fallback_for": list(self._fallback_for) if self._fallback_for else None,
+            "pending_test": self._pending_test.run_id if self._pending_test else None,
+            "running_test": self._running_test,
         }
+
+    @property
+    def _fallback_active(self) -> bool:
+        return self._fallback_for is not None or self._load_failed
+
+    @property
+    def camera_capabilities(self):
+        return self._camera.capabilities if self._camera is not None else None
+
+    def request_program_test(self, request: testrun.TestRequest) -> None:
+        """Queue a test run (one at a time); it starts after the next slot."""
+        with self._test_lock:
+            if self._pending_test is not None or self._running_test is not None:
+                raise RuntimeError("a test run is already queued or running")
+            self._pending_test = request
 
     @property
     def exposure_diagnostics(self) -> ExposureDiagnostics | None:
@@ -237,12 +274,21 @@ class CaptureWorker(threading.Thread):
 
     def run(self) -> None:
         self._loop = asyncio.new_event_loop()
+        if self._program_store is not None:
+            crashed = self._program_store.take_crash_marker()
+            if crashed is not None:
+                self._fallback_for = crashed
+                self._program_last_error = (
+                    f"{crashed[0]} ({crashed[1][:12]}) hung and the process was restarted — running default.py"
+                )
+                logger.error("Capture program %s", self._program_last_error)
         failures = 0
         stalls = 0
         try:
             while not self._stop_event.is_set():
                 try:
                     self._run_cycle()
+                    self._run_pending_test()
                     if failures:
                         logger.info("Capture recovered after %d failed cycle(s)", failures)
                     failures = 0
@@ -422,7 +468,25 @@ class CaptureWorker(threading.Thread):
         return raw, sky_state
 
     def _current_program(self, cfg: AppConfig) -> LoadedProgram:
-        program = _builtin_default_provider(cfg) if self._fallback_active else self._program_provider(cfg)
+        try:
+            wanted = self._program_provider(cfg)
+        except Exception as exc:  # noqa: BLE001 - a missing/broken program must never stop capture
+            message = f"cannot load {cfg.capture.active_program}: {exc}"
+            if message != self._program_last_error:
+                logger.error("Capture program %s — running default.py", message)
+            self._program_last_error = message
+            self._load_failed = True
+            wanted = None
+        else:
+            self._load_failed = False
+            if self._fallback_for is not None and (wanted.name, wanted.sha256) != self._fallback_for:
+                # Another program (or version) was activated since: give it a go.
+                self._fallback_for = None
+                self._program_failures = 0
+        if wanted is None or self._fallback_for is not None:
+            program = _builtin_default_provider(cfg)
+        else:
+            program = wanted
         if self._program is None or program.sha256 != self._program.sha256 or program.name != self._program.name:
             logger.info("Capture program: %s (%s, sha256 %s)", program.name, program.origin, program.sha256[:12])
             self._program_state = {}
@@ -435,10 +499,51 @@ class CaptureWorker(threading.Thread):
         self._program_last_error = str(exc)
         logger.error("Capture program %s failed: %s", program.name, exc, exc_info=exc.__cause__ or exc)
         limit = cfg.capture.max_consecutive_failures
-        if not self._fallback_active and program.origin != "builtin" and self._program_failures >= limit:
+        if self._fallback_for is None and program.origin != "builtin" and self._program_failures >= limit:
             logger.error("Capture program %s failed %d times in a row — falling back to default.py", program.name,
                          self._program_failures)
-            self._fallback_active = True
+            self._fallback_for = (program.name, program.sha256)
+
+    def _program_hung(self, program: LoadedProgram) -> None:
+        logger.critical("Capture program %s is stuck (not yielding) — restarting the process", program.name)
+        if self._program_store is not None and program.origin != "builtin":
+            self._program_store.mark_crashed(program)
+        self._capture_hung()
+
+    def _run_pending_test(self) -> None:
+        with self._test_lock:
+            request, self._pending_test = self._pending_test, None
+            if request is None or self._stop_event.is_set():
+                return
+            self._running_test = request.run_id
+        try:
+            cfg = self._config_manager.current
+            camera = self._ensure_camera(cfg.camera)
+            sky_state = self._refresh_sky_state()
+            hard_limit = threading.Timer(
+                timeout_for(request.program, self._run_interval_s, 0.0) + 600.0, self._program_hung,
+                args=(request.program,),
+            )
+            hard_limit.daemon = True
+            hard_limit.start()
+            try:
+                testrun.execute(
+                    request,
+                    driver=_UnalignedDriver(self),
+                    config=cfg,
+                    sky=sky_state,
+                    exposure_controller=self._exposure_controller,
+                    commanded=self._commanded,
+                    capabilities=camera.capabilities,
+                    interval_s=self._run_interval_s or self._interval(cfg, sky_state),
+                    loop=self._loop,
+                    thumbnail_max_dim=cfg.storage_policy.thumbnail_max_dim,
+                )
+            finally:
+                hard_limit.cancel()
+        finally:
+            with self._test_lock:
+                self._running_test = None
 
     def _run_cycle(self) -> None:
         cfg = self._config_manager.current
@@ -477,7 +582,7 @@ class CaptureWorker(threading.Thread):
             self._loop = asyncio.new_event_loop()
         # Last resort for a program stuck without ever awaiting (a CPU loop):
         # the per-capture watchdog never arms in that case.
-        hard_limit = threading.Timer(timeout_s + 120.0, self._capture_hung)
+        hard_limit = threading.Timer(timeout_s + 120.0, self._program_hung, args=(program,))
         hard_limit.daemon = True
         hard_limit.start()
         try:
@@ -584,6 +689,19 @@ def _member_summary(frame, position: int, is_primary: bool, set_time) -> dict:
         "analogue_gain": frame.raw.analogue_gain,
         "brightness_median": frame.brightness.median,
     }
+
+
+class _UnalignedDriver:
+    """A test run captures straight away — never waits for a grid slot."""
+
+    def __init__(self, worker: CaptureWorker) -> None:
+        self._worker = worker
+
+    def capture_for_program(self, req: CaptureRequest, align_to_slot: bool) -> tuple[RawFrame, SkyState]:
+        return self._worker.capture_for_program(req, align_to_slot=False)
+
+    def stop_requested(self) -> bool:
+        return self._worker.stop_requested()
 
 
 _BUILTIN_DEFAULT: LoadedProgram | None = None

@@ -63,6 +63,9 @@ class StatusResponse(BaseModel):
     #: Current spacing between captures — `capture_interval_s`, or a whole
     #: multiple of it while the exposure doesn't fit in one interval.
     frame_period_s: float | None = None
+    #: The capture program running (see /api/capture-programs): name,
+    #: sha256, origin, failures, whether default.py stands in for it.
+    capture_program: dict[str, Any] | None = None
     #: IANA name from `location.timezone` (e.g. "Europe/Prague") — every
     #: timestamp elsewhere in the API is UTC; this is what the frontend
     #: converts to and labels, so "what timezone am I looking at" is never

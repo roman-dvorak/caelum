@@ -42,6 +42,20 @@ class CameraCapabilities:
             "colour_gains": self.colour_gains,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> CameraCapabilities:
+        def pair(value, cast):
+            return (cast(value[0]), cast(value[1])) if value else None
+
+        return cls(
+            max_resolution=tuple(data.get("max_resolution") or (0, 0)),
+            model=str(data.get("model") or ""),
+            exposure_us=pair(data.get("exposure_us"), int),
+            analogue_gain=pair(data.get("analogue_gain"), float),
+            raw=bool(data.get("raw")),
+            colour_gains=bool(data.get("colour_gains")),
+        )
+
 
 @dataclass(frozen=True)
 class CaptureRequest:
