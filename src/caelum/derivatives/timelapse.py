@@ -63,7 +63,9 @@ def _dates_spanned(start_at: datetime, end_at: datetime) -> list[str]:
 
 def _resolve_frame_paths(data_dir: Path, start_at: datetime, end_at: datetime) -> list[Path]:
     """One entry per captured timestamp in `[start_at, end_at)`, raw
-    preferred over thumbnail when both exist for the same timestamp."""
+    preferred over thumbnail when both exist for the same timestamp — but
+    only legacy FITS raws: a DNG holds undebayered sensor data cv2 can't
+    decode, so for those the (ISP-processed) thumbnail is used."""
     results: dict[str, Path] = {}
     for day in _dates_spanned(start_at, end_at):
         for subdir in ("thumbnails", "raw"):
@@ -72,6 +74,8 @@ def _resolve_frame_paths(data_dir: Path, start_at: datetime, end_at: datetime) -
                 continue
             for child in directory.iterdir():
                 if not child.is_file() or child.suffix == ".json":
+                    continue
+                if subdir == "raw" and child.suffix.lower() == ".dng":
                     continue
                 when = paths.capture_time_of(child)
                 if when is None or not (start_at <= when < end_at):

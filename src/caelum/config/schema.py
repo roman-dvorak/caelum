@@ -201,12 +201,33 @@ class AuthConfig(StrictModel):
     preview_access: Literal["public", "viewer", "admin"] = "viewer"
     session_ttl_hours: int = 720
     # The web terminal is a real shell running as the caelum process user.
+    #: Live stream (`/api/frame/latest.jpg`, `/ws/stream`) only — the stored
+    #: thumbnail is WebP, see `webp_quality`.
     # Left on for the usual single-operator LAN deployment, but this is the
+    webp_quality: int = Field(default=80, ge=1, le=100)
+    #: Store raw DNGs with lossless JPEG compression (bit-identical data,
+    #: ~30 % smaller). Off = uncompressed, slightly less CPU.
+    dng_compress: bool = True
     # one switch to flip on anything reachable from an untrusted network.
     terminal_enabled: bool = True
 
 
 class DocsConfig(StrictModel):
+class ProcessingConfig(StrictModel):
+    """Where per-frame processing (calibration, stats, thumbnail encoding,
+    DNG/WebP writing) runs. "process" is a separate OS process fed through
+    shared memory, so it runs in parallel with capture; "inline" runs it on
+    the capture thread (tests, debugging). Read at startup only."""
+
+    mode: Literal["process", "inline"] = "process"
+    #: Shared-memory frame slots — how many captures may be waiting for or
+    #: in processing at once before new ones are dropped (never blocked).
+    slots: int = Field(default=3, ge=1, le=8)
+    #: A frame still unfinished after this long counts as a hung worker,
+    #: which is then killed and restarted.
+    job_timeout_s: float = Field(default=120.0, gt=0.0)
+
+
     """Where the public documentation site is published.
 
     The web UI deep-links into it (`DocsLink`), so it has to be configurable
@@ -286,3 +307,4 @@ class AppConfig(StrictModel):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     docs: DocsConfig = Field(default_factory=DocsConfig)
     plugins: dict[str, PluginConfig] = Field(default_factory=_default_plugins)
+    processing: ProcessingConfig = Field(default_factory=ProcessingConfig)

@@ -15,10 +15,13 @@ from typing import Literal
 import cv2
 import numpy as np
 
-MediaKind = Literal["image", "fits", "json", "text", "other"]
+from . import paths
+
+MediaKind = Literal["image", "fits", "raw", "json", "text", "other"]
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 _FITS_SUFFIXES = {".fits", ".fit", ".fts"}
+_RAW_SUFFIXES = {".dng"}
 _TEXT_SUFFIXES = {".txt", ".log", ".md", ".csv", ".yaml", ".yml", ".ini", ".conf"}
 
 
@@ -51,6 +54,8 @@ def classify(path: Path) -> MediaKind:
         return "image"
     if suffix in _FITS_SUFFIXES:
         return "fits"
+    if suffix in _RAW_SUFFIXES:
+        return "raw"
     if suffix == ".json":
         return "json"
     if suffix in _TEXT_SUFFIXES:
@@ -147,8 +152,8 @@ def fits_to_bgr(path: Path) -> np.ndarray:
 
     data = np.asarray(data, dtype=np.float32)
     if data.ndim == 3:
-        # raw_writer stores colour as (channels, height, width) — see that
-        # module. Move it back to the (height, width, channels) OpenCV wants.
+        # Legacy raw captures stored colour as (channels, height, width).
+        # Move it back to the (height, width, channels) OpenCV wants.
         if data.shape[0] in (3, 4):
             data = np.moveaxis(data, 0, -1)
         data = data[..., :3]
@@ -167,13 +172,35 @@ _autostretch = autostretch
 _fits_to_bgr = fits_to_bgr
 
 
+def _sibling_thumbnail(path: Path) -> Path | None:
+    """The stored thumbnail of the same capture as a managed raw file
+    (`<root>/raw/YYYY/MM/DD/<stem>.dng` -> `<root>/thumbnails/.../<stem>.webp`)."""
+    captured = paths.capture_time_of(path)
+    if captured is None or len(path.parents) < 5:
+        return None
+    root = path.parents[4]
+    directory = paths.date_dir(root, "thumbnails", captured)
+    for suffix in paths.THUMBNAIL_SUFFIXES:
+        candidate = directory / f"{path.stem}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def render_preview(path: Path, max_dim: int = 1024) -> bytes:
     """Render any supported image file as a downscaled PNG.
 
-    The point is the FITS case — browsers cannot display those at all, so a
-    raw frame would otherwise be a download-only blob in the file browser.
+    The point is the raw cases — browsers cannot display FITS or DNG at
+    all, so a raw frame would otherwise be a download-only blob in the file
+    browser. A DNG is previewed via its capture's stored thumbnail (same
+    exposure, already debayered by the ISP) rather than debayered here.
     """
     media = classify(path)
+    if media == "raw":
+        thumbnail = _sibling_thumbnail(path)
+        if thumbnail is None:
+            raise ValueError(f"No preview available for {path.name}")
+        path, media = thumbnail, "image"
     if media == "fits":
         image = fits_to_bgr(path)
     elif media == "image":

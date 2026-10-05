@@ -268,3 +268,67 @@ async def test_observation_night_spans_utc_midnight(tmp_path, redis_url):
             assert not early_morning.joinpath("20261221-030000.jpg").exists()
     finally:
         await harness.config_manager.stop()
+
+
+async def test_webp_thumbnails_and_dng_raws_are_recognised(tmp_path, redis_url):
+    """New captures are .webp + .dng; older .jpg/.fits ones keep working
+    side by side (see test_frames_manager_groups_and_deletes_captures)."""
+    import cv2
+
+    harness = await _build_harness(tmp_path, redis_url, "filestest6")
+    day = "2026/10/03"
+    thumbnails = harness.data_dir / "thumbnails" / day
+    raws = harness.data_dir / "raw" / day
+    thumbnails.mkdir(parents=True)
+    raws.mkdir(parents=True)
+    ok, webp = cv2.imencode(".webp", np.full((48, 64, 3), 128, dtype=np.uint8))
+    assert ok
+    (thumbnails / "20261003-010203.webp").write_bytes(webp.tobytes())
+    (thumbnails / "20261003-010203.json").write_text('{"exposure_us": 1000}')
+    (raws / "20261003-010203.dng").write_bytes(b"II*\x00" + b"0" * 64)
+    try:
+        async with harness.client() as client:
+            await login(client)
+
+            dates = (await client.get("/api/frames/dates")).json()
+            assert (dates[0]["thumbnails"], dates[0]["raws"]) == (1, 1)
+
+            frames = (await client.get("/api/frames", params={"date": "2026-10-03"})).json()["frames"]
+            assert frames[0]["thumbnail"] == "thumbnails/2026/10/03/20261003-010203.webp"
+            assert frames[0]["raw"] == "raw/2026/10/03/20261003-010203.dng"
+
+            listing = (await client.get("/api/files", params={"path": "raw/2026/10/03"})).json()
+            assert listing["entries"][0]["media"] == "raw"
+
+            # A DNG previews as its capture's stored thumbnail.
+            preview = await client.get(
+                "/api/files/preview", params={"path": "raw/2026/10/03/20261003-010203.dng", "max_dim": 64}
+            )
+            assert preview.status_code == 200
+            assert preview.headers["content-type"] == "image/png"
+
+            content = await client.get("/api/files/content", params={"path": "raw/2026/10/03/20261003-010203.dng"})
+            assert content.headers["content-type"] == "image/x-adobe-dng"
+    finally:
+        await harness.config_manager.stop()
+
+
+async def test_live_frame_raw_download(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "filestest7")
+    raws = harness.data_dir / "raw" / "2026" / "10" / "03"
+    raws.mkdir(parents=True)
+    (raws / "20261003-010203.dng").write_bytes(b"II*\x00dng")
+    try:
+        async with harness.client() as client:
+            await login(client, "viewer1", VIEWER_PASSWORD)
+
+            found = await client.get("/api/frame/raw", params={"captured_at": "2026-10-03T01:02:03.456789+00:00"})
+            assert found.status_code == 200
+            assert found.content == b"II*\x00dng"
+            assert found.headers["content-type"] == "image/x-adobe-dng"
+            assert "20261003-010203.dng" in found.headers["content-disposition"]
+
+            missing = await client.get("/api/frame/raw", params={"captured_at": "2026-10-03T01:05:00+00:00"})
+            assert missing.status_code == 404
+    finally:
+        await harness.config_manager.stop()

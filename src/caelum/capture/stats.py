@@ -21,6 +21,9 @@ class FrameStats:
     p99: float
     saturated_fraction: float
     focus_score: float
+    #: Median of the exposure loop's central brightness circle (see
+    #: `capture/brightness.py`) — what the controller actually regulates on.
+    median: float = 0.0
 
 
 def _downscale_grayscale(image: np.ndarray, max_dim: int = _STATS_MAX_DIM) -> np.ndarray:

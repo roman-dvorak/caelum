@@ -133,11 +133,11 @@ def list_dates(
     summaries = []
     for iso_date in dates:
         thumbnails, thumb_bytes = _count_and_size(
-            paths.date_dir_for_iso(data_dir, "thumbnails", iso_date), (".jpg", ".jpeg")
+            paths.date_dir_for_iso(data_dir, "thumbnails", iso_date), paths.THUMBNAIL_SUFFIXES
         )
-        raws, raw_bytes = _count_and_size(paths.date_dir_for_iso(data_dir, "raw", iso_date), (".fits",))
+        raws, raw_bytes = _count_and_size(paths.date_dir_for_iso(data_dir, "raw", iso_date), paths.RAW_SUFFIXES)
         derivatives, derivative_bytes = _count_and_size(
-            paths.date_dir_for_iso(data_dir, "derivatives", iso_date), (".png", ".jpg", ".jpeg")
+            paths.date_dir_for_iso(data_dir, "derivatives", iso_date), (".png", ".jpg", ".jpeg", ".webp")
         )
         summaries.append(
             FrameDateSummary(
@@ -174,8 +174,8 @@ def list_nights(
     buckets: dict[str, dict[str, int]] = {}
 
     for subdir, suffixes, key in (
-        ("thumbnails", (".jpg", ".jpeg"), "thumbnails"),
-        ("raw", (".fits",), "raws"),
+        ("thumbnails", paths.THUMBNAIL_SUFFIXES, "thumbnails"),
+        ("raw", paths.RAW_SUFFIXES, "raws"),
         ("derivatives", None, "derivatives"),  # every file in here counts
     ):
         for iso_date in utc_dates:
@@ -300,7 +300,7 @@ def _gather_frames(data_dir: Path, utc_dates: list[str], window: tuple[datetime,
         raw_dir = paths.date_dir_for_iso(data_dir, "raw", iso_date)
         if raw_dir.is_dir():
             for child in raw_dir.iterdir():
-                if not (child.is_file() and child.suffix.lower() == ".fits"):
+                if not (child.is_file() and child.suffix.lower() in paths.RAW_SUFFIXES):
                     continue
                 captured = paths.capture_time_of(child)
                 if captured is None or (window and not (window[0] <= captured < window[1])):

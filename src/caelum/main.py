@@ -1,11 +1,13 @@
-"""Headless entrypoint: wires config, camera, capture loop, derivatives,
-storage, and the FastAPI app together, then serves until interrupted.
+"""Headless entrypoint: wires config, camera, capture loop, the frame
+processing worker, derivatives, storage, and the FastAPI app together, then
+serves until interrupted.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 from pathlib import Path
 
 import uvicorn
@@ -32,9 +34,11 @@ from caelum.events import EventBus
 from caelum.logging_conf import configure_logging
 from caelum.plugins.loader import PluginLoader
 from caelum.scheduling.interval_scheduler import IntervalScheduler
+from caelum.processing.client import ProcessingClient
+from caelum.processing.inline import InlineFrameSink
+from caelum.processing.jobs import FrameSink
 from caelum.settings import Settings, load_settings
 from caelum.storage.retention import RetentionSweeper
-from caelum.storage.writer import StorageWriter
 from caelum.upload.uploader import UploadWorker
 
 logger = logging.getLogger(__name__)
@@ -81,7 +85,23 @@ async def _async_main(settings: Settings) -> None:
         backend or device from the web UI takes effect without a restart."""
         return create_camera_backend(resolve_camera_config(camera_cfg))
 
-    dark_library = DarkLibrary(darks_dir=settings.data_dir / "darks")
+    darks_dir = settings.data_dir / "darks"
+    frame_sink: FrameSink
+    if cfg.processing.mode == "inline":
+        frame_sink = InlineFrameSink(
+            frame_store, event_bus, settings.data_dir, DarkLibrary(darks_dir=darks_dir)
+        )
+    else:
+        # Calibration, encoding and all disk writes for captured frames run
+        # in this separate process — see caelum.processing.
+        frame_sink = ProcessingClient(
+            frame_store,
+            event_bus,
+            settings.data_dir,
+            darks_dir=darks_dir,
+            slots=cfg.processing.slots,
+            job_timeout_s=cfg.processing.job_timeout_s,
+        )
 
     capture_worker = CaptureWorker(
         camera_factory=camera_factory,
@@ -90,12 +110,9 @@ async def _async_main(settings: Settings) -> None:
         skystate_calculator=skystate_calculator,
         exposure_controller=ExposureController(),
         storage_policy=StoragePolicy(),
-        dark_library=dark_library,
-        frame_store=frame_store,
-        event_bus=event_bus,
+        frame_sink=frame_sink,
     )
 
-    storage_writer = StorageWriter(event_bus, settings.data_dir)
     upload_worker = UploadWorker(config_manager, event_bus, settings.data_dir)
     retention_sweeper = RetentionSweeper(
         config_manager, settings.data_dir, get_uploaded_before=upload_worker.uploaded_before
@@ -132,13 +149,16 @@ async def _async_main(settings: Settings) -> None:
     app.state.capture_worker = capture_worker
     app.state.skystate_calculator = skystate_calculator
     app.state.plugin_loader = plugin_loader
+    app.state.frame_sink = frame_sink
 
+    frame_sink.start()
     capture_worker.start()
     interval_scheduler.start()
     upload_worker.start()
     logger.info(
-        "caelum starting: camera=%s http=%s:%d local-web=%s auth=%s",
+        "caelum starting: camera=%s processing=%s http=%s:%d local-web=%s auth=%s",
         settings.camera_backend_override or cfg.camera.backend,
+        cfg.processing.mode,
         settings.http_host,
         settings.http_port,
         "bundled" if _LOCAL_WEB_DIST.exists() else "not built",
@@ -160,12 +180,24 @@ async def _async_main(settings: Settings) -> None:
         capture_worker.join(timeout=5)
         interval_scheduler.join(timeout=5)
         upload_worker.join(timeout=5)
-        storage_writer.shutdown()
+        # After capture (nothing new arrives) and before derivatives (the
+        # last frames it publishes still get handed to them).
+        frame_sink.stop()
         derivative_pool.shutdown()
         await config_manager.stop()
 
 
+def _exit_on_sigterm(_signum: int, _frame: object) -> None:
+    raise SystemExit(0)
+
+
 def run() -> None:
+    # uvicorn handles SIGTERM itself, shuts the server down gracefully, then
+    # restores the previous handler and re-raises the signal. With the
+    # default handler that kills the process on the spot — before the
+    # `finally` in `_async_main` can stop capture, the processing worker and
+    # the rest. Turning SIGTERM into SystemExit lets that cleanup run.
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     asyncio.run(_async_main(load_settings()))
 
 

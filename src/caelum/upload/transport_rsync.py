@@ -48,10 +48,16 @@ def _run(cmd: list[str], warn_on_failure: bool = True) -> bool:
 
 def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str) -> bool:
     """Push an entire directory's contents, recursively. One-way archival:
-    never deletes anything remotely, even if it's gone locally."""
+    never deletes anything remotely, even if it's gone locally. Skips the
+    hidden `.<name>.tmp` files atomic writers (e.g. the DNG writer) rename
+    into place — they'd otherwise be uploaded half-written and then linger
+    remotely forever."""
     if not local_dir.exists():
         return True  # nothing to push yet is not a failure
-    cmd = ["rsync", "-az", "--mkpath", *_ssh_option(cfg), f"{local_dir}/", _target(cfg, remote_relative_path)]
+    cmd = [
+        "rsync", "-az", "--mkpath", "--exclude=.*.tmp", *_ssh_option(cfg),
+        f"{local_dir}/", _target(cfg, remote_relative_path),
+    ]
     return _run(cmd)
 
 

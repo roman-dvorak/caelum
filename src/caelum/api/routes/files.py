@@ -25,13 +25,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_PREVIEWABLE = {"image", "fits"}
+_PREVIEWABLE = {"image", "fits", "raw"}
 _INLINE_MEDIA_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".webp": "image/webp",
     ".gif": "image/gif",
+    ".dng": "image/x-adobe-dng",
     ".json": "application/json",
     ".txt": "text/plain; charset=utf-8",
     ".log": "text/plain; charset=utf-8",

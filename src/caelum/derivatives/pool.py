@@ -15,6 +15,7 @@ that specific piece to `process_pool` to use a second/third CPU core —
 from __future__ import annotations
 
 import logging
+import multiprocessing
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import replace
@@ -89,7 +90,14 @@ class DerivativePool:
         self._data_dir = data_dir
         self._config_manager = config_manager
         self._thread_pool = ThreadPoolExecutor(max_workers=max_thread_workers, thread_name_prefix="derivative")
-        self.process_pool = ProcessPoolExecutor(max_workers=max_process_workers)
+        # "spawn", not the default fork: forked workers would inherit the
+        # main process's threads (libcamera, asyncio, redis) mid-state and,
+        # forked while uvicorn is serving, its SIGTERM handler — which only
+        # sets a flag, so they ignored `systemctl stop` until the 90 s
+        # SIGKILL. Submitted callables must be importable functions either way.
+        self.process_pool = ProcessPoolExecutor(
+            max_workers=max_process_workers, mp_context=multiprocessing.get_context("spawn")
+        )
         self._workers: list[DerivativeWorker] = []
         event_bus.subscribe(FRAME_CAPTURED, self._on_frame_captured)
 
