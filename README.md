@@ -84,6 +84,100 @@ truth) and Redis (fast runtime reads + pub/sub change notifications) — see
 `src/caelum/config/manager.py`. Copy `.env.example` to `.env` to override
 bootstrap paths/ports.
 
+## Exposure control
+
+The exposure loop runs on the capture thread, once per frame, entirely in EV
+— config, diagnostics and the dashboard alike:
+
+- exposure*gain: `log2(seconds) + log2(gain)` (+1 EV = twice the light);
+- image brightness: `log2(median / 255)`, i.e. EV below full scale
+  (0 EV = 255 ADU, −1 EV ≈ 128 ADU, −0.77 EV ≈ 150 ADU).
+
+**Measurement** — the median of a circle centred on the frame,
+`exposure_policy.brightness_roi_diameter_frac` (default 0.8) of the shorter
+side across. The preset's `target_ev` is the setpoint on the same scale.
+
+**Each frame says what it needed.** Every frame carries the exposure/gain it
+was really taken with, so `required = applied + (target − brightness) /
+response_gamma` (`response_gamma` ≈ how many EV the image moves per EV of
+exposure, default 0.7). A saturated median corrects by at least
+`saturated_step_ev` down.
+
+**Regulator** — PI, velocity form: `P = kp·Δrequired` (reacts to the scene
+changing), `I = ki·(required − last output)` (closes the remaining
+distance), `kd` exists but is 0. Within `deadband_ev` nothing moves; pinned
+at a preset limit with the error pushing further out, nothing integrates.
+
+**Split** — applied to the current exposure/gain by direction: more light =
+exposure up first, then gain; less light = gain down first, exposure only
+once gain is at its minimum. Preset bounds are soft across sky-period
+switches: a value outside the new preset's range only moves toward it, in
+that order (so at dawn the night's long exposure stays until gain is down).
+
+**Captures on demand** — the camera is stopped between captures; each one
+starts it with that capture's exposure/gain, takes the first frame and stops
+it (~0.2 s overhead). libcamera sets the start controls before the first
+frame, so every frame has exactly the requested settings — a continuously
+running camera applies changes only 6–7 frames later, i.e. minutes with long
+frames.
+
+**Timing** — captures sit on a wall-clock grid `capture_interval_s` apart
+(e.g. every minute on the minute), with the *middle of the exposure* on the
+slot: the start is brought forward by half the exposure plus the measured
+start latency, and `captured_at` is the mid-exposure time. A capture that
+can't make a slot (exposure longer than the interval) skips it; the grid
+never moves.
+
+Older config files (`target_mean_adu`, `deadband_pct`,
+`saturation_threshold`, `max_step_*`) are converted on load.
+`GET /api/status` → `exposure_diagnostics` shows the last cycle; every
+frame's sidecar has it under `exposure_control`, and
+`scripts/plot_exposure.py` charts it over a night.
+
+## Capture pipeline and output
+
+The capture thread only captures, measures brightness, sets the next
+exposure and hands the frame off. Calibration, statistics, encoding and all
+disk writes run in a separate **processing process** (fed through shared
+memory, `/dev/shm/caelum-*`), in parallel with the next exposure; if it falls
+behind, frames are dropped from processing rather than delaying capture.
+`processing.mode: "inline"` runs it on the capture thread instead (debugging).
+`GET /api/status` → `processing` has its counters.
+
+Per capture:
+
+- `thumbnails/YYYY/MM/DD/<YYYYMMDD-HHMMSS>.webp` + `.json` sidecar, always;
+- `raw/YYYY/MM/DD/<YYYYMMDD-HHMMSS>.dng` + `.json` sidecar, during
+  `storage_policy.raw_periods` — the sensor's real 12-bit Bayer data (not
+  the ISP output), with exposure/ISO/time/camera tags and an XMP packet
+  (`caelum:` namespace) carrying sky state, site location, gains and the
+  exposure loop's measurement. Needs PiDNG (`python3-pidng`, seen through the
+  venv's system site-packages).
+
+### White balance on a RAW frame
+
+The DNG's white balance is its `AsShotNeutral` tag — the camera-space RGB
+of a neutral grey, `[1/red_gain, 1, 1/blue_gain]` — the form every raw
+converter reads (the alternative, `AsShotWhiteXY`, is far less supported).
+The camera's `ColourGains` never change the Bayer data, so white balance
+on a DNG is metadata only, and editing it is non-destructive.
+
+The White balance page's **RAW frame** mode loads the newest DNG
+(`GET /api/raw/white-balance`, then `/pixels`: linear camera RGB, one pixel
+per 2×2 CFA cell, downscaled) and renders it in the browser — gains, the
+file's colour matrix, a display-only brightness, sRGB curve. From there:
+
+- **Save to this DNG** (`PUT /api/raw/white-balance`) rewrites those 24
+  bytes in place, atomically; nothing else in the file changes. The gains
+  the frame was captured with stay in the XMP (`caelum:colour_gains`), so
+  "as captured" can always be restored. rsync re-sends the file on the
+  next upload pass.
+- **Use as camera default** is the existing `POST /api/camera/white-balance`:
+  manual gains, AWB off, applied to every frame from then on.
+
+The live stream (`/api/frame/latest.jpg`, `/ws/stream`) stays JPEG. Older
+captures in `.jpg`/`.fits` keep working everywhere alongside the new formats.
+
 ## Accounts and access control
 
 The API and web UI are behind a login. On first start, if there is no account
@@ -152,10 +246,10 @@ preview level and deletes admin-only:
   resolved and confined to the data directory before use, symlinks included.
   `/api/files/preview` renders any image *including FITS* as a downscaled PNG
   with a percentile stretch, which is the only way to look at a raw frame in a
-  browser.
+  browser; a DNG previews as its capture's stored thumbnail.
 - `/api/frames` — the same files seen as a time series instead of a tree. One
   capture is up to three files in three directories (thumbnail, `.json`
-  sidecar, raw FITS); this collapses them into one row per capture, and
+  sidecar, raw DNG — or FITS for older captures); this collapses them into one row per capture, and
   supports deleting a whole date, a selection of captures, or just the raw
   frames of a night (which is where the gigabytes are).
 

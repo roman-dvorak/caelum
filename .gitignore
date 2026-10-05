@@ -30,3 +30,6 @@ htmlcov/
 
 # Local Claude Code session state
 .claude/
+
+# In-progress atomic config writes
+/config/.config-*.json.tmp
