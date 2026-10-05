@@ -8,13 +8,13 @@ import httpx
 from caelum.api.app import create_app
 from caelum.auth import UserStore
 from caelum.cameras.mock_backend import MockCameraBackend
-from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
 from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
+from caelum.processing.inline import InlineFrameSink
 from caelum.events import EventBus
 from caelum.logging_conf import LogBuffer
 from caelum.settings import Settings
@@ -68,9 +68,7 @@ async def _build_harness(tmp_path, redis_url, key_prefix: str) -> _Harness:
         skystate_calculator=SkyStateCalculator(lat=50.0755, lon=14.4378, elevation_m=200.0),
         exposure_controller=ExposureController(),
         storage_policy=StoragePolicy(),
-        dark_library=DarkLibrary(darks_dir=None),
-        frame_store=frame_store,
-        event_bus=event_bus,
+        frame_sink=InlineFrameSink(frame_store, event_bus),
     )
 
     # Real accounts, real password hashing, real cookies — the API is now

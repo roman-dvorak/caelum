@@ -10,15 +10,37 @@ from caelum.config.schema import CameraConfig
 
 
 class ExposureDiagnosticsResponse(BaseModel):
+    """Mirrors `control.exposure.ExposureDiagnostics` — all in EV. Image
+    brightness is relative to full scale (0 EV = 255 ADU); exposure*gain
+    is log2(seconds) + log2(gain)."""
+
     sky_period: str
-    target_mean_adu: float
-    measured_mean: float | None
-    error_adu: float | None
-    raw_correction_factor: float | None
-    correction_factor: float | None
-    within_deadband: bool
-    deadband_pct: float
-    max_step_pct: float
+    target_ev: float
+    deadband_ev: float
+    ev_min: float
+    ev_max: float
+    kp: float
+    ki: float
+    kd: float
+    measured_ev: float | None = None
+    p99_ev: float | None = None
+    error_ev: float | None = None
+    correction_ev: float | None = None
+    applied_ev: float | None = None
+    required_ev: float | None = None
+    remaining_ev: float | None = None
+    p_term_ev: float | None = None
+    i_term_ev: float | None = None
+    d_term_ev: float | None = None
+    output_ev: float | None = None
+    change_ev: float | None = None
+    ev_exposure: float | None = None
+    ev_gain: float | None = None
+    limited: Literal["none", "upper", "lower"] = "none"
+    integrating: bool = False
+    within_deadband: bool = False
+    saturated: bool = False
+    manual: bool = False
 
 
 class StatusResponse(BaseModel):
@@ -35,6 +57,12 @@ class StatusResponse(BaseModel):
     #: None only if sky state can't be computed (should not happen in
     #: practice; the calculator has no failure mode today).
     exposure_diagnostics: ExposureDiagnosticsResponse | None = None
+    #: Counters from the frame-processing sink (worker pid/liveness,
+    #: in-flight/dropped/failed frames, last latency) — None if not wired.
+    processing: dict[str, Any] | None = None
+    #: Current spacing between captures — `capture_interval_s`, or a whole
+    #: multiple of it while the exposure doesn't fit in one interval.
+    frame_period_s: float | None = None
     #: IANA name from `location.timezone` (e.g. "Europe/Prague") — every
     #: timestamp elsewhere in the API is UTC; this is what the frontend
     #: converts to and labels, so "what timezone am I looking at" is never
@@ -104,6 +132,35 @@ class WhiteBalanceAutoCalibrateRequest(BaseModel):
     h: float = Field(gt=0.0, le=1.0)
 
 
+class RawWhiteBalanceInfo(BaseModel):
+    #: Relative to the data directory — pass it back to `/pixels` and `PUT`.
+    path: str
+    captured_at: str | None
+    sensor_width: int
+    sensor_height: int
+    #: Size of the `/pixels` image for the same `max_dim`.
+    width: int
+    height: int
+    #: The file's `AsShotNeutral` — `[1/red_gain, 1, 1/blue_gain]`.
+    as_shot_neutral: list[float] | None
+    red_gain: float
+    blue_gain: float
+    #: The camera's gains when the frame was taken (XMP), i.e. before any edit.
+    captured_red_gain: float | None
+    captured_blue_gain: float | None
+    #: White-balanced camera RGB -> linear sRGB, 3x3 row-major.
+    render_matrix: list[list[float]]
+    camera_wb_auto: bool
+    camera_red_gain: float
+    camera_blue_gain: float
+
+
+class RawWhiteBalanceSaveRequest(BaseModel):
+    path: str = Field(min_length=1)
+    red_gain: float = Field(ge=0.1, le=8.0)
+    blue_gain: float = Field(ge=0.1, le=8.0)
+
+
 class PluginUpdateRequest(BaseModel):
     enabled: bool | None = None
     order: int | None = None
@@ -156,7 +213,7 @@ class FileEntry(BaseModel):
     kind: Literal["dir", "file"]
     size: int
     modified_at: str
-    media: Literal["image", "fits", "json", "text", "other"]
+    media: Literal["image", "fits", "raw", "json", "text", "other"]
 
 
 class DirectoryListing(BaseModel):

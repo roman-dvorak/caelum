@@ -53,6 +53,10 @@ class FrameMetadata(BaseModel):
     sky_state: SkyStateModel
     focus_score: float
     overlay_elements: list[OverlayElement] = Field(default_factory=list)
+    #: The exposure regulator's cycle on this frame — its measurement of it
+    #: and what it set for the next one (see `exposure_control_snapshot`).
+    #: None for frames from before this was recorded.
+    exposure_control: dict[str, Any] | None = None
 
 
 def default_overlay_elements(metadata_without_elements: FrameMetadata) -> list[OverlayElement]:

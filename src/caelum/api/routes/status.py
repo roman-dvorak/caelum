@@ -1,25 +1,21 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from caelum.api.deps import get_capture_worker, get_config_manager, get_frame_store, get_skystate_calculator
 from caelum.api.schemas import ExposureDiagnosticsResponse, SkyStateResponse, StatusResponse
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
-from caelum.control.exposure import ExposureController
+from caelum.control.exposure import idle_diagnostics
 from caelum.control.skystate import SkyStateCalculator
 
 router = APIRouter()
 
-# Stateless (no instance fields) — safe to build fresh per request rather
-# than threading the capture loop's own instance through here, and keeps
-# this read-only reporting path fully independent of the capture loop.
-_diagnostics_controller = ExposureController()
-
 
 @router.get("/status", response_model=StatusResponse)
 def get_status(
+    request: Request,
     frame_store: FrameStore = Depends(get_frame_store),
     worker: CaptureWorker = Depends(get_capture_worker),
     config_manager: ConfigManager = Depends(get_config_manager),
@@ -28,9 +24,12 @@ def get_status(
     latest = frame_store.get_latest()
     target = worker.current_target
     sky_state = skystate_calculator.compute()
-    diagnostics = _diagnostics_controller.diagnose(
-        sky_state, latest.stats if latest else None, config_manager.current.exposure_policy
+    # The live regulator's own snapshot of its last cycle — read-only, it
+    # can't influence the loop.
+    diagnostics = worker.exposure_diagnostics or idle_diagnostics(
+        sky_state.period, config_manager.current.exposure_policy
     )
+    frame_sink = getattr(request.app.state, "frame_sink", None)
     return StatusResponse(
         camera_backend=worker.camera_backend_name,
         capturing=worker.is_alive(),
@@ -43,6 +42,8 @@ def get_status(
         last_save_raw=latest.save_raw if latest else None,
         exposure_diagnostics=ExposureDiagnosticsResponse(**diagnostics.__dict__),
         timezone=config_manager.current.location.timezone,
+        processing=frame_sink.stats if frame_sink is not None else None,
+        frame_period_s=worker.frame_period_s,
     )
 
 
