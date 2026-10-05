@@ -134,6 +134,18 @@ Older config files (`target_mean_adu`, `deadband_pct`,
 frame's sidecar has it under `exposure_control`, and
 `scripts/plot_exposure.py` charts it over a night.
 
+## Capture programs
+
+What is captured each slot is a **capture program** — `async def
+capture(ctx)` in a small Python module, run once per slot. The automatic
+exposure above is the built-in `default.py`; `fixed.py`, `hdr.py` and
+`darks.py` come with it, and admins can write, check, test on the camera
+and activate their own under **Manage → Capture programs**. A program can
+take several frames per slot and return them as a capture set, stored as
+one multi-frame DNG. Every frame records which program (and sha256)
+produced it. See [docs/capture-programs.md](docs/capture-programs.md) and
+[docs/dng-capture-sets.md](docs/dng-capture-sets.md).
+
 ## Capture pipeline and output
 
 The capture thread only captures, measures brightness, sets the next
