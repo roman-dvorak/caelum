@@ -28,6 +28,7 @@ from caelum.capture_runtime.program import load_program, source_sha256
 from caelum.capture_runtime.store import MAX_SOURCE_BYTES, ProgramNotFound, ProgramStore, ProgramStoreError
 from caelum.config.manager import ConfigManager
 from caelum.settings import Settings
+from caelum.storage import browse
 
 router = APIRouter()
 audit = logging.getLogger("caelum.audit")
@@ -134,15 +135,26 @@ def get_test_run(run_id: str, settings: Settings = Depends(get_settings)) -> dic
     return testrun.read_report(run_dir)
 
 
-@router.get("/capture-programs/test-runs/{run_id}/{filename}")
-def get_test_frame(run_id: str, filename: str, settings: Settings = Depends(get_settings)) -> FileResponse:
+_TEST_FILE_TYPES = {".webp": "image/webp", ".dng": "image/x-adobe-dng", ".json": "application/json"}
+
+
+@router.get("/capture-programs/test-runs/{run_id}/{path:path}")
+def get_test_file(run_id: str, path: str, settings: Settings = Depends(get_settings)) -> FileResponse:
+    """A file the test run stored (same layout as the data directory:
+    `thumbnails/…`, `raw/…`)."""
     run_dir = testrun.run_dir_for(settings.data_dir, run_id)
-    if run_dir is None or "/" in filename or not filename.startswith("frame_") or not filename.endswith(".webp"):
+    if run_dir is None:
         raise HTTPException(status_code=404, detail="Not found")
-    path = run_dir / filename
-    if not path.is_file():
+    try:
+        target = browse.resolve_within(run_dir, path)
+    except browse.PathOutsideRoot as exc:
+        raise HTTPException(status_code=404, detail="Not found") from exc
+    media_type = _TEST_FILE_TYPES.get(target.suffix.lower())
+    if media_type is None or not target.is_file() or target.name == "report.json":
         raise HTTPException(status_code=404, detail="Not found")
-    return FileResponse(path, media_type="image/webp")
+    if target.suffix.lower() == ".dng":
+        return FileResponse(target, media_type=media_type, filename=f"test-{run_id}-{target.name}")
+    return FileResponse(target, media_type=media_type)
 
 
 @router.get("/capture-programs/{name}")

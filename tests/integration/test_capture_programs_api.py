@@ -104,6 +104,11 @@ async def test_save_check_activate_test_and_delete(tmp_path, redis_url):
             image = await client.get(f"{run_url}/{body['frames'][0]['file']}")
             assert image.status_code == 200 and image.content[:4] == b"RIFF"
             assert (await client.get(f"{run_url}/report.json")).status_code == 404
+            assert body["frames"][1]["file"].startswith("thumbnails/") and body["frames"][1]["representative"]
+            assert any("_set/" in f for f in body["files"])
+            # The mock camera has no raw stream: no DNG.
+            assert body["dng"] is None
+            assert (await client.get(f"{run_url}/../../../etc/passwd")).status_code in (400, 404)
 
             # Activate the checked version; a stale sha is refused.
             assert (await client.post("/api/capture-programs/pair.py/activate",

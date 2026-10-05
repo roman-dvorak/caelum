@@ -14,6 +14,7 @@ how busy the rest of the system is.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import logging
 import math
@@ -510,6 +511,11 @@ class CaptureWorker(threading.Thread):
             self._program_store.mark_crashed(program)
         self._capture_hung()
 
+    def _store_test_set(self, directory, cfg: AppConfig, capture_set: CaptureSet, provenance: dict) -> None:
+        """A test run's result, stored the way production would store it
+        (same processing as the processing worker), into `directory`."""
+        _store_test_set_into(directory, cfg, capture_set, provenance, self._storage_policy)
+
     def _run_pending_test(self) -> None:
         with self._test_lock:
             request, self._pending_test = self._pending_test, None
@@ -537,7 +543,12 @@ class CaptureWorker(threading.Thread):
                     capabilities=camera.capabilities,
                     interval_s=self._run_interval_s or self._interval(cfg, sky_state),
                     loop=self._loop,
-                    thumbnail_max_dim=cfg.storage_policy.thumbnail_max_dim,
+                    store=lambda directory, capture_set: self._store_test_set(
+                        directory, cfg, capture_set, self._provenance(
+                            cfg, request.program,
+                            dict(cfg.capture.params.get(request.program.name.removesuffix(".py"), {})), camera,
+                        )
+                    ),
                 )
             finally:
                 hard_limit.cancel()
@@ -689,6 +700,23 @@ def _member_summary(frame, position: int, is_primary: bool, set_time) -> dict:
         "analogue_gain": frame.raw.analogue_gain,
         "brightness_median": frame.brightness.median,
     }
+
+
+def _store_test_set_into(directory, cfg: AppConfig, capture_set: CaptureSet, provenance: dict,
+                         storage_policy: StoragePolicy) -> None:
+    from caelum.capture.frame_store import FrameStore
+    from caelum.events import EventBus
+    from caelum.processing.inline import InlineFrameSink
+
+    submissions = [
+        dataclasses.replace(s, save_raw=True)
+        for s in build_submissions(cfg, capture_set, provenance, storage_policy)
+    ]
+    sink = InlineFrameSink(FrameStore(), EventBus(), directory)
+    if len(submissions) == 1:
+        sink.submit(submissions[0])
+    else:
+        sink.submit_set(submissions)
 
 
 class _UnalignedDriver:

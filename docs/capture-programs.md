@@ -79,8 +79,12 @@ list, get, `PUT` save, upload, delete, `check`, `{name}/test`,
   it twice against a simulated camera with the real camera's limits — in a
   separate process, never in the server.
 - **Test once** runs the saved program on the real camera right after the next
-  slot, with its own state and a copy of the regulator. Frames go to
-  `<data_dir>/program-tests/<run id>/` — nothing is published or uploaded.
+  slot, with its own state and a copy of the regulator. What it returns is
+  stored **exactly as production stores it** — same processing, same
+  `thumbnails/…` / `raw/…` layout (a set: representative, `<stem>_set/`
+  members, one multi-frame DNG) — under `<data_dir>/program-tests/<run id>/`,
+  next to a `report.json`. Raw frames are kept regardless of the time of day;
+  nothing is published or uploaded.
 - **Activate** checks again, archives, and switches production from the next
   slot.
 - A program that fails `capture.max_consecutive_failures` times in a row (or
