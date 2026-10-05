@@ -33,10 +33,10 @@ from caelum.derivatives.timelapse import TimelapseWorker
 from caelum.events import EventBus
 from caelum.logging_conf import configure_logging
 from caelum.plugins.loader import PluginLoader
-from caelum.scheduling.interval_scheduler import IntervalScheduler
 from caelum.processing.client import ProcessingClient
 from caelum.processing.inline import InlineFrameSink
 from caelum.processing.jobs import FrameSink
+from caelum.scheduling.interval_scheduler import IntervalScheduler
 from caelum.settings import Settings, load_settings
 from caelum.storage.retention import RetentionSweeper
 from caelum.upload.uploader import UploadWorker

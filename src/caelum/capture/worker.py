@@ -13,6 +13,7 @@ how busy the rest of the system is.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
@@ -20,20 +21,22 @@ import threading
 import time
 from collections.abc import Callable
 
-from caelum.cameras.base import CameraBackend, CameraStalled
+from caelum.cameras.base import CameraBackend, CameraStalled, RawFrame
+from caelum.capture_runtime import CaptureContext, CaptureProgramError, LoadedProgram, builtin_program
+from caelum.capture_runtime.context import Overrides
+from caelum.capture_runtime.errors import ProgramStopped
+from caelum.capture_runtime.runner import DEFAULT_MAX_CAPTURES, run_once, timeout_for
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import AppConfig, CameraConfig
 from caelum.control.exposure import (
     ExposureController,
     ExposureDiagnostics,
     ExposureTarget,
-    exposure_control_snapshot,
 )
 from caelum.control.skystate import SkyState, SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
 from caelum.processing.jobs import FrameSink, FrameSubmission, ProcessingSettings
 
-from . import brightness as brightness_module
 from .metadata import SkyStateModel
 
 logger = logging.getLogger(__name__)
@@ -144,6 +147,7 @@ class CaptureWorker(threading.Thread):
         stream_mode: StreamModeController | None = None,
         manual_exposure: ManualExposureOverride | None = None,
         white_balance_override: WhiteBalanceOverride | None = None,
+        program_provider: Callable[[AppConfig], LoadedProgram] | None = None,
     ) -> None:
         super().__init__(name="CaptureWorker", daemon=True)
         self._camera_factory = camera_factory
@@ -163,9 +167,8 @@ class CaptureWorker(threading.Thread):
         self._stop_event = threading.Event()
         self._sky_state: SkyState | None = None
         self._sky_state_computed_at: float = 0.0
-        self._current_target = _INITIAL_EXPOSURE_TARGET
-        self._needs_initial_controls = True
-        self._was_manual = False
+        self._commanded = _INITIAL_EXPOSURE_TARGET
+        self._camera_fresh = True
         self._frame_period_s: float | None = None
         # Capture grid, in wall-clock seconds: the next slot, and the
         # interval the grid was laid out with.
@@ -173,10 +176,35 @@ class CaptureWorker(threading.Thread):
         self._grid_interval_s: float | None = None
         self._start_latency_s = _INITIAL_START_LATENCY_S
 
+        # The capture program (see caelum.capture_runtime) and its state.
+        self._program_provider = program_provider or _builtin_default_provider
+        self._program: LoadedProgram | None = None
+        self._program_state: dict = {}
+        self._program_runs = 0
+        self._program_failures = 0
+        self._program_last_error: str | None = None
+        self._fallback_active = False
+        self._loop: asyncio.AbstractEventLoop | None = None
+        # Per run: the interval of the grid and the slot the run is aimed at.
+        self._run_interval_s = 0.0
+
     @property
     def current_target(self) -> ExposureTarget:
         """What was last commanded for the next frame."""
-        return self._current_target
+        return self._commanded
+
+    @property
+    def program_status(self) -> dict:
+        program = self._program
+        return {
+            "name": program.name if program else None,
+            "sha256": program.sha256 if program else None,
+            "origin": program.origin if program else None,
+            "runs": self._program_runs,
+            "consecutive_failures": self._program_failures,
+            "last_error": self._program_last_error,
+            "fallback_active": self._fallback_active,
+        }
 
     @property
     def exposure_diagnostics(self) -> ExposureDiagnostics | None:
@@ -205,6 +233,7 @@ class CaptureWorker(threading.Thread):
         self._stop_event.set()
 
     def run(self) -> None:
+        self._loop = asyncio.new_event_loop()
         failures = 0
         stalls = 0
         try:
@@ -236,6 +265,7 @@ class CaptureWorker(threading.Thread):
                     self._stop_event.wait(delay)
         finally:
             self._close_camera()
+            self._loop.close()
 
     def _ensure_camera(self, camera_cfg: CameraConfig) -> CameraBackend:
         """Open the camera, reopening it if the configuration changed.
@@ -274,7 +304,7 @@ class CaptureWorker(threading.Thread):
         # A fresh camera knows nothing of our last exposure — set it before
         # the first capture, and restart the regulator from whatever that
         # first frame then actually reports.
-        self._needs_initial_controls = True
+        self._camera_fresh = True
         self._exposure_controller.reset()
         self._next_due = None
         logger.info("Camera opened: %s (%s)", type(camera).__name__, resolved_cfg.sensor_id)
@@ -323,10 +353,6 @@ class CaptureWorker(threading.Thread):
         self._frame_period_s = period
         return period
 
-    def _apply(self, camera: CameraBackend, target: ExposureTarget) -> None:
-        camera.set_controls(target.exposure_us, target.analogue_gain)
-        self._current_target = target
-
     @staticmethod
     def _capture_hung() -> None:
         logger.critical(
@@ -355,6 +381,60 @@ class CaptureWorker(threading.Thread):
         self._stop_event.wait(self._next_due - lead - now)
         return self._next_due
 
+    # ---- capture programs ---------------------------------------------------
+
+    def stop_requested(self) -> bool:
+        return self._stop_event.is_set()
+
+    def capture_for_program(self, target: ExposureTarget, align_to_slot: bool) -> tuple[RawFrame, SkyState]:
+        """`ctx.capture()`'s worker side: set the controls, wait for the slot
+        (first capture of a run only), take the frame under the watchdog."""
+        camera = self._camera
+        assert camera is not None
+        camera.set_controls(target.exposure_us, target.analogue_gain)
+        due = None
+        if align_to_slot:
+            due = self._wait_for_slot(self._run_interval_s, target.exposure_us / 1e6)
+            if self._stop_event.is_set():
+                raise ProgramStopped
+        # Waiting may have taken a whole interval — describe the sky as it
+        # is now, at the capture.
+        sky_state = self._refresh_sky_state()
+        called_ns = time.monotonic_ns()
+        watchdog = threading.Timer(target.exposure_us / 1e6 + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung)
+        watchdog.daemon = True
+        watchdog.start()
+        try:
+            raw = camera.capture_frame()
+        finally:
+            watchdog.cancel()
+        if due is not None:
+            self._next_due = due + self._run_interval_s
+        if raw.exposure_start_monotonic_ns is not None:
+            latency = (raw.exposure_start_monotonic_ns - called_ns) / 1e9
+            if 0.0 <= latency < 2.0:
+                self._start_latency_s = 0.7 * self._start_latency_s + 0.3 * latency
+        return raw, sky_state
+
+    def _current_program(self, cfg: AppConfig) -> LoadedProgram:
+        program = _builtin_default_provider(cfg) if self._fallback_active else self._program_provider(cfg)
+        if self._program is None or program.sha256 != self._program.sha256 or program.name != self._program.name:
+            logger.info("Capture program: %s (%s, sha256 %s)", program.name, program.origin, program.sha256[:12])
+            self._program_state = {}
+            self._program_runs = 0
+        self._program = program
+        return program
+
+    def _program_failed(self, program: LoadedProgram, exc: CaptureProgramError, cfg: AppConfig) -> None:
+        self._program_failures += 1
+        self._program_last_error = str(exc)
+        logger.error("Capture program %s failed: %s", program.name, exc, exc_info=exc.__cause__ or exc)
+        limit = cfg.capture.max_consecutive_failures
+        if not self._fallback_active and program.origin != "builtin" and self._program_failures >= limit:
+            logger.error("Capture program %s failed %d times in a row — falling back to default.py", program.name,
+                         self._program_failures)
+            self._fallback_active = True
+
     def _run_cycle(self) -> None:
         cfg = self._config_manager.current
         camera = self._ensure_camera(cfg.camera)
@@ -365,68 +445,73 @@ class CaptureWorker(threading.Thread):
             camera.set_white_balance(red_gain, blue_gain, auto)
 
         sky_state = self._refresh_sky_state()
-        policy = cfg.exposure_policy
-        manual_target = self.manual_exposure.get()
-
-        if self._needs_initial_controls:
-            if manual_target is not None:
-                start = manual_target
-            elif self._exposure_controller.diagnostics is None:
-                start = self._exposure_controller.initial_target(sky_state.period, policy)
-            else:
-                start = self._current_target
-            self._apply(camera, start)
-            self._exposure_controller.prime(start, sky_state.period)
-            self._needs_initial_controls = False
-
+        program = self._current_program(cfg)
         interval_s = self._interval(cfg, sky_state)
-        due = self._wait_for_slot(interval_s, self._current_target.exposure_us / 1e6)
-        if self._stop_event.is_set():
-            return
-        # Waiting may have taken a whole interval — describe the sky as it
-        # is now, at the capture.
-        sky_state = self._refresh_sky_state()
-        called_ns = time.monotonic_ns()
-        watchdog = threading.Timer(
-            self._current_target.exposure_us / 1e6 + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung
+        self._run_interval_s = interval_s
+        ctx = CaptureContext(
+            driver=self,
+            config=cfg,
+            sky=sky_state,
+            program_name=program.name,
+            state=self._program_state,
+            params=dict(cfg.capture.params.get(program.name.removesuffix(".py"), {})),
+            exposure_controller=self._exposure_controller,
+            commanded=self._commanded,
+            camera_fresh=self._camera_fresh,
+            overrides=Overrides(manual_exposure=self.manual_exposure.get()),
+            stream_mode=self.stream_mode.enabled,
+            interval_s=interval_s,
+            slot=self._program_runs,
+            max_captures=int(program.meta.get("max_captures", DEFAULT_MAX_CAPTURES)),
         )
-        watchdog.daemon = True
-        watchdog.start()
+        self._camera_fresh = False
+        longest = max(p.exposure_us_max for p in cfg.exposure_policy.presets.values()) / 1e6
+        timeout_s = timeout_for(program, interval_s, longest)
+        if self._loop is None:
+            self._loop = asyncio.new_event_loop()
+        # Last resort for a program stuck without ever awaiting (a CPU loop):
+        # the per-capture watchdog never arms in that case.
+        hard_limit = threading.Timer(timeout_s + 120.0, self._capture_hung)
+        hard_limit.daemon = True
+        hard_limit.start()
         try:
-            raw = camera.capture_frame()
-        finally:
-            watchdog.cancel()
-        self._next_due = due + interval_s
-        if raw.exposure_start_monotonic_ns is not None:
-            latency = (raw.exposure_start_monotonic_ns - called_ns) / 1e9
-            if 0.0 <= latency < 2.0:
-                self._start_latency_s = 0.7 * self._start_latency_s + 0.3 * latency
-
-        applied = ExposureTarget(exposure_us=raw.exposure_us, analogue_gain=raw.analogue_gain)
-        sample = brightness_module.measure(raw.image, policy.brightness_roi_diameter_frac)
-
-        # Every frame is taken with exactly the settings requested for it
-        # (see Picamera2Backend), so the next one can be decided right here.
-        if manual_target is not None:
-            next_target = manual_target
-            self._exposure_controller.track(manual_target, sample, applied, sky_state.period, policy)
+            frames = run_once(self._loop, program, ctx, timeout_s)
+        except ProgramStopped:
+            return
+        except CaptureProgramError as exc:
+            self._program_failed(program, exc, cfg)
+            frames = []
         else:
-            if self._was_manual:
-                # Leaving manual: continue from the manual setting.
-                self._exposure_controller.reset()
-            next_target = self._exposure_controller.step(sample, applied, sky_state.period, policy)
-        self._was_manual = manual_target is not None
-        self._apply(camera, next_target)
-        self._frame_period(cfg, sky_state, next_target)
+            self._program_failures = 0
+        finally:
+            hard_limit.cancel()
+            self._program_runs += 1
+            self._commanded = ctx.commanded
+        if ctx.captures == 0:
+            # Nothing captured (or failed before capturing): still use up
+            # the slot, so a broken program can't spin.
+            self._next_due = self._wait_for_slot(interval_s, 0.0) + interval_s
+        self._frame_period(cfg, sky_state, self._commanded)
 
-        decision = self._storage_policy.decide(sky_state, cfg.storage_policy)
-        self._frame_sink.submit(
-            FrameSubmission(
-                raw=raw,
-                sky_state=SkyStateModel.from_skystate(sky_state),
-                save_raw=decision.save_raw,
-                settings=ProcessingSettings.from_config(cfg, sky_state.period),
-                brightness=sample,
-                exposure_control=exposure_control_snapshot(self._exposure_controller.diagnostics),
+        for frame in frames:
+            decision = self._storage_policy.decide(frame.sky, cfg.storage_policy)
+            self._frame_sink.submit(
+                FrameSubmission(
+                    raw=frame.raw,
+                    sky_state=SkyStateModel.from_skystate(frame.sky),
+                    save_raw=decision.save_raw,
+                    settings=ProcessingSettings.from_config(cfg, frame.sky.period),
+                    brightness=frame.brightness,
+                    exposure_control=frame.exposure_control,
+                )
             )
-        )
+
+
+_BUILTIN_DEFAULT: LoadedProgram | None = None
+
+
+def _builtin_default_provider(_cfg: AppConfig) -> LoadedProgram:
+    global _BUILTIN_DEFAULT
+    if _BUILTIN_DEFAULT is None:
+        _BUILTIN_DEFAULT = builtin_program("default.py")
+    return _BUILTIN_DEFAULT

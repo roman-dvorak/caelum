@@ -228,6 +228,16 @@ class ProcessingConfig(StrictModel):
     job_timeout_s: float = Field(default=120.0, gt=0.0)
 
 
+class CaptureProgramConfig(StrictModel):
+    """Which capture program runs (see caelum.capture_runtime)."""
+
+    #: Parameters per program, by name without `.py` — `ctx.params`.
+    params: dict[str, dict] = Field(default_factory=dict)
+    #: After this many failed runs in a row a user program is replaced by the
+    #: built-in default until it is activated again.
+    max_consecutive_failures: int = Field(default=3, ge=1)
+
+
 class RetentionConfig(StrictModel):
     """Local-disk rotation only — the remote upload target is never rotated."""
 
@@ -354,6 +364,7 @@ class AppConfig(StrictModel):
     exposure_policy: ExposurePolicyConfig = Field(default_factory=ExposurePolicyConfig)
     storage_policy: StoragePolicyConfig = Field(default_factory=StoragePolicyConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
+    capture: CaptureProgramConfig = Field(default_factory=CaptureProgramConfig)
     retention: RetentionConfig = Field(default_factory=RetentionConfig)
     upload: UploadConfig = Field(default_factory=UploadConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
