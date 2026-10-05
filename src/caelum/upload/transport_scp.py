@@ -28,6 +28,7 @@ from pathlib import Path, PurePosixPath
 from caelum.config.schema import UploadConfig
 
 from .ssh import destination, ssh_command, ssh_options
+from .stats import TransferStats
 
 logger = logging.getLogger(__name__)
 
@@ -44,47 +45,67 @@ def _remote_path(cfg: UploadConfig, relative_path: str) -> str:
     return str(PurePosixPath(base) / relative_path) if relative_path else base
 
 
-def _ssh(cfg: UploadConfig, command: str, warn_on_failure: bool = True) -> subprocess.CompletedProcess | None:
+def _ssh(cfg: UploadConfig, command: str, stats: TransferStats | None = None) -> subprocess.CompletedProcess | None:
     cmd = [*ssh_command(cfg), destination(cfg), command]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         logger.warning("ssh to %s timed out: %s", cfg.remote_host, command)
+        if stats is not None:
+            stats.error(f"ssh to {cfg.remote_host} timed out")
         return None
     if result.returncode != 0:
-        (logger.warning if warn_on_failure else logger.debug)(
-            "ssh to %s failed (%s): %s", cfg.remote_host, command, result.stderr.strip()
-        )
+        logger.warning("ssh to %s failed (%s): %s", cfg.remote_host, command, result.stderr.strip())
+        if stats is not None:
+            stats.error(f"ssh to {cfg.remote_host} failed (exit {result.returncode}): {result.stderr.strip()}")
         return None
     return result
 
 
-def _scp(cfg: UploadConfig, sources: list[str], target: str, warn_on_failure: bool = True) -> bool:
+def _scp(cfg: UploadConfig, sources: list[str], target: str, warn_on_failure: bool = True,
+         stats: TransferStats | None = None) -> bool:
     limit = ["-l", str(cfg.bandwidth_limit_kbps * 8)] if cfg.bandwidth_limit_kbps else []  # scp: Kbit/s
     cmd = ["scp", "-p", "-q", "-B", *ssh_options(cfg), "-P", str(cfg.ssh_port), *limit, *sources, target]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         logger.warning("scp to %s timed out", target)
+        if stats is not None:
+            stats.error(f"scp to {target} timed out")
         return False
     if result.returncode != 0:
         (logger.warning if warn_on_failure else logger.debug)("scp to %s failed: %s", target, result.stderr.strip())
+        if stats is not None and warn_on_failure:
+            stats.error(f"scp to {target} failed (exit {result.returncode}): {result.stderr.strip()}")
         return False
+    if stats is not None:
+        stats.sent(len(sources), sum(_size(s) for s in sources))
     return True
 
 
-def _configured(cfg: UploadConfig) -> bool:
+def _size(path: str) -> int:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
+def _configured(cfg: UploadConfig, stats: TransferStats | None = None) -> bool:
     if not cfg.remote_host:
         logger.warning("scp upload needs upload.remote_host")
+        if stats is not None:
+            stats.error("scp upload needs upload.remote_host")
         return False
     return True
 
 
-def _list_remote(cfg: UploadConfig, remote_dir: str) -> dict[str, tuple[int, float]] | None:
+def _list_remote(cfg: UploadConfig, remote_dir: str,
+                 stats: TransferStats | None = None) -> dict[str, tuple[int, float]] | None:
     """{relative path: (size, mtime)} of every file under `remote_dir`; an
     empty dict if it doesn't exist yet, None if the listing failed."""
     quoted = shlex.quote(remote_dir)
-    result = _ssh(cfg, f"if [ -d {quoted} ]; then cd {quoted} && find . -type f -printf '%P\\t%s\\t%T@\\n'; fi")
+    result = _ssh(cfg, f"if [ -d {quoted} ]; then cd {quoted} && find . -type f -printf '%P\\t%s\\t%T@\\n'; fi",
+                  stats)
     if result is None:
         return None
     remote = {}
@@ -105,16 +126,17 @@ def _needs_upload(path: Path, remote: tuple[int, float] | None) -> bool:
     return stat.st_size != size or stat.st_mtime > mtime + _MTIME_SLACK_S
 
 
-def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str) -> bool:
+def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str,
+              stats: TransferStats | None = None) -> bool:
     """Push an entire directory's contents, recursively. One-way archival:
     never deletes anything remotely. Skips the hidden `.<name>.tmp` files
     atomic writers rename into place, like the other transports."""
     if not local_dir.exists():
         return True  # nothing to push yet is not a failure
-    if not _configured(cfg):
+    if not _configured(cfg, stats):
         return False
     remote_dir = _remote_path(cfg, remote_relative_path)
-    remote = _list_remote(cfg, remote_dir)
+    remote = _list_remote(cfg, remote_dir, stats)
     if remote is None:
         return False
     if not remote and any(local_dir.iterdir()):
@@ -137,24 +159,26 @@ def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str) -> 
 
     targets = {d: _remote_path(cfg, str(PurePosixPath(remote_relative_path) / d) if d != "." else remote_relative_path)
                for d in by_dir}
-    if _ssh(cfg, "mkdir -p " + " ".join(shlex.quote(t) for t in sorted(set(targets.values())))) is None:
+    if _ssh(cfg, "mkdir -p " + " ".join(shlex.quote(t) for t in sorted(set(targets.values()))), stats) is None:
         return False
     ok = True
     for directory, files in sorted(by_dir.items()):
         existing = [str(p) for p in files if p.exists()]
         for start in range(0, len(existing), _BATCH):
-            ok = _scp(cfg, existing[start:start + _BATCH], f"{destination(cfg)}:{targets[directory]}/") and ok
+            batch = existing[start:start + _BATCH]
+            ok = _scp(cfg, batch, f"{destination(cfg)}:{targets[directory]}/", stats=stats) and ok
     return ok
 
 
-def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str) -> bool:
-    if not local_path.exists() or not _configured(cfg):
+def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str,
+              stats: TransferStats | None = None) -> bool:
+    if not local_path.exists() or not _configured(cfg, stats):
         return False
     target = _remote_path(cfg, remote_relative_path)
     parent = str(PurePosixPath(target).parent)
-    if _ssh(cfg, f"mkdir -p {shlex.quote(parent)}") is None:
+    if _ssh(cfg, f"mkdir -p {shlex.quote(parent)}", stats) is None:
         return False
-    return _scp(cfg, [str(local_path)], f"{destination(cfg)}:{target}")
+    return _scp(cfg, [str(local_path)], f"{destination(cfg)}:{target}", stats=stats)
 
 
 def pull_file(cfg: UploadConfig, remote_relative_path: str, local_path: Path) -> bool:

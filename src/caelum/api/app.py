@@ -21,6 +21,7 @@ from .routes import (
     stream,
     system,
     terminal,
+    upload,
 )
 from .security import require_admin, require_preview
 
@@ -61,6 +62,7 @@ def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = (
     app.include_router(system.router, prefix="/api", dependencies=admin_only)
     app.include_router(raw_white_balance.router, prefix="/api", dependencies=admin_only)
     app.include_router(capture_programs.router, prefix="/api", dependencies=admin_only)
+    app.include_router(upload.router, prefix="/api", dependencies=admin_only)
     # files/frames/overlay declare per-route levels: reads are preview, writes admin.
     app.include_router(files.router, prefix="/api")
     app.include_router(frames.router, prefix="/api")

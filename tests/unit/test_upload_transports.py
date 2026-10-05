@@ -166,3 +166,84 @@ def test_reconcile_uploads_only_published_captures(tmp_path, fake_ssh, transport
     assert not [p for p in uploaded if p.startswith(("capture-programs", "program-tests", "overlay_assets"))]
     assert (remote / "cameras.json").exists()
     assert worker.uploaded_before() is not None and worker.uploaded_before() <= datetime.now(UTC)
+
+
+def _data(tmp_path):
+    data = tmp_path / "data"
+    (data / "thumbnails/2026/10/05").mkdir(parents=True)
+    (data / "thumbnails/2026/10/05/a.webp").write_bytes(b"x" * 1000)
+    return data
+
+
+def test_status_records_a_successful_pass(tmp_path):
+    from caelum.events import EventBus
+
+    cfg = UploadConfig(enabled=True, remote_base_path=str(tmp_path / "remote"))
+    worker = UploadWorker(_Holder(cfg), EventBus(), _data(tmp_path))
+    worker._reconcile(cfg)
+    status = worker.status
+    assert status["enabled"] and status["transport"] == "rsync"
+    assert status["last_reconcile"]["ok"] is True
+    assert status["last_reconcile"]["files"] >= 1 and status["last_reconcile"]["bytes"] >= 1000
+    assert status["last_success_at"] == status["last_reconcile"]["at"]
+    assert status["consecutive_failures"] == 0 and status["last_error"] is None
+    assert status["uploaded_before"] is not None
+
+
+def test_status_records_failures_and_their_message(tmp_path):
+    from caelum.events import EventBus
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    remote.chmod(0o500)  # like the Pi's "Permission denied"
+    try:
+        cfg = UploadConfig(enabled=True, remote_base_path=str(remote / "archive"))
+        worker = UploadWorker(_Holder(cfg), EventBus(), _data(tmp_path))
+        worker._reconcile(cfg)
+        worker._incremental_push(cfg)
+    finally:
+        remote.chmod(0o700)
+    status = worker.status
+    assert status["last_reconcile"]["ok"] is False
+    assert status["consecutive_failures"] == 2
+    assert "Permission denied" in status["last_error"]["message"]
+    assert status["uploaded_before"] is None  # retention must not delete anything
+
+
+@pytest.mark.parametrize(
+    "cfg,problem",
+    [
+        (UploadConfig(transport="rsync", remote_user="u"), "remote_host is empty"),
+        (UploadConfig(transport="scp"), "scp needs a server"),
+        (UploadConfig(transport="s3"), "s3_bucket"),
+        (UploadConfig(transport="rsync", remote_host="h", ssh_key_path="/nonexistent/key"), "not found"),
+        (UploadConfig(transport="rsync"), None),
+    ],
+)
+def test_config_problems_are_spelled_out(cfg, problem):
+    from caelum.upload.uploader import _config_problem
+
+    found = _config_problem(cfg)
+    assert (found is None) if problem is None else (problem in found)
+
+
+def test_sync_request_runs_a_reconcile_promptly(tmp_path):
+    import time
+
+    from caelum.events import EventBus
+
+    cfg = UploadConfig(enabled=True, remote_base_path=str(tmp_path / "remote"), reconcile_interval_s=9999,
+                       thumbnail_interval_s=9999)
+    worker = UploadWorker(_Holder(cfg), EventBus(), _data(tmp_path))
+    worker._last_reconcile_monotonic = time.monotonic()  # as if one just ran
+    worker.start()
+    try:
+        worker.request_sync()
+        deadline = time.monotonic() + 10
+        while worker.status["last_reconcile"] is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert worker.status["last_reconcile"]["ok"] is True
+    finally:
+        worker.request_stop()
+        worker.join(5)
+    assert not worker.is_alive()

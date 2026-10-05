@@ -22,6 +22,8 @@ from typing import Any
 
 from caelum.config.schema import UploadConfig
 
+from .stats import TransferStats
+
 logger = logging.getLogger(__name__)
 
 # Not in Python's default mimetypes table.
@@ -98,8 +100,9 @@ def _needs_upload(path: Path, remote: tuple[int, datetime] | None) -> bool:
     return stat.st_size != size or datetime.fromtimestamp(stat.st_mtime, UTC) > last_modified
 
 
-def _upload(cfg: UploadConfig, path: Path, key: str) -> bool:
+def _upload(cfg: UploadConfig, path: Path, key: str, stats: TransferStats | None = None) -> bool:
     try:
+        size = path.stat().st_size
         _client(cfg).upload_file(str(path), cfg.s3_bucket, key, ExtraArgs=_extra_args(cfg, path))
     except FileNotFoundError:
         return True  # removed locally (e.g. by retention) between listing and upload
@@ -107,11 +110,16 @@ def _upload(cfg: UploadConfig, path: Path, key: str) -> bool:
         if not _is_s3_error(exc):
             raise
         logger.warning("S3 upload of %s to s3://%s/%s failed: %s", path, cfg.s3_bucket, key, exc)
+        if stats is not None:
+            stats.error(f"S3 upload to s3://{cfg.s3_bucket}/{key} failed: {exc}")
         return False
+    if stats is not None:
+        stats.sent(1, size)
     return True
 
 
-def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str) -> bool:
+def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str,
+              stats: TransferStats | None = None) -> bool:
     """Push an entire directory's contents, recursively. One-way archival:
     never deletes anything remotely. Skips the hidden `.<name>.tmp` files
     atomic writers rename into place, like the rsync transport does."""
@@ -124,6 +132,8 @@ def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str) -> 
         if not _is_s3_error(exc):
             raise
         logger.warning("S3 listing of s3://%s/%s failed: %s", cfg.s3_bucket, prefix, exc)
+        if stats is not None:
+            stats.error(f"S3 listing of s3://{cfg.s3_bucket}/{prefix} failed: {exc}")
         return False
 
     ok = True
@@ -138,14 +148,15 @@ def push_tree(cfg: UploadConfig, local_dir: Path, remote_relative_path: str) -> 
                     continue
             except FileNotFoundError:
                 continue
-            ok = _upload(cfg, path, key) and ok
+            ok = _upload(cfg, path, key, stats) and ok
     return ok
 
 
-def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str) -> bool:
+def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str,
+              stats: TransferStats | None = None) -> bool:
     if not local_path.exists():
         return False
-    return _upload(cfg, local_path, _key(cfg, remote_relative_path))
+    return _upload(cfg, local_path, _key(cfg, remote_relative_path), stats)
 
 
 def pull_file(cfg: UploadConfig, remote_relative_path: str, local_path: Path) -> bool:
