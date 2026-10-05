@@ -10,7 +10,7 @@ from .routes import auth, camera, config, files, frames, logs, overlay, plugins,
 from .security import require_admin, require_preview
 
 
-def create_app(static_dir: Path | None = None) -> FastAPI:
+def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = ()) -> FastAPI:
     app = FastAPI(title="caelum", version="0.1.0")
 
     app.add_middleware(
@@ -19,8 +19,10 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
         # it, so a wildcard here would be both useless and rejected by every
         # browser for credentialed requests. Vite's dev server proxies /api
         # to the backend, making even development same-origin; this list is
-        # only for pointing a dev frontend at a camera on the LAN.
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        # only for pointing a dev frontend at a camera on the LAN, plus any
+        # `cors_origins` (the static caelum-viewer reads /api/files cookie-
+        # less, so it only works with `auth.preview_access: public`).
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *cors_origins],
         allow_origin_regex=r"http://localhost:\d+|http://127\.0\.0\.1:\d+",
         allow_credentials=True,
         allow_methods=["*"],

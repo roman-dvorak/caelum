@@ -120,7 +120,10 @@ async def _async_main(settings: Settings) -> None:
     reload_plugins(cfg)
     config_manager.on_change(reload_plugins)
 
-    app = create_app(static_dir=_LOCAL_WEB_DIST if _LOCAL_WEB_DIST.exists() else None)
+    app = create_app(
+        static_dir=_LOCAL_WEB_DIST if _LOCAL_WEB_DIST.exists() else None,
+        cors_origins=settings.cors_origins,
+    )
     app.state.settings = settings
     app.state.config_manager = config_manager
     app.state.user_store = user_store

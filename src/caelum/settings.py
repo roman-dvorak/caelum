@@ -30,6 +30,10 @@ class Settings:
     redis_url: str
     camera_backend_override: str | None
     log_level: str
+    #: Extra browser origins allowed to call the API cross-site — e.g. the
+    #: static caelum-viewer on GitHub Pages reading frames straight off the
+    #: camera. Comma-separated in CAELUM_CORS_ORIGINS.
+    cors_origins: tuple[str, ...] = ()
 
     @property
     def config_file(self) -> Path:
@@ -52,4 +56,9 @@ def load_settings() -> Settings:
         # auto-detect on real hardware. Unset by default.
         camera_backend_override=os.environ.get("CAELUM_CAMERA_BACKEND"),
         log_level=os.environ.get("CAELUM_LOG_LEVEL", "INFO"),
+        cors_origins=tuple(
+            o.strip().rstrip("/")
+            for o in os.environ.get("CAELUM_CORS_ORIGINS", "https://roman-dvorak.github.io").split(",")
+            if o.strip()
+        ),
     )
