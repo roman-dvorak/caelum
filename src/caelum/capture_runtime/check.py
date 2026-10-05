@@ -108,5 +108,10 @@ def check(
                     if items:
                         where = f"run {run['slot']} frame {frame['index']}"
                         issues.append(_issue("info", None, f"{where}: camera {what} {', '.join(items)}"))
+        slots = config.processing.slots
+        largest = max(((run.get("returned") or {}).get("count", 0) for run in report["simulation"]["runs"]), default=0)
+        if largest > slots:
+            issues.append(_issue("warning", None, f"returns sets of {largest} frames but processing has {slots} slots "
+                                 "— such sets are dropped whole (raise processing.slots)"))
     report["ok"] = not any(i["level"] == "error" for i in issues)
     return report
