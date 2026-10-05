@@ -21,7 +21,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from caelum.cameras.base import CameraBackend, CameraStalled, RawFrame
+from caelum.cameras.base import CameraBackend, CameraStalled, CaptureRequest, RawFrame
 from caelum.capture_runtime import CaptureContext, CaptureProgramError, LoadedProgram, builtin_program
 from caelum.capture_runtime.context import Overrides
 from caelum.capture_runtime.errors import ProgramStopped
@@ -386,26 +386,28 @@ class CaptureWorker(threading.Thread):
     def stop_requested(self) -> bool:
         return self._stop_event.is_set()
 
-    def capture_for_program(self, target: ExposureTarget, align_to_slot: bool) -> tuple[RawFrame, SkyState]:
-        """`ctx.capture()`'s worker side: set the controls, wait for the slot
-        (first capture of a run only), take the frame under the watchdog."""
+    def capture_for_program(self, req: CaptureRequest, align_to_slot: bool) -> tuple[RawFrame, SkyState]:
+        """`ctx.capture()`'s worker side: set the camera up (best effort),
+        wait for the slot (first capture of a run only), take the frame
+        under the watchdog."""
         camera = self._camera
         assert camera is not None
-        camera.set_controls(target.exposure_us, target.analogue_gain)
+        record = camera.apply_request(req)
+        exposure_s = record["commanded"]["exposure_us"] / 1e6
         due = None
         if align_to_slot:
-            due = self._wait_for_slot(self._run_interval_s, target.exposure_us / 1e6)
+            due = self._wait_for_slot(self._run_interval_s, exposure_s)
             if self._stop_event.is_set():
                 raise ProgramStopped
         # Waiting may have taken a whole interval — describe the sky as it
         # is now, at the capture.
         sky_state = self._refresh_sky_state()
         called_ns = time.monotonic_ns()
-        watchdog = threading.Timer(target.exposure_us / 1e6 + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung)
+        watchdog = threading.Timer(exposure_s + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung)
         watchdog.daemon = True
         watchdog.start()
         try:
-            raw = camera.capture_frame()
+            raw = camera.finish_request(camera.capture_frame(), record)
         finally:
             watchdog.cancel()
         if due is not None:
@@ -463,6 +465,7 @@ class CaptureWorker(threading.Thread):
             interval_s=interval_s,
             slot=self._program_runs,
             max_captures=int(program.meta.get("max_captures", DEFAULT_MAX_CAPTURES)),
+            capabilities=camera.capabilities,
         )
         self._camera_fresh = False
         longest = max(p.exposure_us_max for p in cfg.exposure_policy.presets.values()) / 1e6

@@ -78,6 +78,7 @@ class FrameInfo:
     camera_model: str
     brightness_median: float | None
     exposure_control: dict[str, Any] | None = None
+    capture_settings: dict[str, Any] | None = None
 
     @classmethod
     def from_submission(cls, submission: FrameSubmission) -> FrameInfo:
@@ -95,6 +96,7 @@ class FrameInfo:
             camera_model=raw.camera_model,
             brightness_median=submission.brightness.median if submission.brightness else None,
             exposure_control=submission.exposure_control,
+            capture_settings=raw.capture_settings,
         )
 
 

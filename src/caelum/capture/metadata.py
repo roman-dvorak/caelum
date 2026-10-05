@@ -57,6 +57,10 @@ class FrameMetadata(BaseModel):
     #: and what it set for the next one (see `exposure_control_snapshot`).
     #: None for frames from before this was recorded.
     exposure_control: dict[str, Any] | None = None
+    #: What the capture requested of the camera and what it really did —
+    #: clamped to its ranges, options it lacks ignored (see
+    #: `CameraBackend.apply_request`). None for frames from before this.
+    capture_settings: dict[str, Any] | None = None
 
 
 def default_overlay_elements(metadata_without_elements: FrameMetadata) -> list[OverlayElement]:

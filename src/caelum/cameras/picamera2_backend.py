@@ -174,6 +174,7 @@ class Picamera2Backend(CameraBackend):
         self._raw_config: dict[str, Any] | None = None
         self._model = ""
         self._requested: tuple[int, float] | None = None
+        self._request_gains = False
 
     def open(self) -> None:
         global _manager_suspect
@@ -209,8 +210,30 @@ class Picamera2Backend(CameraBackend):
                 logger.debug("picamera2 close after failed open raised", exc_info=True)
             raise
         self._model = str(picam2.camera_properties.get("Model", "") or "")
+        self.capabilities = self._read_capabilities(picam2)
         logger.info("picamera2 raw stream: %s", self._raw_config)
         self.set_white_balance(self._wb_red_gain, self._wb_blue_gain, auto=self._wb_auto)
+
+    def _read_capabilities(self, picam2: Any) -> CameraCapabilities:
+        controls = getattr(picam2, "camera_controls", None) or {}
+
+        def bounds(name: str, cast):
+            entry = controls.get(name)
+            try:
+                low, high = cast(entry[0]), cast(entry[1])
+            except (TypeError, IndexError, ValueError):
+                return None
+            return (low, high) if high > low else None
+
+        return CameraCapabilities(
+            max_resolution=self._resolution,
+            supports_streaming=True,
+            model=self._model,
+            exposure_us=bounds("ExposureTime", int),
+            analogue_gain=bounds("AnalogueGain", float),
+            raw=self._raw_config is not None,
+            colour_gains=True,
+        )
 
     def _configure(self, raw_format: str | None) -> None:
         assert self._picam2 is not None
@@ -290,6 +313,19 @@ class Picamera2Backend(CameraBackend):
             self._picam2.set_controls({"AwbEnable": True})
         else:
             self._picam2.set_controls({"AwbEnable": False, "ColourGains": (red_gain, blue_gain)})
+
+    def set_request_colour_gains(self, gains: tuple[float, float] | None) -> None:
+        assert self._picam2 is not None, "set_request_colour_gains() called before open()"
+        if gains is not None:
+            self._picam2.set_controls({"AwbEnable": False, "ColourGains": (float(gains[0]), float(gains[1]))})
+            self._request_gains = True
+        elif self._request_gains:
+            # Back to the configured white balance (without touching it).
+            self._request_gains = False
+            if self._wb_auto:
+                self._picam2.set_controls({"AwbEnable": True})
+            else:
+                self._picam2.set_controls({"AwbEnable": False, "ColourGains": (self._wb_red_gain, self._wb_blue_gain)})
 
     def _matches_request(self, meta: dict[str, Any]) -> bool:
         if self._requested is None:

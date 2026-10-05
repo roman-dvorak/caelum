@@ -35,7 +35,13 @@ def _build_base_scene() -> np.ndarray:
 
 class MockCameraBackend(CameraBackend):
     def __init__(self, cfg: CameraConfig | None = None, seed: int = 0) -> None:
-        self.capabilities = CameraCapabilities(max_resolution=_RESOLUTION, supports_streaming=True)
+        self.capabilities = CameraCapabilities(
+            max_resolution=_RESOLUTION,
+            supports_streaming=True,
+            model="mock",
+            exposure_us=(1, 3_600_000_000),
+            analogue_gain=(1.0, 64.0),
+        )
         self._rng = np.random.default_rng(seed)
         self._exposure_us = 10_000
         self._analogue_gain = 1.0

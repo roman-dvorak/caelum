@@ -60,6 +60,7 @@ def build_metadata(info: FrameInfo, stats: FrameStats) -> FrameMetadata:
         sky_state=SkyStateModel.model_validate(info.sky_state),
         focus_score=stats.focus_score,
         exposure_control=info.exposure_control,
+        capture_settings=info.capture_settings,
     )
     return metadata.model_copy(update={"overlay_elements": default_overlay_elements(metadata)})
 
@@ -98,6 +99,21 @@ def _xmp_fields(info: FrameInfo, metadata: FrameMetadata, stats: FrameStats) -> 
         "brightness_median_ev": round(adu_to_ev(info.brightness_median), 3) if info.brightness_median else None,
         "target_ev": info.settings.target_ev,
         "focus_score": round(stats.focus_score, 3),
+        **_capture_settings_xmp(info.capture_settings),
+    }
+
+
+def _capture_settings_xmp(settings: dict[str, Any] | None) -> dict[str, Any]:
+    if not settings:
+        return {}
+    requested = settings.get("requested", {})
+    gains = requested.get("colour_gains")
+    return {
+        "requested_exposure_us": requested.get("exposure_us"),
+        "requested_analogue_gain": requested.get("analogue_gain"),
+        "requested_colour_gains": ",".join(f"{g:.4f}" for g in gains) if gains else None,
+        "capture_clamped": ",".join(settings.get("clamped", [])) or None,
+        "capture_ignored": ",".join(settings.get("ignored", [])) or None,
     }
 
 
