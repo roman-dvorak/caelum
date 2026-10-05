@@ -238,10 +238,26 @@ def _default_plugins() -> dict[str, PluginConfig]:
 
     `settings: {}` means "use the plugin's own declared defaults" — see each
     worker's `config_schema`.
+    #: "rsync" pushes over SSH (or to a local path); "s3" pushes to an
+    #: S3-compatible object store — see upload/transport_s3.py.
+    transport: Literal["rsync", "s3"] = "rsync"
     """
     return {
         # Keogram first: it only reads frames, so it cannot be affected by
         # anything a later plugin does.
+    # S3 transport. Like AuthConfig, this deliberately holds no secrets —
+    # it's exposed through /api/config. Keys come from the standard AWS
+    # credential chain instead: `s3_profile` names a profile in
+    # ~/.aws/credentials, or leave it empty and set AWS_ACCESS_KEY_ID /
+    # AWS_SECRET_ACCESS_KEY in .env.
+    s3_endpoint_url: str = ""
+    s3_bucket: str = ""
+    #: Key prefix inside the bucket — S3's counterpart of `remote_base_path`.
+    s3_prefix: str = ""
+    s3_profile: str = ""
+    #: Canned ACL for every uploaded object, e.g. "public-read" when the
+    #: remote-web app reads straight from the bucket. Empty: bucket default.
+    s3_acl: str = ""
         "keogram": PluginConfig(enabled=True, order=10),
         "meteor_detection": PluginConfig(enabled=True, order=20),
         # Disabled by default: both require the admin to configure them

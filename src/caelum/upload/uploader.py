@@ -4,7 +4,8 @@
   (`upload.thumbnail_interval_s`), so new thumbnails/raw/derivatives show up
   on the remote promptly.
 - **Reconciliation pass** — the *entire* local tree, run less often
-  (`upload.reconcile_interval_s`). rsync compares source vs. destination
+  (`upload.reconcile_interval_s`). The transport (rsync, or the S3 listing
+  diff in transport_s3.py) compares source vs. destination
   itself, so this is naturally idempotent and self-healing: anything an
   incremental push missed (a reboot mid-transfer, a network blip) gets
   picked up here with no separate ledger/retry-queue needed. Only a
@@ -27,11 +28,16 @@ from caelum.config.manager import ConfigManager
 from caelum.config.schema import UploadConfig
 from caelum.events import FRAME_CAPTURED, EventBus
 
-from . import manifest, transport_rsync
+from . import manifest, transport_rsync, transport_s3
 
 logger = logging.getLogger(__name__)
 
 _IDLE_POLL_S = 5.0
+
+
+def _transport(cfg: UploadConfig):
+    """Both modules expose the same push_tree/push_file/pull_file trio."""
+    return transport_s3 if cfg.transport == "s3" else transport_rsync
 
 
 class UploadWorker(threading.Thread):
@@ -82,12 +88,12 @@ class UploadWorker(threading.Thread):
         for subdir in ("thumbnails", "raw", "derivatives"):
             local = self._data_dir / subdir / today_path
             if local.exists():
-                transport_rsync.push_tree(cfg, local, f"{cfg.camera_slug}/{subdir}/{today_path}")
+                _transport(cfg).push_tree(cfg, local, f"{cfg.camera_slug}/{subdir}/{today_path}")
         self._push_manifests(cfg)
 
     def _reconcile(self, cfg: UploadConfig) -> None:
         logger.info("Running full upload reconciliation pass")
-        ok = transport_rsync.push_tree(cfg, self._data_dir, cfg.camera_slug)
+        ok = _transport(cfg).push_tree(cfg, self._data_dir, cfg.camera_slug)
         self._push_manifests(cfg)
         if ok:
             self._uploaded_before = datetime.now(UTC)
@@ -97,7 +103,7 @@ class UploadWorker(threading.Thread):
         camera_manifest = manifest.write_local_manifests(
             self._data_dir, cfg.camera_slug, cfg.camera_name, {"lat": location.lat, "lon": location.lon}
         )
-        transport_rsync.push_file(
+        _transport(cfg).push_file(
             cfg, self._data_dir / "manifest.json", f"{cfg.camera_slug}/manifest.json"
         )
         self._update_cameras_index(cfg, camera_manifest)
@@ -105,11 +111,11 @@ class UploadWorker(threading.Thread):
     def _update_cameras_index(self, cfg: UploadConfig, camera_manifest: dict) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             cameras_json_path = Path(tmp) / "cameras.json"
-            transport_rsync.pull_file(cfg, "cameras.json", cameras_json_path)
+            _transport(cfg).pull_file(cfg, "cameras.json", cameras_json_path)
             existing = json.loads(cameras_json_path.read_text()) if cameras_json_path.exists() else None
 
             merged = manifest.merge_cameras_index(
                 existing, cfg.camera_slug, cfg.camera_name, camera_manifest, datetime.now(UTC)
             )
             cameras_json_path.write_text(json.dumps(merged, indent=2))
-            transport_rsync.push_file(cfg, cameras_json_path, "cameras.json")
+            _transport(cfg).push_file(cfg, cameras_json_path, "cameras.json")
