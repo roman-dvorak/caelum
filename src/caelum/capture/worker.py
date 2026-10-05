@@ -1,36 +1,71 @@
 """CaptureWorker — the sole owner of a CameraBackend for the process's
 lifetime. Runs on its own thread with one deliberately narrow, fast job:
-capture -> calibrate -> stats -> thumbnail -> publish. Nothing slow (disk
-writes, derivative processing, uploads) happens here — those subscribe to
-the `frame_captured` event and run off-thread instead, so capture cadence
-never depends on how busy the rest of the system is.
+
+    capture -> measure brightness -> exposure regulator -> set controls
+            -> hand the frame to the FrameSink
+
+Everything else — dark calibration, statistics, thumbnail encoding, writing
+WebP/DNG — happens behind the sink, by default in a separate process (see
+`caelum.processing`), and derivatives/uploads hang off the `frame_captured`
+event that the sink publishes. Capture cadence therefore never depends on
+how busy the rest of the system is.
 """
 
 from __future__ import annotations
 
 import logging
+import math
+import os
 import threading
 import time
 from collections.abc import Callable
 
-from caelum.cameras.base import CameraBackend
+from caelum.cameras.base import CameraBackend, CameraStalled
 from caelum.config.manager import ConfigManager
-from caelum.config.schema import CameraConfig
-from caelum.control.exposure import ExposureController, ExposureTarget
+from caelum.config.schema import AppConfig, CameraConfig
+from caelum.control.exposure import (
+    ExposureController,
+    ExposureDiagnostics,
+    ExposureTarget,
+    exposure_control_snapshot,
+)
 from caelum.control.skystate import SkyState, SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
-from caelum.events import FRAME_CAPTURED, EventBus
+from caelum.processing.jobs import FrameSink, FrameSubmission, ProcessingSettings
 
-from . import stats as stats_module
-from . import thumbnail as thumbnail_module
-from .calibration import DarkLibrary
-from .frame_store import FrameStore, ProcessedFrame
-from .metadata import FrameMetadata, SkyStateModel, default_overlay_elements
+from . import brightness as brightness_module
+from .metadata import SkyStateModel
 
 logger = logging.getLogger(__name__)
 
 _INITIAL_EXPOSURE_TARGET = ExposureTarget(exposure_us=10_000, analogue_gain=1.0)
+
+# Time per capture beyond the exposure itself (camera start, readout).
+_READOUT_MARGIN_S = 0.2
+# Last resort if a capture hangs inside the camera stack despite the
+# backend's own timeouts: after the exposure plus this, the process exits so
+# systemd starts it again with a fresh camera stack.
+_CAPTURE_WATCHDOG_GRACE_S = 60.0
+# Stalls in a row (with the camera reopened in between) before giving up on
+# this process: right after boot, libcamera in the first process can stay
+# unable to deliver frames however often it is reopened, while a fresh
+# process works.
+_MAX_STALLS_IN_PROCESS = 2
+_WATCHDOG_EXIT_CODE = 70
+# First guess for how long after `capture_frame()` is called the exposure
+# actually starts; refined from every frame that reports it.
+_INITIAL_START_LATENCY_S = 0.1
+
+# Retry delay after a failed cycle doubles per consecutive failure, up to
+# the max — a camera held by another process must not be hammered once a
+# second (each failed open used to leak file descriptors; see
+# picamera2_backend._cleanup_failed_init).
 _ERROR_BACKOFF_S = 1.0
+_MAX_ERROR_BACKOFF_S = 60.0
+# Full tracebacks for the first few consecutive failures, then only every
+# Nth — one line per retry otherwise.
+_FULL_TRACEBACK_FAILURES = 3
+_TRACEBACK_EVERY = 20
 
 
 class StreamModeController:
@@ -103,9 +138,7 @@ class CaptureWorker(threading.Thread):
         skystate_calculator: SkyStateCalculator,
         exposure_controller: ExposureController,
         storage_policy: StoragePolicy,
-        dark_library: DarkLibrary,
-        frame_store: FrameStore,
-        event_bus: EventBus,
+        frame_sink: FrameSink,
         resolve_camera_config: Callable[[CameraConfig], CameraConfig] | None = None,
         sky_state_refresh_interval_s: float = 30.0,
         stream_mode: StreamModeController | None = None,
@@ -121,9 +154,7 @@ class CaptureWorker(threading.Thread):
         self._skystate_calculator = skystate_calculator
         self._exposure_controller = exposure_controller
         self._storage_policy = storage_policy
-        self._dark_library = dark_library
-        self._frame_store = frame_store
-        self._event_bus = event_bus
+        self._frame_sink = frame_sink
         self._sky_state_refresh_interval_s = sky_state_refresh_interval_s
         self.stream_mode = stream_mode or StreamModeController()
         self.manual_exposure = manual_exposure or ManualExposureOverride()
@@ -133,10 +164,32 @@ class CaptureWorker(threading.Thread):
         self._sky_state: SkyState | None = None
         self._sky_state_computed_at: float = 0.0
         self._current_target = _INITIAL_EXPOSURE_TARGET
+        self._needs_initial_controls = True
+        self._was_manual = False
+        self._frame_period_s: float | None = None
+        # Capture grid, in wall-clock seconds: the next slot, and the
+        # interval the grid was laid out with.
+        self._next_due: float | None = None
+        self._grid_interval_s: float | None = None
+        self._start_latency_s = _INITIAL_START_LATENCY_S
 
     @property
     def current_target(self) -> ExposureTarget:
+        """What was last commanded for the next frame."""
         return self._current_target
+
+    @property
+    def exposure_diagnostics(self) -> ExposureDiagnostics | None:
+        return self._exposure_controller.diagnostics
+
+    @property
+    def frame_period_s(self) -> float | None:
+        """The current spacing between captures."""
+        return self._frame_period_s
+
+    @property
+    def frame_sink(self) -> FrameSink:
+        return self._frame_sink
 
     @property
     def camera_backend_name(self) -> str:
@@ -152,13 +205,35 @@ class CaptureWorker(threading.Thread):
         self._stop_event.set()
 
     def run(self) -> None:
+        failures = 0
+        stalls = 0
         try:
             while not self._stop_event.is_set():
                 try:
                     self._run_cycle()
-                except Exception:
-                    logger.exception("Capture cycle failed — retrying after a short backoff")
-                    self._stop_event.wait(_ERROR_BACKOFF_S)
+                    if failures:
+                        logger.info("Capture recovered after %d failed cycle(s)", failures)
+                    failures = 0
+                    stalls = 0
+                except Exception as exc:
+                    failures += 1
+                    if isinstance(exc, CameraStalled):
+                        stalls += 1
+                        if stalls >= _MAX_STALLS_IN_PROCESS:
+                            self._capture_hung()
+                    # Start over with a freshly opened camera next time — a
+                    # failed capture may have left it in a bad state.
+                    self._close_camera()
+                    delay = min(_ERROR_BACKOFF_S * 2 ** (failures - 1), _MAX_ERROR_BACKOFF_S)
+                    if failures <= _FULL_TRACEBACK_FAILURES or failures % _TRACEBACK_EVERY == 0:
+                        logger.exception(
+                            "Capture cycle failed (%d in a row) — retrying in %.0fs", failures, delay
+                        )
+                    else:
+                        logger.warning(
+                            "Capture cycle failed (%d in a row): %s — retrying in %.0fs", failures, exc, delay
+                        )
+                    self._stop_event.wait(delay)
         finally:
             self._close_camera()
 
@@ -196,6 +271,12 @@ class CaptureWorker(threading.Thread):
         # silently leaving the camera closed.
         self._camera = camera
         self._camera_config = resolved_cfg
+        # A fresh camera knows nothing of our last exposure — set it before
+        # the first capture, and restart the regulator from whatever that
+        # first frame then actually reports.
+        self._needs_initial_controls = True
+        self._exposure_controller.reset()
+        self._next_due = None
         logger.info("Camera opened: %s (%s)", type(camera).__name__, resolved_cfg.sensor_id)
         return camera
 
@@ -217,6 +298,63 @@ class CaptureWorker(threading.Thread):
             self._sky_state_computed_at = now
         return self._sky_state
 
+    def _interval(self, cfg: AppConfig, sky_state: SkyState) -> float:
+        base = self._storage_policy.decide(sky_state, cfg.storage_policy).capture_interval_s
+        if self.stream_mode.enabled and cfg.storage_policy.realtime_stream_fps > 0:
+            base = min(base, 1.0 / cfg.storage_policy.realtime_stream_fps)
+        return base
+
+    def _frame_period(self, cfg: AppConfig, sky_state: SkyState, target: ExposureTarget) -> float:
+        """Effective spacing between captures: `capture_interval_s`, or —
+        while the exposure (plus start/readout overhead) doesn't fit in one
+        interval — the smallest whole multiple of it, since captures always
+        land on the same grid and just skip the slots they can't make."""
+        base = self._interval(cfg, sky_state)
+        needed = target.exposure_us / 1e6 + self._start_latency_s + _READOUT_MARGIN_S
+        period = base if needed <= base else base * math.ceil(needed / base)
+        if period != self._frame_period_s:
+            if period > base:
+                logger.info(
+                    "Capture period %.3gs (interval %.3gs; exposure %.3gs doesn't fit in one)",
+                    period, base, target.exposure_us / 1e6,
+                )
+            else:
+                logger.info("Capture period %.3gs", period)
+        self._frame_period_s = period
+        return period
+
+    def _apply(self, camera: CameraBackend, target: ExposureTarget) -> None:
+        camera.set_controls(target.exposure_us, target.analogue_gain)
+        self._current_target = target
+
+    @staticmethod
+    def _capture_hung() -> None:
+        logger.critical(
+            "Capture has hung inside the camera stack — exiting so the service restarts with a fresh one"
+        )
+        logging.shutdown()
+        os._exit(_WATCHDOG_EXIT_CODE)
+
+    def _wait_for_slot(self, interval_s: float, exposure_s: float) -> float:
+        """Wait for the moment to start the next capture, and return the
+        grid slot (wall-clock seconds) it is aimed at.
+
+        The grid is laid out on the wall clock — slots at whole multiples of
+        the interval (every minute on the minute, say) — and the *middle of
+        the exposure* is what lands on a slot, so captures are evenly spaced
+        however much the exposure changes. The start is brought forward by
+        half the exposure plus the measured start latency. A slot that can't
+        be made any more is skipped; the grid itself never moves."""
+        now = time.time()
+        if self._next_due is None or self._grid_interval_s != interval_s:
+            self._grid_interval_s = interval_s
+            self._next_due = math.ceil(now / interval_s) * interval_s
+        lead = exposure_s / 2 + self._start_latency_s
+        if self._next_due - lead < now:
+            self._next_due += math.ceil((now - (self._next_due - lead)) / interval_s) * interval_s
+        self._stop_event.wait(self._next_due - lead - now)
+        return self._next_due
+
     def _run_cycle(self) -> None:
         cfg = self._config_manager.current
         camera = self._ensure_camera(cfg.camera)
@@ -227,49 +365,68 @@ class CaptureWorker(threading.Thread):
             camera.set_white_balance(red_gain, blue_gain, auto)
 
         sky_state = self._refresh_sky_state()
-        preset = cfg.exposure_policy.preset_for(sky_state.period)
-
+        policy = cfg.exposure_policy
         manual_target = self.manual_exposure.get()
+
+        if self._needs_initial_controls:
+            if manual_target is not None:
+                start = manual_target
+            elif self._exposure_controller.diagnostics is None:
+                start = self._exposure_controller.initial_target(sky_state.period, policy)
+            else:
+                start = self._current_target
+            self._apply(camera, start)
+            self._exposure_controller.prime(start, sky_state.period)
+            self._needs_initial_controls = False
+
+        interval_s = self._interval(cfg, sky_state)
+        due = self._wait_for_slot(interval_s, self._current_target.exposure_us / 1e6)
+        if self._stop_event.is_set():
+            return
+        # Waiting may have taken a whole interval — describe the sky as it
+        # is now, at the capture.
+        sky_state = self._refresh_sky_state()
+        called_ns = time.monotonic_ns()
+        watchdog = threading.Timer(
+            self._current_target.exposure_us / 1e6 + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung
+        )
+        watchdog.daemon = True
+        watchdog.start()
+        try:
+            raw = camera.capture_frame()
+        finally:
+            watchdog.cancel()
+        self._next_due = due + interval_s
+        if raw.exposure_start_monotonic_ns is not None:
+            latency = (raw.exposure_start_monotonic_ns - called_ns) / 1e9
+            if 0.0 <= latency < 2.0:
+                self._start_latency_s = 0.7 * self._start_latency_s + 0.3 * latency
+
+        applied = ExposureTarget(exposure_us=raw.exposure_us, analogue_gain=raw.analogue_gain)
+        sample = brightness_module.measure(raw.image, policy.brightness_roi_diameter_frac)
+
+        # Every frame is taken with exactly the settings requested for it
+        # (see Picamera2Backend), so the next one can be decided right here.
         if manual_target is not None:
-            target = manual_target
+            next_target = manual_target
+            self._exposure_controller.track(manual_target, sample, applied, sky_state.period, policy)
         else:
-            prev_stats = self._frame_store.get_latest_stats()
-            target = self._exposure_controller.compute_target(
-                sky_state, prev_stats, self._current_target, cfg.exposure_policy
-            )
-        self._current_target = target
-        camera.set_controls(target.exposure_us, target.analogue_gain)
-
-        raw = camera.capture_frame()
-        image = self._dark_library.apply_dark(raw.image, raw.exposure_us, raw.analogue_gain)
-
-        frame_stats = stats_module.extract(image, saturation_value=preset.saturation_threshold)
-        thumbnail_jpeg = thumbnail_module.encode(
-            image, cfg.storage_policy.thumbnail_max_dim, cfg.storage_policy.jpeg_quality
-        )
-
-        metadata = FrameMetadata(
-            captured_at=raw.captured_at,
-            exposure_us=raw.exposure_us,
-            analogue_gain=raw.analogue_gain,
-            sky_state=SkyStateModel.from_skystate(sky_state),
-            focus_score=frame_stats.focus_score,
-        )
-        metadata = metadata.model_copy(update={"overlay_elements": default_overlay_elements(metadata)})
+            if self._was_manual:
+                # Leaving manual: continue from the manual setting.
+                self._exposure_controller.reset()
+            next_target = self._exposure_controller.step(sample, applied, sky_state.period, policy)
+        self._was_manual = manual_target is not None
+        self._apply(camera, next_target)
+        self._frame_period(cfg, sky_state, next_target)
 
         decision = self._storage_policy.decide(sky_state, cfg.storage_policy)
-        processed = ProcessedFrame(
-            image=image,
-            thumbnail_jpeg=thumbnail_jpeg,
-            stats=frame_stats,
-            metadata=metadata,
-            save_raw=decision.save_raw,
+        self._frame_sink.submit(
+            FrameSubmission(
+                raw=raw,
+                sky_state=SkyStateModel.from_skystate(sky_state),
+                save_raw=decision.save_raw,
+                settings=ProcessingSettings.from_config(cfg, sky_state.period),
+                brightness=sample,
+                exposure_control=exposure_control_snapshot(self._exposure_controller.diagnostics),
+            )
         )
-
-        self._frame_store.update(processed)
-        self._event_bus.publish(FRAME_CAPTURED, processed)
-
-        capture_interval_s = decision.capture_interval_s
-        if self.stream_mode.enabled and cfg.storage_policy.realtime_stream_fps > 0:
-            capture_interval_s = min(capture_interval_s, 1.0 / cfg.storage_policy.realtime_stream_fps)
-        self._stop_event.wait(capture_interval_s)

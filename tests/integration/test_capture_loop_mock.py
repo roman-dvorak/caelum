@@ -5,13 +5,13 @@ import time
 from datetime import UTC, datetime
 
 from caelum.cameras.mock_backend import MockCameraBackend
-from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore, ProcessedFrame
 from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
 from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyState
 from caelum.control.storage_policy import StoragePolicy
+from caelum.processing.inline import InlineFrameSink
 from caelum.events import FRAME_CAPTURED, EventBus
 
 
@@ -83,9 +83,7 @@ async def test_capture_worker_switches_storage_decision_with_sky_state(tmp_path,
             skystate_calculator=fake_sky,
             exposure_controller=ExposureController(),
             storage_policy=StoragePolicy(),
-            dark_library=DarkLibrary(darks_dir=None),
-            frame_store=FrameStore(),
-            event_bus=event_bus,
+            frame_sink=InlineFrameSink(FrameStore(), event_bus),
             sky_state_refresh_interval_s=0.0,  # pick up period flips every cycle
         )
         worker.start()
@@ -99,9 +97,10 @@ async def test_capture_worker_switches_storage_decision_with_sky_state(tmp_path,
             fake_sky.period = "night"
             with lock:
                 seen_before_switch = len(captured)
-            assert _wait_until(lambda: len(captured) >= seen_before_switch + 3)
+            assert _wait_until(lambda: len(captured) >= seen_before_switch + 4)
             with lock:
-                new_frames = captured[seen_before_switch:]
+                # One frame may already have been mid-capture when the period flipped.
+                new_frames = captured[seen_before_switch + 1 :]
             assert all(f.save_raw is True for f in new_frames)
             assert all(f.metadata.sky_state.period == "night" for f in new_frames)
         finally:
@@ -128,9 +127,7 @@ async def test_capture_worker_updates_frame_store(tmp_path, redis_url):
             skystate_calculator=_FakeSkyStateCalculator(period="day"),
             exposure_controller=ExposureController(),
             storage_policy=StoragePolicy(),
-            dark_library=DarkLibrary(darks_dir=None),
-            frame_store=frame_store,
-            event_bus=EventBus(),
+            frame_sink=InlineFrameSink(frame_store, EventBus()),
         )
         worker.start()
         try:
