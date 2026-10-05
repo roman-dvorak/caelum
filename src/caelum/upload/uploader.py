@@ -3,9 +3,10 @@
 - **Incremental push** — today's date directories only, run frequently
   (`upload.thumbnail_interval_s`), so new thumbnails/raw/derivatives show up
   on the remote promptly.
-- **Reconciliation pass** — the *entire* local tree, run less often
-  (`upload.reconcile_interval_s`). The transport (rsync, or the S3 listing
-  diff in transport_s3.py) compares source vs. destination
+- **Reconciliation pass** — every published capture (thumbnails, raw,
+  derivatives — nothing else in the data directory), run less often
+  (`upload.reconcile_interval_s`). The transport (rsync, or the listing
+  diff of transport_scp.py / transport_s3.py) compares source vs. destination
   itself, so this is naturally idempotent and self-healing: anything an
   incremental push missed (a reboot mid-transfer, a network blip) gets
   picked up here with no separate ledger/retry-queue needed. Only a
@@ -27,17 +28,21 @@ from caelum.capture.frame_store import ProcessedFrame
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import UploadConfig
 from caelum.events import FRAME_CAPTURED, EventBus
+from caelum.storage import paths
 
-from . import manifest, transport_rsync, transport_s3
+from . import manifest, transport_rsync, transport_s3, transport_scp
 
 logger = logging.getLogger(__name__)
 
 _IDLE_POLL_S = 5.0
 
 
+_TRANSPORTS = {"rsync": transport_rsync, "scp": transport_scp, "s3": transport_s3}
+
+
 def _transport(cfg: UploadConfig):
-    """Both modules expose the same push_tree/push_file/pull_file trio."""
-    return transport_s3 if cfg.transport == "s3" else transport_rsync
+    """Every module exposes the same push_tree/push_file/pull_file trio."""
+    return _TRANSPORTS.get(cfg.transport, transport_rsync)
 
 
 class UploadWorker(threading.Thread):
@@ -93,7 +98,11 @@ class UploadWorker(threading.Thread):
 
     def _reconcile(self, cfg: UploadConfig) -> None:
         logger.info("Running full upload reconciliation pass")
-        ok = _transport(cfg).push_tree(cfg, self._data_dir, cfg.camera_slug)
+        # Only the published captures — never the rest of the data directory
+        # (capture-program sources, program test runs, overlay assets, darks).
+        ok = True
+        for subdir in paths.MANAGED_SUBDIRS:
+            ok = _transport(cfg).push_tree(cfg, self._data_dir / subdir, f"{cfg.camera_slug}/{subdir}") and ok
         self._push_manifests(cfg)
         if ok:
             self._uploaded_before = datetime.now(UTC)

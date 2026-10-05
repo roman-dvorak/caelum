@@ -258,13 +258,19 @@ class RetentionConfig(StrictModel):
 
 class UploadConfig(StrictModel):
     enabled: bool = False
-    #: "rsync" pushes over SSH (or to a local path); "s3" pushes to an
-    #: S3-compatible object store — see upload/transport_s3.py.
-    transport: Literal["rsync", "s3"] = "rsync"
+    #: "rsync" pushes over SSH (or to a local path) with delta transfer;
+    #: "scp" pushes over SSH where only scp/sftp is available (whole files,
+    #: changed ones found from a remote listing); "s3" pushes to an
+    #: S3-compatible object store — see upload/transport_*.py.
+    transport: Literal["rsync", "scp", "s3"] = "rsync"
     remote_host: str = ""
     remote_user: str = ""
     remote_base_path: str = "/var/www/allsky-data"
     ssh_key_path: str = "/etc/caelum/upload_key"
+    #: SSH port for the rsync and scp transports.
+    ssh_port: int = Field(default=22, ge=1, le=65535)
+    #: Upload bandwidth cap in KiB/s for rsync and scp; 0 = unlimited.
+    bandwidth_limit_kbps: int = Field(default=0, ge=0)
     # S3 transport. Like AuthConfig, this deliberately holds no secrets —
     # it's exposed through /api/config. Keys come from the standard AWS
     # credential chain instead: `s3_profile` names a profile in

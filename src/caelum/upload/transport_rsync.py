@@ -12,10 +12,13 @@ makes this module testable without a real network.
 from __future__ import annotations
 
 import logging
+import shlex
 import subprocess
 from pathlib import Path
 
 from caelum.config.schema import UploadConfig
+
+from .ssh import destination, ssh_command
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +31,14 @@ def _target(cfg: UploadConfig, relative_path: str) -> str:
     base_path = f"{cfg.remote_base_path}/{relative_path}" if relative_path else f"{cfg.remote_base_path}/"
     if _is_local(cfg):
         return base_path
-    return f"{cfg.remote_user}@{cfg.remote_host}:{base_path}"
+    return f"{destination(cfg)}:{base_path}"
 
 
 def _ssh_option(cfg: UploadConfig) -> list[str]:
+    options = [f"--bwlimit={cfg.bandwidth_limit_kbps}"] if cfg.bandwidth_limit_kbps else []
     if _is_local(cfg):
-        return []
-    return ["-e", f"ssh -i {cfg.ssh_key_path} -o StrictHostKeyChecking=accept-new -o BatchMode=yes"]
+        return options
+    return [*options, "-e", shlex.join(ssh_command(cfg))]
 
 
 def _run(cmd: list[str], warn_on_failure: bool = True) -> bool:

@@ -190,6 +190,25 @@ file's colour matrix, a display-only brightness, sRGB curve. From there:
 The live stream (`/api/frame/latest.jpg`, `/ws/stream`) stays JPEG. Older
 captures in `.jpg`/`.fits` keep working everywhere alongside the new formats.
 
+## Upload
+
+With `upload.enabled`, published captures (`thumbnails/`, `raw/`,
+`derivatives/` — nothing else from the data directory) plus the manifests
+are pushed to a remote archive: today's directories every
+`thumbnail_interval_s`, everything every `reconcile_interval_s` (that pass
+also advances retention's "safe to delete" mark). Pick `upload.transport`:
+
+| transport | for | how |
+|---|---|---|
+| `rsync` | SSH servers with rsync, or a local/NFS path (`remote_host` empty) | delta transfer, resumable |
+| `scp` | SSH servers with only scp/sftp (hosting, NAS) | one remote `find` listing, then only missing/changed files, `scp -p` |
+| `s3` | S3-compatible object stores | bucket listing, then only missing/changed objects; keys from the AWS credential chain |
+
+rsync and scp use `remote_user@remote_host:remote_base_path`, the key in
+`ssh_key_path` (no passphrase; the host key is accepted on first use),
+`ssh_port`, and optionally `bandwidth_limit_kbps`. Nothing is ever deleted
+remotely.
+
 ## Accounts and access control
 
 The API and web UI are behind a login. On first start, if there is no account
