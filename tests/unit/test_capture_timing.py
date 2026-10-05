@@ -167,3 +167,31 @@ def test_a_capture_that_cannot_make_the_next_slot_skips_it():
     gaps = [b - a for a, b in zip(sink.times[1:5], sink.times[2:5], strict=False)]
     # Every other slot: 0.4 s apart, still on the 0.2 s grid.
     assert all(g == pytest.approx(0.4, abs=0.08) for g in gaps)
+
+
+def test_stream_mode_cuts_a_long_slot_wait_short():
+    """Turning stream mode on while waiting for a far-off slot captures on
+    the new, fast grid straight away — not after the old interval."""
+    cfg = _config(30.0)
+    cfg = cfg.model_copy(
+        update={"storage_policy": cfg.storage_policy.model_copy(update={"realtime_stream_fps": 4.0})}
+    )
+    sink = _RecordingSink()
+    worker = _worker(MockCameraBackend(), cfg, sink)
+    worker.start()
+    try:
+        deadline = time.monotonic() + 35
+        while len(sink.times) < 1 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sink.times, "no first frame"
+        time.sleep(0.3)  # now waiting for a slot up to 30 s away
+        switched = time.monotonic()
+        worker.stream_mode.set(True)
+        while len(sink.times) < 3 and time.monotonic() - switched < 5:
+            time.sleep(0.02)
+        assert len(sink.times) >= 3
+        assert sink.times[1] - switched < 1.0  # next capture on the 0.25 s grid
+    finally:
+        worker.request_stop()
+        worker.join(2)
+    assert not worker.is_alive()  # the stop also cut the wait short

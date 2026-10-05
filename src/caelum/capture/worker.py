@@ -91,9 +91,18 @@ class StreamModeController:
 
     def __init__(self) -> None:
         self._event = threading.Event()
+        self._listeners: list[Callable[[], None]] = []
+
+    def add_listener(self, callback: Callable[[], None]) -> None:
+        """Called (from the setter's thread) whenever the mode changes."""
+        self._listeners.append(callback)
 
     def set(self, enabled: bool) -> None:
+        if enabled == self._event.is_set():
+            return
         self._event.set() if enabled else self._event.clear()
+        for callback in list(self._listeners):
+            callback()
 
     @property
     def enabled(self) -> bool:
@@ -174,6 +183,10 @@ class CaptureWorker(threading.Thread):
         self._frame_sink = frame_sink
         self._sky_state_refresh_interval_s = sky_state_refresh_interval_s
         self.stream_mode = stream_mode or StreamModeController()
+        # Set to cut a wait for the next slot short: stream mode toggled
+        # (the cadence changed) or shutdown. Never interrupts an exposure.
+        self._wake = threading.Event()
+        self.stream_mode.add_listener(self._wake.set)
         self.manual_exposure = manual_exposure or ManualExposureOverride()
         self.white_balance_override = white_balance_override or WhiteBalanceOverride()
 
@@ -272,6 +285,7 @@ class CaptureWorker(threading.Thread):
 
     def request_stop(self) -> None:
         self._stop_event.set()
+        self._wake.set()
 
     def run(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -411,7 +425,7 @@ class CaptureWorker(threading.Thread):
         logging.shutdown()
         os._exit(_WATCHDOG_EXIT_CODE)
 
-    def _wait_for_slot(self, interval_s: float, exposure_s: float) -> float:
+    def _wait_for_slot(self, interval_s: float, exposure_s: float) -> float | None:
         """Wait for the moment to start the next capture, and return the
         grid slot (wall-clock seconds) it is aimed at.
 
@@ -420,7 +434,11 @@ class CaptureWorker(threading.Thread):
         the exposure* is what lands on a slot, so captures are evenly spaced
         however much the exposure changes. The start is brought forward by
         half the exposure plus the measured start latency. A slot that can't
-        be made any more is skipped; the grid itself never moves."""
+        be made any more is skipped; the grid itself never moves.
+
+        Returns None instead if the wait was cut short because the cadence
+        changed (stream mode toggled) — the caller recomputes the interval
+        and waits again, on the new grid."""
         now = time.time()
         if self._next_due is None or self._grid_interval_s != interval_s:
             self._grid_interval_s = interval_s
@@ -428,7 +446,9 @@ class CaptureWorker(threading.Thread):
         lead = exposure_s / 2 + self._start_latency_s
         if self._next_due - lead < now:
             self._next_due += math.ceil((now - (self._next_due - lead)) / interval_s) * interval_s
-        self._stop_event.wait(self._next_due - lead - now)
+        if self._wake.wait(max(0.0, self._next_due - lead - now)) and not self._stop_event.is_set():
+            self._wake.clear()
+            return None
         return self._next_due
 
     # ---- capture programs ---------------------------------------------------
@@ -446,9 +466,16 @@ class CaptureWorker(threading.Thread):
         exposure_s = record["commanded"]["exposure_us"] / 1e6
         due = None
         if align_to_slot:
-            due = self._wait_for_slot(self._run_interval_s, exposure_s)
-            if self._stop_event.is_set():
-                raise ProgramStopped
+            while True:
+                due = self._wait_for_slot(self._run_interval_s, exposure_s)
+                if self._stop_event.is_set():
+                    raise ProgramStopped
+                if due is not None:
+                    break
+                # The cadence changed while waiting (e.g. stream mode on):
+                # aim at the next slot of the new grid instead.
+                self._run_interval_s = self._interval(self._config_manager.current, self._refresh_sky_state())
+                logger.info("Capture cadence changed — next capture on the %.2fs grid", self._run_interval_s)
         # Waiting may have taken a whole interval — describe the sky as it
         # is now, at the capture.
         sky_state = self._refresh_sky_state()
@@ -612,7 +639,9 @@ class CaptureWorker(threading.Thread):
         if ctx.captures == 0:
             # Nothing captured (or failed before capturing): still use up
             # the slot, so a broken program can't spin.
-            self._next_due = self._wait_for_slot(interval_s, 0.0) + interval_s
+            due = self._wait_for_slot(interval_s, 0.0)
+            if due is not None:
+                self._next_due = due + interval_s
         self._frame_period(cfg, sky_state, self._commanded)
 
         if capture_set is not None:
