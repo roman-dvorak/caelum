@@ -12,8 +12,8 @@ from caelum.capture.worker import CaptureWorker
 from caelum.config.schema import CameraConfig
 from caelum.control.exposure import ExposureController
 from caelum.control.storage_policy import StoragePolicy
-from caelum.processing.inline import InlineFrameSink
 from caelum.events import EventBus
+from caelum.processing.inline import InlineFrameSink
 
 
 def _make_worker(resolve_camera_config=None, opens=None) -> CaptureWorker:

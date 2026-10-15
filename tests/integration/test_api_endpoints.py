@@ -14,9 +14,9 @@ from caelum.config.manager import ConfigManager
 from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
-from caelum.processing.inline import InlineFrameSink
 from caelum.events import EventBus
 from caelum.logging_conf import LogBuffer
+from caelum.processing.inline import InlineFrameSink
 from caelum.settings import Settings
 
 ADMIN_PASSWORD = "admin-test-password"

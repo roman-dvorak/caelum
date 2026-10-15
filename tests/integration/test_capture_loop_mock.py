@@ -11,8 +11,8 @@ from caelum.config.manager import ConfigManager
 from caelum.control.exposure import ExposureController
 from caelum.control.skystate import SkyState
 from caelum.control.storage_policy import StoragePolicy
-from caelum.processing.inline import InlineFrameSink
 from caelum.events import FRAME_CAPTURED, EventBus
+from caelum.processing.inline import InlineFrameSink
 
 
 class _FakeSkyStateCalculator:
