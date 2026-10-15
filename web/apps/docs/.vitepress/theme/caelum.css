@@ -1,0 +1,73 @@
+/* Maps VitePress' theme variables onto the caelum palette, so the docs and
+ * the two web apps read as one product. The values are copied from
+ * packages/ui/src/theme.css — that file is the source of truth; VitePress
+ * cannot import it, because Tailwind's `@theme` block is not plain CSS.
+ *
+ * VitePress toggles dark mode with a `.dark` class on <html>, whereas the
+ * apps use `data-theme` — different mechanism, same two palettes. */
+
+:root {
+  --vp-c-brand-1: #a9690f;
+  --vp-c-brand-2: #855009;
+  --vp-c-brand-3: #a9690f;
+  --vp-c-brand-soft: rgba(169, 105, 15, 0.14);
+
+  --vp-c-bg: #f7f4ee;
+  --vp-c-bg-alt: #f1ece2;
+  --vp-c-bg-soft: #fbf8f2;
+  --vp-c-bg-elv: #ffffff;
+
+  --vp-c-text-1: #1b1712;
+  --vp-c-text-2: #5d5346;
+  --vp-c-text-3: #8d8271;
+
+  --vp-c-divider: #ddd5c5;
+  --vp-c-border: #ddd5c5;
+  --vp-c-gutter: #ece7dc;
+
+  --vp-font-family-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Roboto Mono', Consolas, monospace;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #a9690f, #276476);
+}
+
+.dark {
+  --vp-c-brand-1: #e8a13a;
+  --vp-c-brand-2: #ffc266;
+  --vp-c-brand-3: #e8a13a;
+  --vp-c-brand-soft: rgba(232, 161, 58, 0.16);
+
+  --vp-c-bg: #0b0a08;
+  --vp-c-bg-alt: #110f0c;
+  --vp-c-bg-soft: #16130f;
+  --vp-c-bg-elv: #16130f;
+
+  --vp-c-text-1: #f3ede1;
+  --vp-c-text-2: #ab9d89;
+  --vp-c-text-3: #6e6353;
+
+  --vp-c-divider: #2f2a20;
+  --vp-c-border: #2f2a20;
+  --vp-c-gutter: #211d17;
+
+  --vp-home-hero-name-background: linear-gradient(120deg, #e8a13a, #6bb3c4);
+}
+
+/* The apps use sharp corners throughout; rounded doc cards next to them
+ * look like a different product. */
+.VPFeature,
+.vp-doc div[class*='language-'],
+.custom-block {
+  border-radius: 2px;
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+}
+
+/* Long config tables and command lines scroll inside their own container
+ * rather than widening the page on a phone. */
+.vp-doc div[class*='language-'] pre {
+  overflow-x: auto;
+}

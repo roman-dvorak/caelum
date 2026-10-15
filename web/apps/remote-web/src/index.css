@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* See apps/local-web/src/index.css for why this is needed: Tailwind's class
+ * scanner needs an explicit pointer at the shared @caelum/ui source, which
+ * this app imports unbuilt via the pnpm workspace link. */
+@source "../../../packages/ui/src";
+
+@import "../../../packages/ui/src/theme.css";

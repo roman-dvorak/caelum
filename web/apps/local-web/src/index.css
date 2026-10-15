@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Explicit source so Tailwind's class scanner also sees classes used only
+ * inside the shared @caelum/ui component source (which this app imports
+ * directly, unbuilt, via the pnpm workspace link). Without this, utility
+ * classes referenced only from packages/ui would be tree-shaken out of the
+ * generated CSS. */
+@source "../../../packages/ui/src";
+
+@import "../../../packages/ui/src/theme.css";
