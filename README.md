@@ -1,29 +1,170 @@
 # caelum
 
-Headless capture engine for (not only) allsky cameras. Owns the camera, computes
-sky state (sun/moon altitude, twilight period), drives exposure/gain, processes
-frames in RAM, and persists/uploads only what's decided to be kept.
+**Headless allsky / astro camera engine for Raspberry Pi and Linux.**
 
-See `../caelum-web` for the local and remote React frontends, and
-`/home/roman/.claude/plans/pot-eboval-bych-zde-zalo-it-cuddly-squid.md` for the
-full architecture writeup.
+caelum owns the camera, knows where the Sun and Moon are, drives exposure and
+gain through day, twilight and night, processes every frame in RAM and writes
+or uploads only what is worth keeping. It runs unattended as a systemd
+service and is controlled from a web UI.
 
-## Development
+- **Cameras** — Raspberry Pi HQ/Global/Module cameras via picamera2/libcamera,
+  any UVC/V4L2 webcam via OpenCV, and a mock backend for development.
+  Switchable at runtime, without a restart.
+- **Sky-aware auto-exposure** — closed-loop exposure/gain control with
+  separate presets for day, civil/nautical/astronomical twilight and night;
+  Sun/Moon positions from astropy's builtin ephemeris, fully offline.
+- **RAM-first pipeline** — thumbnails, JSON metadata sidecars and raw FITS,
+  dark-frame and lens/white-balance calibration, configurable overlays.
+- **Plugins** — keograms, meteor detection, timelapses, telescope-position
+  overlay; third-party plugins use the same interface.
+- **Storage and archive** — rotating local cache with retention policy and an
+  rsync uploader to a permanent remote archive, viewable as a static
+  multi-camera gallery.
+- **Web UI** — live view, recordings by night, file browser, settings, live
+  logs, web terminal; accounts with admin/viewer roles.
+
+The web frontends (local control UI, static remote gallery, documentation
+site) live in a separate repository, `caelum-web`.
+
+## Installation
+
+Pick one:
+
+| | For | How |
+| --- | --- | --- |
+| [A. System install](#a-system-install-raspberry-pi--debian) | a camera in the field — Raspberry Pi OS, Debian, Ubuntu | `scripts/install-system.sh` → systemd service |
+| [B. Manual / pip](#b-manual-install) | other distros, custom layouts, containers | `pip install` + your own service |
+| [C. Development](#c-development) | working on caelum itself | `uv sync` + mock camera |
+
+Requirements: Linux, Python ≥ 3.11, Redis (optional but recommended — without
+it caelum runs off the on-disk config only). On a Raspberry Pi, use
+**Raspberry Pi OS Bookworm (64-bit)**; a Pi 4 or 5 is recommended.
+
+### A. System install (Raspberry Pi / Debian)
+
+```bash
+sudo apt install -y git
+sudo git clone https://github.com/roman-dvorak/caelum /opt/caelum
+sudo /opt/caelum/scripts/install-system.sh --web-dist /path/to/local-web/dist
+```
+
+The script is idempotent and does everything a field install needs:
+
+1. installs `redis-server`, `python3-venv`, `rsync` and — for the Pi camera —
+   `python3-picamera2` from apt,
+2. creates a `caelum` system user (in the `video` group),
+3. builds a virtualenv in `/opt/caelum/.venv` and installs caelum into it,
+4. creates `/etc/caelum` (config, accounts, `caelum.env`) and
+   `/var/lib/caelum` (captured data),
+5. seeds `config.json` with the right camera backend, copies in the web UI,
+6. installs and starts `caelum.service`.
+
+Options (`--help` for the full list):
+
+| Option | Meaning |
+| --- | --- |
+| `--camera picamera2\|opencv\|mock` | camera backend for a *new* config; default `picamera2` on a Raspberry Pi, `mock` elsewhere |
+| `--web-dist DIR` | a built `caelum-web/apps/local-web/dist` to serve at `/` |
+| `--user NAME` | service account name (default `caelum`) |
+| `--no-start` | install, but do not enable/start the service |
+
+Then open `http://<camera-ip>:8000/`, log in as `admin` with the password from
+`/etc/caelum/initial-admin-password.txt`, change it on the Accounts page,
+delete the file, and set the camera's location in Settings (the shipped
+default is Prague). See [Accounts and access control](#accounts-and-access-control).
+
+```bash
+sudo cat /etc/caelum/initial-admin-password.txt
+journalctl -u caelum -f
+```
+
+**Web UI.** The control UI is a separate static build from `caelum-web`.
+Without `--web-dist` caelum still runs, API-only. Build it on any machine with
+Node ≥ 22 and pnpm (not on the Pi — there is no need) and copy it over:
+
+```bash
+cd caelum-web && pnpm install && pnpm --filter local-web build
+rsync -a apps/local-web/dist/ pi@camera:/tmp/local-web-dist/
+```
+
+then pass `--web-dist /tmp/local-web-dist` to the installer (or re-run it
+with that option later).
+
+**Upgrade** — pull and re-run; config, accounts and data are kept,
+`default.json` and the unit file are refreshed:
+
+```bash
+sudo git -C /opt/caelum pull
+sudo /opt/caelum/scripts/install-system.sh
+```
+
+**Uninstall:**
+
+```bash
+sudo systemctl disable --now caelum
+sudo rm /etc/systemd/system/caelum.service
+sudo rm -rf /opt/caelum /etc/caelum   # code, config and accounts
+sudo rm -rf /var/lib/caelum           # captured data — only if you mean it
+sudo userdel caelum
+```
+
+#### Why the Pi install pins numpy
+
+Raspberry Pi OS's camera stack (`python3-picamera2` + `python3-libcamera` from
+apt) is compiled against the *system* Python (3.11 on Bookworm) and the
+*system* numpy (1.24.x) — there is no PyPI wheel for `libcamera` itself, so
+apt is the only way to get it. The installer therefore creates the venv with
+`--system-site-packages` (so it sees apt's picamera2) and installs with
+`scripts/constraints-rpi.txt`, which pins numpy 1.24.2, astropy 6.1.7 (the
+newest line supporting numpy 1.x) and opencv < 4.12. A numpy 2.x in that venv
+*imports* fine but crashes with `numpy.dtype size changed` the moment
+picamera2 pulls in `simplejpeg`. The full test suite passes under exactly
+these pins on Python 3.11.
+
+### B. Manual install
+
+caelum is a normal Python package with a `caelum` console script:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install git+https://github.com/roman-dvorak/caelum
+```
+
+(On a Raspberry Pi with the Pi camera, add `--system-site-packages` to the
+venv and `-c scripts/constraints-rpi.txt` to pip — see above.)
+
+It is configured by a handful of environment variables, all optional (see
+`.env.example`; a `.env` in the working directory is read too):
+
+| Variable | Default | |
+| --- | --- | --- |
+| `CAELUM_CONFIG_DIR` | `./config` | `config.json`, `auth.json`; put `config/default.json` from this repo here |
+| `CAELUM_DATA_DIR` | `./data` | captured frames, derivatives |
+| `CAELUM_WEB_DIR` | `../caelum-web/apps/local-web/dist` relative to a source checkout | built web UI, served at `/` |
+| `CAELUM_HTTP_HOST` / `CAELUM_HTTP_PORT` | `0.0.0.0` / `8000` | |
+| `CAELUM_REDIS_URL` | `redis://127.0.0.1:6379/0` | |
+| `CAELUM_CAMERA_BACKEND` | unset | force a backend regardless of config (dev/CI) |
+| `CAELUM_TERMINAL_SHELL` | `$SHELL`, else `/bin/bash` | shell for the web terminal |
+| `CAELUM_LOG_LEVEL` | `INFO` | |
+
+For a service, `systemd/caelum.service.template` is the unit the installer
+renders — replace the `@...@` placeholders by hand.
+
+### C. Development
 
 ```bash
 uv sync --group dev
 uv run pytest
+./scripts/dev_run.sh        # seeds ./config + ./data, starts redis if needed, runs on the mock camera
 ```
 
-No real camera is required for development — the mock backend
-(`CAELUM_CAMERA_BACKEND=mock`, the default outside a Raspberry Pi) generates
-synthetic frames with simulated exposure/gain-dependent brightness.
+No real camera is required — the mock backend (`CAELUM_CAMERA_BACKEND=mock`)
+generates synthetic frames with simulated exposure/gain-dependent brightness.
+With `caelum-web` checked out next to this repository and
+`pnpm --filter local-web build` run there, the UI is served automatically;
+for frontend work use its Vite dev server instead.
 
-```bash
-uv run caelum
-```
-
-### Testing with a real webcam
+#### Testing with a real webcam
 
 Set `camera.backend` to `"opencv"` (or `CAELUM_CAMERA_BACKEND=opencv` to
 override for one run) to capture from any UVC/V4L2 webcam via OpenCV —
@@ -38,43 +179,6 @@ photometry. In particular, the default `exposure_policy.day` preset
 indoors; either widen that preset for a local test config, or use
 `POST /api/camera/exposure-override` with something like
 `{"exposure_us": 100000}` to see a normally-lit room.
-
-### Deploying to a real Raspberry Pi (picamera2)
-
-Raspberry Pi OS's camera stack (`python3-picamera2` + `python3-libcamera` from
-apt) is compiled against the *system* Python (3.11 on Bookworm) and the
-*system* numpy (1.24.x) — there is no PyPI wheel for `libcamera` itself, so
-this is the only way to get it. That drives the whole install recipe:
-
-```bash
-sudo apt install -y python3-picamera2 redis-server
-python3.11 -m venv --system-site-packages .venv   # sees apt's picamera2/libcamera
-.venv/bin/pip install -e . 'numpy==1.24.2' 'astropy==6.1.7'  # match the system ABI
-```
-
-`numpy>=2.1`/current `astropy` (this project's normal floors, fine on a dev
-machine) will *import* but crash with a `numpy.dtype size changed` ABI error
-the moment `picamera2` pulls in `simplejpeg` — numpy changed its C struct
-layout in 2.0, and the apt-compiled extensions were built against 1.24's.
-Pinning both to versions compatible with the system numpy (6.1.x is the
-newest astropy still numpy-1.x-compatible) resolves it; `--no-deps` when
-installing caelum itself avoids pip immediately undoing the pin by pulling
-newer defaults back in.
-
-`requires-python = ">=3.11"` in `pyproject.toml` reflects this too — 3.13
-would be preferable in isolation, but Bookworm's picamera2 forces 3.11, and
-that's this project's actual deployment target.
-
-### Local systemd service (optional)
-
-There's no systemd unit active anywhere by default — local dev just runs
-`scripts/dev_run.sh` / `uv run caelum` directly, and `systemd/caelum.service.template`
-is a template for a real Raspberry Pi deployment (`WorkingDirectory`,
-`.venv` path, and `caelum` user need adjusting for wherever it's installed).
-To run it as a persistent local service instead (e.g. to leave a webcam
-test running in the background), copy the template, fill in the paths, and
-`systemctl --user enable --now` it — ask first if you'd like this set up,
-since it changes what starts automatically on this machine.
 
 ## Configuration
 

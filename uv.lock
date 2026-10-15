@@ -142,7 +142,7 @@ dev = [
 requires-dist = [
     { name = "astropy", specifier = ">=6.1" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "numpy", specifier = ">=2.1" },
+    { name = "numpy", specifier = ">=1.24" },
     { name = "opencv-python-headless", specifier = ">=4.10" },
     { name = "picamera2", marker = "(platform_machine == 'aarch64' and extra == 'picamera2') or (platform_machine == 'armv7l' and extra == 'picamera2')", specifier = ">=0.3.20" },
     { name = "pillow", specifier = ">=10.0" },

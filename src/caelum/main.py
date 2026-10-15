@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
 
 import uvicorn
 
@@ -38,10 +37,6 @@ from caelum.storage.writer import StorageWriter
 from caelum.upload.uploader import UploadWorker
 
 logger = logging.getLogger(__name__)
-
-# apps/local-web/dist, if it's been built — see caelum-web.
-_LOCAL_WEB_DIST = Path(__file__).resolve().parents[3] / "caelum-web" / "apps" / "local-web" / "dist"
-
 
 async def _async_main(settings: Settings) -> None:
     log_buffer = configure_logging(settings.log_level)
@@ -120,7 +115,8 @@ async def _async_main(settings: Settings) -> None:
     reload_plugins(cfg)
     config_manager.on_change(reload_plugins)
 
-    app = create_app(static_dir=_LOCAL_WEB_DIST if _LOCAL_WEB_DIST.exists() else None)
+    web_dir = settings.web_dir if settings.web_dir and settings.web_dir.is_dir() else None
+    app = create_app(static_dir=web_dir)
     app.state.settings = settings
     app.state.config_manager = config_manager
     app.state.user_store = user_store
@@ -138,7 +134,7 @@ async def _async_main(settings: Settings) -> None:
         settings.camera_backend_override or cfg.camera.backend,
         settings.http_host,
         settings.http_port,
-        "bundled" if _LOCAL_WEB_DIST.exists() else "not built",
+        web_dir or "not built",
         "on" if cfg.auth.enabled else "OFF",
     )
 

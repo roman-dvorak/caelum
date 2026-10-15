@@ -1,8 +1,40 @@
 [project]
 name = "caelum"
 version = "0.1.0"
-description = "Headless allsky/astro camera capture engine: exposure control, sky-state, RAM-first image pipeline"
+description = "Headless allsky / astro camera engine for Raspberry Pi: sky-aware auto-exposure, RAM-first image pipeline, keograms, meteor detection, timelapses, web UI and remote archive upload"
 readme = "README.md"
+keywords = [
+    "allsky",
+    "all-sky camera",
+    "astronomy",
+    "astrophotography",
+    "raspberry-pi",
+    "picamera2",
+    "libcamera",
+    "meteor-detection",
+    "keogram",
+    "timelapse",
+    "sky-quality",
+    "weather-monitoring",
+    "observatory",
+    "fastapi",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: No Input/Output (Daemon)",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics :: Capture :: Digital Camera",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
 authors = [
     { name = "Roman Dvorak", email = "romandvorak@mlab.cz" }
 ]
@@ -12,7 +44,9 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "redis>=5.2",
-    "numpy>=2.1",
+    # 1.24 is Raspberry Pi OS Bookworm's system numpy, which apt's picamera2
+    # is compiled against — see scripts/constraints-rpi.txt.
+    "numpy>=1.24",
     "opencv-python-headless>=4.10",
     "astropy>=6.1",
     "python-dotenv>=1.0",
@@ -20,6 +54,11 @@ dependencies = [
     "python-multipart>=0.0.12",
     "Pillow>=10.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/roman-dvorak/caelum"
+Source = "https://github.com/roman-dvorak/caelum"
+Issues = "https://github.com/roman-dvorak/caelum/issues"
 
 [project.optional-dependencies]
 picamera2 = [
