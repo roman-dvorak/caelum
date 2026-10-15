@@ -7,12 +7,12 @@ backend is open that isn't. See main.py's `resolve_camera_config`."""
 from __future__ import annotations
 
 from caelum.cameras.mock_backend import MockCameraBackend
-from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
 from caelum.config.schema import CameraConfig
 from caelum.control.exposure import ExposureController
 from caelum.control.storage_policy import StoragePolicy
+from caelum.processing.inline import InlineFrameSink
 from caelum.events import EventBus
 
 
@@ -29,9 +29,7 @@ def _make_worker(resolve_camera_config=None, opens=None) -> CaptureWorker:
         skystate_calculator=None,
         exposure_controller=ExposureController(),
         storage_policy=StoragePolicy(),
-        dark_library=DarkLibrary(darks_dir=None),
-        frame_store=FrameStore(),
-        event_bus=EventBus(),
+        frame_sink=InlineFrameSink(FrameStore(), EventBus()),
         resolve_camera_config=resolve_camera_config,
     )
 

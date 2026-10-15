@@ -20,6 +20,12 @@ from pathlib import Path
 
 MANAGED_SUBDIRS = ("raw", "thumbnails", "derivatives")
 
+#: What new captures are written as (first entry) plus the legacy formats
+#: older captures on disk may still be in — every reader filters with these
+#: so a mixed directory keeps working.
+THUMBNAIL_SUFFIXES = (".webp", ".jpg", ".jpeg")
+RAW_SUFFIXES = (".dng", ".fits")
+
 
 def date_parts(when: datetime) -> tuple[str, str, str]:
     return when.strftime("%Y"), when.strftime("%m"), when.strftime("%d")
@@ -46,11 +52,30 @@ def date_dir_for_iso(data_dir: Path, subdir: str, iso_date: str) -> Path:
 
 
 def raw_path(data_dir: Path, when: datetime) -> Path:
-    return date_dir(data_dir, "raw", when) / f"{timestamp_stem(when)}.fits"
+    return date_dir(data_dir, "raw", when) / f"{timestamp_stem(when)}{RAW_SUFFIXES[0]}"
 
 
 def thumbnail_path(data_dir: Path, when: datetime) -> Path:
-    return date_dir(data_dir, "thumbnails", when) / f"{timestamp_stem(when)}.jpg"
+    return date_dir(data_dir, "thumbnails", when) / f"{timestamp_stem(when)}{THUMBNAIL_SUFFIXES[0]}"
+
+
+def member_stem(when: datetime, index: int) -> str:
+    """A capture-set member's stem: the representative's stem plus `_mNN`
+    (so `capture_time_of` still reads the set's time from it)."""
+    return f"{timestamp_stem(when)}_m{index:02d}"
+
+
+def set_dir_name(when: datetime) -> str:
+    """Members of a capture set other than its representative live in this
+    subdirectory of the day directory — out of sight of everything that
+    lists one capture per file, still found by recursive walks (retention)."""
+    return f"{timestamp_stem(when)}_set"
+
+
+def member_path(data_dir: Path, subdir: str, when: datetime, index: int, suffix: str) -> Path:
+    """`<data_dir>/<subdir>/YYYY/MM/DD/<stem>_set/<stem>_mNN<suffix>`, `when`
+    being the representative's capture time."""
+    return date_dir(data_dir, subdir, when) / set_dir_name(when) / f"{member_stem(when, index)}{suffix}"
 
 
 def sidecar_path(image_path: Path) -> Path:

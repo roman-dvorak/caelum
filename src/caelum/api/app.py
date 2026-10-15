@@ -11,22 +11,25 @@ from caelum import __version__
 from .routes import (
     auth,
     camera,
+    capture_programs,
     config,
     files,
     frames,
     logs,
     overlay,
     plugins,
+    raw_white_balance,
     status,
     stream,
     system,
     terminal,
     update,
+    upload,
 )
 from .security import require_admin, require_preview
 
 
-def create_app(static_dir: Path | None = None) -> FastAPI:
+def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = ()) -> FastAPI:
     app = FastAPI(title="caelum", version=__version__)
 
     app.add_middleware(
@@ -35,12 +38,16 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
         # it, so a wildcard here would be both useless and rejected by every
         # browser for credentialed requests. Vite's dev server proxies /api
         # to the backend, making even development same-origin; this list is
-        # only for pointing a dev frontend at a camera on the LAN.
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        # only for pointing a dev frontend at a camera on the LAN, plus any
+        # `cors_origins` (the static caelum-viewer reads /api/files cookie-
+        # less, so it only works with `auth.preview_access: public`).
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *cors_origins],
         allow_origin_regex=r"http://localhost:\d+|http://127\.0\.0\.1:\d+",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # The raw white-balance pixel buffer says its size in these.
+        expose_headers=["X-Width", "X-Height"],
     )
 
     # Auth routes handle their own access levels (login must stay reachable
@@ -57,6 +64,9 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
     app.include_router(system.router, prefix="/api", dependencies=admin_only)
     app.include_router(update.router, prefix="/api", dependencies=admin_only)
+    app.include_router(raw_white_balance.router, prefix="/api", dependencies=admin_only)
+    app.include_router(capture_programs.router, prefix="/api", dependencies=admin_only)
+    app.include_router(upload.router, prefix="/api", dependencies=admin_only)
     # files/frames/overlay declare per-route levels: reads are preview, writes admin.
     app.include_router(files.router, prefix="/api")
     app.include_router(frames.router, prefix="/api")

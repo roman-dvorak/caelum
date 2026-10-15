@@ -33,12 +33,24 @@ def test_resolve_frame_paths_prefers_raw_over_thumbnail(tmp_path):
     end = datetime(2026, 9, 20, 20, 0, tzinfo=UTC)
     when = datetime(2026, 9, 20, 19, 0, tzinfo=UTC)
 
+    fits = paths.raw_path(tmp_path, when).with_suffix(".fits")  # a legacy raw cv2/astropy can decode
     _touch(paths.thumbnail_path(tmp_path, when))
-    _touch(paths.raw_path(tmp_path, when))
+    _touch(fits)
 
     result = _resolve_frame_paths(tmp_path, start, end)
 
-    assert result == [paths.raw_path(tmp_path, when)]
+    assert result == [fits]
+
+
+def test_resolve_frame_paths_uses_the_thumbnail_for_dng_raws(tmp_path):
+    start = datetime(2026, 9, 20, 18, 0, tzinfo=UTC)
+    end = datetime(2026, 9, 20, 20, 0, tzinfo=UTC)
+    when = datetime(2026, 9, 20, 19, 0, tzinfo=UTC)
+
+    _touch(paths.thumbnail_path(tmp_path, when))
+    _touch(paths.raw_path(tmp_path, when))  # .dng: undebayered, not decodable by cv2
+
+    assert _resolve_frame_paths(tmp_path, start, end) == [paths.thumbnail_path(tmp_path, when)]
 
 
 def test_resolve_frame_paths_spans_a_window_crossing_midnight(tmp_path):

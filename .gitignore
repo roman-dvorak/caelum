@@ -33,3 +33,6 @@ htmlcov/
 
 # Web UI bundled into the wheel by scripts/build-release.sh
 /src/caelum/webui/
+
+# In-progress atomic config writes
+/config/.config-*.json.tmp

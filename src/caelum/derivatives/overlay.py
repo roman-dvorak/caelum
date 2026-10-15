@@ -14,6 +14,8 @@ own docstring for why plugins never see the frame that early).
 
 from __future__ import annotations
 
+import string
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -25,8 +27,15 @@ from caelum.plugins.base import Plugin
 #: The fixed set of `str.format()` fields a label `template` may reference.
 #: Mirrored in the frontend's overlay editor as the "insert placeholder"
 #: quick-buttons — kept here as the single source of truth for what's valid.
+#:
+#: Beyond plain `str.format()`, templates support (see `_LabelFormatter`):
+#: - a numeric divisor: `{exposure_us/1000:.1f}` (ms with one decimal);
+#:   decimals come from the standard format spec, e.g. `{exposure_s:.2f}`;
+#: - strftime formats for datetimes: `{captured_at:%Y-%m-%d %H:%M:%S}`.
+#:   A bare `{captured_at}` keeps rendering as ISO 8601.
 LABEL_PLACEHOLDERS: tuple[str, ...] = (
     "exposure_us",
+    "exposure_s",
     "analogue_gain",
     "sky_state.period",
     "sky_state.sun_altitude_deg",
@@ -36,6 +45,7 @@ LABEL_PLACEHOLDERS: tuple[str, ...] = (
     "sky_state.moon_illumination",
     "focus_score",
     "captured_at",
+    "captured_at_local",
 )
 
 
@@ -52,9 +62,15 @@ class OverlayElementDef(BaseModel):
     color: str = "#000000"
     #: mask fill opacity.
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
-    #: label only — a `str.format()` template, e.g. "Exp: {exposure_us}us".
+    #: label only — a `str.format()` template, e.g. "Exp: {exposure_s:.2f}s"
+    #: or "{captured_at:%d.%m.%Y %H:%M} UTC" — see `LABEL_PLACEHOLDERS`.
     template: str | None = None
     font_size_px: int | None = Field(default=None, ge=1, le=200)
+    #: label only — horizontal alignment, both of the (multi-line) text and
+    #: of the label against its `x` anchor: "left" puts the text's left edge
+    #: at `x`, "right" its right edge, "center" (the original behaviour) its
+    #: middle. Newlines in `template` render as line breaks.
+    align: Literal["left", "center", "right"] = "center"
     #: image only — a filename under `data_dir/overlay_assets/`.
     asset: str | None = None
 
@@ -93,16 +109,40 @@ class OverlaySettings(BaseModel):
         return []
 
 
+class _LabelFormatter(string.Formatter):
+    """`str.format()` plus a `/divisor` suffix on field names and ISO 8601
+    as the default rendering of datetimes (strftime when a spec is given,
+    which is just `datetime.__format__`)."""
+
+    def get_field(self, field_name: str, args: Any, kwargs: Any) -> Any:
+        base, slash, divisor = field_name.partition("/")
+        value, used_key = super().get_field(base, args, kwargs)
+        if slash:
+            value = value / float(divisor)
+        return value, used_key
+
+    def format_field(self, value: Any, format_spec: str) -> Any:
+        if isinstance(value, datetime) and not format_spec:
+            return value.isoformat()
+        return super().format_field(value, format_spec)
+
+
+_LABEL_FORMATTER = _LabelFormatter()
+
+
 def _render_label_text(template: str, metadata: FrameMetadata) -> str:
     try:
-        return template.format(
+        return _LABEL_FORMATTER.format(
+            template,
             exposure_us=metadata.exposure_us,
+            exposure_s=metadata.exposure_us / 1_000_000,
             analogue_gain=metadata.analogue_gain,
             sky_state=metadata.sky_state,
             focus_score=metadata.focus_score,
-            captured_at=metadata.captured_at.isoformat(),
+            captured_at=metadata.captured_at,
+            captured_at_local=metadata.captured_at.astimezone(),
         )
-    except (KeyError, AttributeError, IndexError, ValueError):
+    except (KeyError, AttributeError, IndexError, ValueError, TypeError, ZeroDivisionError):
         # A bad/unknown placeholder shouldn't drop the whole overlay element
         # — show the raw template so the mistake is visible and fixable
         # rather than silently missing.
@@ -157,6 +197,7 @@ class OverlayWorker(Plugin):
                     "text": _render_label_text(definition.template, frame.metadata),
                     "color": definition.color,
                     "font_size_px": definition.font_size_px,
+                    "align": definition.align,
                 },
             )
         if definition.kind == "image":

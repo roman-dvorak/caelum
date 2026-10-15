@@ -35,7 +35,11 @@ def _dated_files(data_dir: Path, subdir: str) -> dict[str, list[Path]]:
             for day_dir in sorted(month_dir.iterdir()):
                 if not (day_dir.is_dir() and _MONTH_DAY_RE.match(day_dir.name)):
                     continue
-                files = sorted(p for p in day_dir.glob("*") if p.is_file() and p.suffix != ".json")
+                files = sorted(
+                    p for p in day_dir.glob("*")
+                    # Hidden files are in-progress atomic writes (`.<name>.tmp`).
+                    if p.is_file() and p.suffix != ".json" and not p.name.startswith(".")
+                )
                 if files:
                     by_date[f"{year_dir.name}-{month_dir.name}-{day_dir.name}"] = files
     return by_date

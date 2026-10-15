@@ -10,11 +10,13 @@ from starlette.requests import HTTPConnection
 
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.worker import CaptureWorker
+from caelum.capture_runtime.store import ProgramStore
 from caelum.config.manager import ConfigManager
 from caelum.control.skystate import SkyStateCalculator
 from caelum.logging_conf import LogBuffer
 from caelum.settings import Settings
 from caelum.update.job import Updater
+from caelum.upload.uploader import UploadWorker
 
 
 def get_config_manager(conn: HTTPConnection) -> ConfigManager:
@@ -35,6 +37,14 @@ def get_frame_store(conn: HTTPConnection) -> FrameStore:
 
 def get_capture_worker(conn: HTTPConnection) -> CaptureWorker:
     return conn.app.state.capture_worker
+
+
+def get_program_store(conn: HTTPConnection) -> ProgramStore:
+    return conn.app.state.program_store
+
+
+def get_upload_worker(conn: HTTPConnection) -> UploadWorker:
+    return conn.app.state.upload_worker
 
 
 def get_skystate_calculator(conn: HTTPConnection) -> SkyStateCalculator:
