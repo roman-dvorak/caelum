@@ -154,6 +154,7 @@ async def _async_main(settings: Settings) -> None:
     app.state.plugin_loader = plugin_loader
     app.state.frame_sink = frame_sink
     app.state.program_store = program_store
+    app.state.upload_worker = upload_worker
 
     frame_sink.start()
     capture_worker.start()
