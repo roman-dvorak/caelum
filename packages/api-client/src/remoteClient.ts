@@ -97,4 +97,11 @@ export class RemoteApiClient {
   keogramUrl(slug: string, date: string): string {
     return this.resolveCameraUrl(slug, `derivatives/${date}/keogram.png`)
   }
+
+  /** A `custom_image` overlay element's `asset` field, resolved against this
+   * camera's synced `overlay_assets/` directory — the whole-tree upload
+   * reconciliation pass mirrors it here alongside thumbnails/raw/derivatives. */
+  overlayAssetUrl(slug: string, asset: string): string {
+    return this.resolveCameraUrl(slug, `overlay_assets/${asset}`)
+  }
 }

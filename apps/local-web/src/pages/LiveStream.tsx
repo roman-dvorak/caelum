@@ -69,7 +69,12 @@ export function LiveStream() {
 
       <section className="overflow-hidden border border-line bg-void">
         {frame ? (
-          <ImageViewer src={frame.imageBlobUrl} metadata={frame.metadata} alt="Live camera feed" />
+          <ImageViewer
+            src={frame.imageBlobUrl}
+            metadata={frame.metadata}
+            alt="Live camera feed"
+            resolveAssetUrl={localApiClient.overlayAssetUrl}
+          />
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-faint">
             {streamStatus === 'connecting' ? 'Connecting to live stream…' : 'Waiting for first frame…'}

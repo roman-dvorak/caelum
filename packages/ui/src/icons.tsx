@@ -137,6 +137,12 @@ export const ChevronRightIcon = (props: IconProps) => (
   </Icon>
 )
 
+export const ChevronLeftIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M15 5l-7 7 7 7" />
+  </Icon>
+)
+
 export const DownloadIcon = (props: IconProps) => (
   <Icon {...props}>
     <path d="M12 3v11M8 10.5l4 4 4-4" />
@@ -182,5 +188,32 @@ export const PauseIcon = (props: IconProps) => (
 export const PlayIcon = (props: IconProps) => (
   <Icon {...props}>
     <path d="M7 5v14l12-7z" fill="currentColor" stroke="none" />
+  </Icon>
+)
+
+export const CpuIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="7" y="7" width="10" height="10" rx="1" />
+    <path d="M9.5 7V3.5M14.5 7V3.5M9.5 20.5V17M14.5 20.5V17M7 9.5H3.5M7 14.5H3.5M20.5 9.5H17M20.5 14.5H17" />
+  </Icon>
+)
+
+export const PowerIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 3.5v7" />
+    <path d="M7.5 6.2a7 7 0 109 0" />
+  </Icon>
+)
+
+export const LayersIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 3.5l8 4.5-8 4.5-8-4.5z" />
+    <path d="M4 12.5l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" />
+  </Icon>
+)
+
+export const DropletIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 3.5c3.5 4.2 6 7.5 6 10.5a6 6 0 11-12 0c0-3 2.5-6.3 6-10.5z" />
   </Icon>
 )

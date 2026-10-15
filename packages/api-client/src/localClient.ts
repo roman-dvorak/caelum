@@ -12,10 +12,13 @@ import type {
   CameraOptions,
   DeepPartial,
   DeleteFramesRequest,
+  DerivativeKindSummary,
+  DerivativeListResponse,
   DirectoryListing,
   ExposureOverrideRequest,
   ExposureOverrideResponse,
   FrameListResponse,
+  ListDerivativesParams,
   ListFramesParams,
   ObservationNightSummary,
   FrameMetadata,
@@ -27,8 +30,14 @@ import type {
   Role,
   SkyStateResponse,
   StatusResponse,
+  OverlayAssetInfo,
+  SystemActionResponse,
+  SystemInfoResponse,
   UsageResponse,
   UserSummary,
+  WhiteBalanceAutoCalibrateRequest,
+  WhiteBalanceRequest,
+  WhiteBalanceResponse,
 } from './types.js'
 
 export interface LocalApiClientOptions {
@@ -136,6 +145,14 @@ export class LocalApiClient {
 
   clearExposureOverride(): Promise<ExposureOverrideResponse> {
     return this.postJson<ExposureOverrideResponse>('/camera/exposure-override', { clear: true })
+  }
+
+  setWhiteBalance(body: WhiteBalanceRequest): Promise<WhiteBalanceResponse> {
+    return this.postJson<WhiteBalanceResponse>('/camera/white-balance', body)
+  }
+
+  autoCalibrateWhiteBalance(body: WhiteBalanceAutoCalibrateRequest): Promise<WhiteBalanceResponse> {
+    return this.postJson<WhiteBalanceResponse>('/camera/white-balance/auto-calibrate', body)
   }
 
   getPlugins(): Promise<PluginsResponse> {
@@ -247,6 +264,28 @@ export class LocalApiClient {
     return this.request<FrameListResponse>(`/frames?${query}`)
   }
 
+  /** Which derivative kinds (keogram, keogram_live, meteor_crop, ...) exist
+   * for this date/night, and how many of each — drives the Recordings
+   * page's derivative sub-tabs. */
+  listDerivativeKinds(params: ListFramesParams): Promise<DerivativeKindSummary[]> {
+    const query = new URLSearchParams()
+    if (params.date) query.set('date', params.date)
+    if (params.night) query.set('night', params.night)
+    return this.request<DerivativeKindSummary[]>(`/frames/derivative-kinds?${query}`)
+  }
+
+  /** Paginated, one kind at a time — a busy night's meteor crops alone can
+   * number in the hundreds. */
+  listDerivatives(params: ListDerivativesParams): Promise<DerivativeListResponse> {
+    const query = new URLSearchParams()
+    if (params.date) query.set('date', params.date)
+    if (params.night) query.set('night', params.night)
+    query.set('kind', params.kind)
+    if (params.limit) query.set('limit', String(params.limit))
+    if (params.offset) query.set('offset', String(params.offset))
+    return this.request<DerivativeListResponse>(`/frames/derivatives?${query}`)
+  }
+
   deleteFrames(body: DeleteFramesRequest): Promise<{ date: string; files_removed: number }> {
     return this.request('/frames', {
       method: 'DELETE',
@@ -261,6 +300,41 @@ export class LocalApiClient {
    * its first message. Useful on its own for a quick curl check. */
   getLogs(): Promise<LogEntry[]> {
     return this.request<LogEntry[]>('/logs')
+  }
+
+  // ---- system --------------------------------------------------------
+
+  getSystemInfo(): Promise<SystemInfoResponse> {
+    return this.request<SystemInfoResponse>('/system/info')
+  }
+
+  shutdownSystem(): Promise<SystemActionResponse> {
+    return this.postJson<SystemActionResponse>('/system/shutdown', {})
+  }
+
+  rebootSystem(): Promise<SystemActionResponse> {
+    return this.postJson<SystemActionResponse>('/system/reboot', {})
+  }
+
+  // ---- overlay assets --------------------------------------------------
+
+  /** Direct URL for a `custom_image` overlay element's `asset` field —
+   * an `<img>`/CSS background URL the browser fetches itself, session
+   * cookie included like any other same-origin request. */
+  overlayAssetUrl = (asset: string): string => this.apiUrl(`/overlay/assets/${encodeURIComponent(asset)}`)
+
+  listOverlayAssets(): Promise<OverlayAssetInfo[]> {
+    return this.request<OverlayAssetInfo[]>('/overlay/assets')
+  }
+
+  uploadOverlayAsset(file: File): Promise<OverlayAssetInfo> {
+    const body = new FormData()
+    body.append('file', file)
+    return this.request<OverlayAssetInfo>('/overlay/assets', { method: 'POST', body })
+  }
+
+  deleteOverlayAsset(name: string): Promise<{ deleted: string }> {
+    return this.request(`/overlay/assets/${encodeURIComponent(name)}`, { method: 'DELETE' })
   }
 }
 

@@ -18,7 +18,12 @@ export function GalleryItem({ slug, time, thumbnailPath, metadataPath }: Gallery
 
   return (
     <figure className="overflow-hidden border border-line bg-void">
-      <ImageViewer src={thumbnailUrl} metadata={metadata} alt={`Frame at ${time}`} />
+      <ImageViewer
+        src={thumbnailUrl}
+        metadata={metadata}
+        alt={`Frame at ${time}`}
+        resolveAssetUrl={(asset) => remoteApiClient.overlayAssetUrl(slug, asset)}
+      />
       <figcaption className="border-t border-line-soft px-2 py-1 text-center font-mono text-xs text-ink-faint">
         {formatCaptureTime(time)}
       </figcaption>

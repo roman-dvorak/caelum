@@ -38,12 +38,14 @@ actually need.
   keogram at day rollover, a detection that just fired.
   `context["frame"]` is always the frame that was just processed.
 
-::: warning
-`modify_image` is part of the declared interface but `DerivativePool` does not
-currently invoke it — `_run_worker` calls `on_frame`,
-`provide_overlay_elements` and `create_derivative` only. Write the hook if your
-plugin needs it, but do not expect it to run yet.
-:::
+`modify_image` is chained across every enabled worker in ascending `order`
+before `on_frame`/`provide_overlay_elements`/`create_derivative` run — see
+`DerivativePool._run_modify_chain`. Only `ProcessedFrame.image` passes through
+the chain; the thumbnail JPEG and any raw FITS write are already fixed by the
+time it runs, so a `modify_image` change is visible to derivative workers
+(keograms, meteor detection) but never to the stored thumbnail/raw file or the
+live view — an overlay element (see `provide_overlay_elements` above) is the
+right tool for anything that should show up on the Dashboard or remote-web.
 
 A `Derivative` is:
 
@@ -257,8 +259,45 @@ on a thread; a heavy stateless computation goes to the process pool.**
 `DerivativePool` hands every worker a reference to the same process pool for
 exactly this purpose.
 
+## Worked example: the overlay plugin
+
+`OverlayWorker` (id `overlay`) is what backs the web UI's visual overlay
+editor — masks, text labels and inserted images an admin configures by
+dragging boxes over the live preview rather than writing Python. Its whole
+job is `provide_overlay_elements`: it turns each `OverlayElementDef` in
+`settings.elements` into a `mask`, `custom_label` or `custom_image` overlay
+element. Label `template` strings are resolved with plain `str.format()`
+against the frame's metadata (`{exposure_us}`, `{sky_state.period}`, etc.) —
+an unknown placeholder falls back to showing the raw template rather than
+dropping the element or crashing the pipeline.
+
+Masking here means an opaque box drawn on top wherever the image is
+displayed — it is `provide_overlay_elements`, not `modify_image`, precisely
+because (per the note above) only an overlay element reaches the live view,
+the Dashboard and remote-web; it does not redact the stored thumbnail/raw
+file.
+
+## Worked example: the telescope-position widget
+
+`TelescopePositionWorker` (id `telescope_position`) is a small demo proving
+the same interface can back a "widget", not just static annotations: it
+contributes a `telescope_marker` overlay element showing where a telescope is
+pointed, projected onto the allsky image with the standard equidistant-fisheye
+formula (`r = radius * (90 - altitude) / 90`). `source: "simulated"` — the only
+mode implemented today — sweeps a fake alt/az over a few minutes rather than
+querying real hardware; swapping in a query against an INDI/ASCOM server is a
+drop-in replacement for that one function, everything else about the plugin
+stays the same.
+
+Both `overlay` and `telescope_position` ship disabled by default (an empty
+mask list or a fake telescope marker showing up unasked would be a bad
+default) — enable them from the Overlay editor page or `PUT /api/plugins/{id}`.
+
 ::: warning
-The two built-ins are registered directly on the `DerivativePool` in `main.py`,
-not loaded through `PluginLoader`. Adding `keogram` or `meteor_detection`
-entries to the `plugins` config block does not currently switch them off.
+`overlay`'s `custom_image` elements reference an asset by filename, resolved
+against `data_dir/overlay_assets/` locally (`GET /api/overlay/assets/{name}`,
+admin-only to upload/delete) and against `<camera_slug>/overlay_assets/` on
+the remote archive — the uploader's whole-tree reconciliation pass mirrors
+that directory the same way it mirrors `darks/`, so no separate sync step is
+needed.
 :::

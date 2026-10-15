@@ -42,6 +42,22 @@ export interface FrameStats {
 }
 
 /** `GET /api/status` response. */
+/** What the exposure controller measured last cycle and would do next —
+ * read-only reporting, entirely separate from the capture loop's own use
+ * of the same numbers. `measured_mean`/`error_adu`/`correction_factor` are
+ * null only before the very first frame has been measured. */
+export interface ExposureDiagnostics {
+  sky_period: string
+  target_mean_adu: number
+  measured_mean: number | null
+  error_adu: number | null
+  raw_correction_factor: number | null
+  correction_factor: number | null
+  within_deadband: boolean
+  deadband_pct: number
+  max_step_pct: number
+}
+
 export interface StatusResponse {
   camera_backend: string
   capturing: boolean
@@ -52,6 +68,7 @@ export interface StatusResponse {
   last_capture_at: string | null
   last_stats: FrameStats | null
   last_save_raw: boolean | null
+  exposure_diagnostics: ExposureDiagnostics | null
   /** IANA name from `location.timezone` (e.g. "Europe/Prague"). Every
    * timestamp elsewhere in the API is UTC; this is what to convert to and
    * label when showing a time to a human — see `formatLocalTime`. */
@@ -111,10 +128,20 @@ export interface DetectionBoxPayload {
 
 // ---- AppConfig ------------------------------------------------------------
 
+export interface LensConfig {
+  projection: 'equidistant_fisheye'
+  center_x: number
+  center_y: number
+  radius: number
+  azimuth_offset_deg: number
+  mirror: boolean
+}
+
 export interface CameraConfig {
   backend: 'mock' | 'picamera2' | string
   sensor_id: string
   resolution: [number, number]
+  lens: LensConfig
 }
 
 export interface LocationConfig {
@@ -239,6 +266,10 @@ export interface CameraOptions {
   active: CameraConfig | null
   active_backend_class: string
   applied: boolean
+  /** Set when `CAELUM_CAMERA_BACKEND` is pinning the backend regardless of
+   * `configured`/`active` — the UI should explain this rather than leave a
+   * selection that never "applies" looking broken. */
+  backend_override: string | null
 }
 
 export interface ExposureOverrideRequest {
@@ -254,6 +285,25 @@ export interface ExposureOverrideValue {
 
 export interface ExposureOverrideResponse {
   override: ExposureOverrideValue | null
+}
+
+export interface WhiteBalanceRequest {
+  red_gain: number
+  blue_gain: number
+}
+
+export interface WhiteBalanceResponse {
+  red_gain: number
+  blue_gain: number
+  auto: boolean
+}
+
+/** Fractional (0..1) patch over the latest frame to calibrate from. */
+export interface WhiteBalanceAutoCalibrateRequest {
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 // ---- /api/plugins/* -----------------------------------------------------
@@ -411,7 +461,6 @@ export interface FrameListResponse {
   /** Echoes whichever of `date`/`night` the request used. */
   date: string
   frames: FrameEntry[]
-  derivatives: FileEntry[]
   /** Total frames in this date/night before `limit`/`offset` were applied. */
   total_frames: number
   limit: number
@@ -438,6 +487,46 @@ export interface DeleteFramesRequest {
   kinds?: ('raw' | 'thumbnails' | 'derivatives')[]
 }
 
+// ---- /api/frames/derivative-kinds, /api/frames/derivatives ----------------
+//
+// Derivatives (keograms, meteor crops, ...) live one subdirectory per kind
+// under `derivatives/<date>/`, each with a backend-generated thumbnail
+// alongside the full-resolution file — paginated separately from captures
+// since a busy night's meteor detections alone can number in the hundreds.
+
+export interface DerivativeKindSummary {
+  kind: string
+  count: number
+}
+
+export interface DerivativeEntry {
+  /** The derivative file's own stem — a unique id for this one derivative. */
+  stem: string
+  captured_at: string
+  /** Small backend-generated JPEG for the gallery grid. */
+  thumbnail: string | null
+  /** Path to the full-resolution file, relative to the data directory. */
+  full: string
+  size: number
+}
+
+export interface DerivativeListResponse {
+  kind: string
+  entries: DerivativeEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ListDerivativesParams {
+  /** Pass exactly one of `date` or `night`. */
+  date?: string
+  night?: string
+  kind: string
+  limit?: number
+  offset?: number
+}
+
 // ---- /api/logs, /ws/logs -------------------------------------------------
 
 export interface LogEntry {
@@ -445,4 +534,101 @@ export interface LogEntry {
   level: string
   logger: string
   message: string
+}
+
+// ---- /api/system/* --------------------------------------------------------
+
+export interface DiskUsageInfo {
+  path: string
+  total_bytes: number
+  used_bytes: number
+  free_bytes: number
+  percent: number
+}
+
+export interface NetworkInterfaceInfo {
+  name: string
+  is_up: boolean
+  /** Null when the driver doesn't report a link speed (loopback, virtual
+   * interfaces, or a link that's currently down). */
+  speed_mbps: number | null
+  addresses: string[]
+}
+
+export interface SystemInfoResponse {
+  hostname: string
+  uptime_s: number
+  cpu_percent: number
+  cpu_count: number
+  /** 1/5/15-minute load average. Null on platforms without one (Windows). */
+  load_avg: [number, number, number] | null
+  mem_total_bytes: number
+  mem_used_bytes: number
+  mem_percent: number
+  disks: DiskUsageInfo[]
+  /** Sensor label -> degrees Celsius. Empty where the platform exposes none. */
+  temperatures_c: Record<string, number>
+  network: NetworkInterfaceInfo[]
+}
+
+export interface SystemActionResponse {
+  ok: boolean
+  message: string
+}
+
+// ---- /api/overlay/assets ---------------------------------------------------
+
+export interface OverlayAssetInfo {
+  name: string
+  size: number
+}
+
+// ---- `overlay` / `telescope_position` plugin settings shapes ---------------
+//
+// Mirror `OverlaySettings`/`TelescopePositionSettings` in
+// `caelum/src/caelum/derivatives/overlay.py` and `telescope_position.py`.
+// `PluginConfig.settings` is `Record<string, unknown>` at the API-contract
+// level (the app-level config store treats it as opaque) — these are for the
+// overlay editor's own use when reading/writing those two plugins' settings.
+
+export type OverlayElementKind = 'mask' | 'label' | 'image'
+
+export interface OverlayElementDef {
+  id: string
+  kind: OverlayElementKind
+  /** Fractional (0..1) top-left anchor. */
+  x: number
+  y: number
+  /** mask/image only. */
+  w?: number | null
+  h?: number | null
+  /** mask fill / label text color. */
+  color: string
+  /** mask fill opacity. */
+  opacity: number
+  /** label only — a placeholder template, e.g. "Exp: {exposure_us}us". */
+  template?: string | null
+  font_size_px?: number | null
+  /** image only — a filename under `data_dir/overlay_assets/`. */
+  asset?: string | null
+}
+
+export interface OverlayTemplate {
+  name: string
+  elements: OverlayElementDef[]
+}
+
+export interface OverlaySettings {
+  templates: OverlayTemplate[]
+  active_template: string | null
+}
+
+export interface TelescopePositionSettings {
+  source: 'simulated'
+  center_x: number
+  center_y: number
+  radius: number
+  azimuth_offset_deg: number
+  mirror: boolean
+  label: string
 }

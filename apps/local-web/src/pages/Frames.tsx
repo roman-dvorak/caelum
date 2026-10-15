@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { FrameDateSummary, FrameEntry, FrameListResponse } from '@caelum/api-client'
+import { useCallback, useEffect, useState } from 'react'
+import type {
+  DerivativeEntry,
+  DerivativeKindSummary,
+  FrameDateSummary,
+  FrameEntry,
+  FrameListResponse,
+} from '@caelum/api-client'
 import {
   Button,
-  DownloadIcon,
+  Calendar,
   EmptyState,
+  Lightbox,
   Loading,
   Message,
   PageHeader,
@@ -15,10 +22,12 @@ import {
   formatCaptureTime,
   formatSiteTime,
 } from '@caelum/ui'
+import type { LightboxItem } from '@caelum/ui'
 import { useAuth } from '../authContext.ts'
 import { localApiClient } from '../services/client.ts'
 
 type GroupMode = 'night' | 'date'
+type View = 'captures' | 'derivatives'
 const PAGE_SIZE = 60
 
 /**
@@ -137,26 +146,21 @@ export function Frames() {
         <EmptyState>Nothing recorded yet.</EmptyState>
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {summaries.map((summary) => (
-              <button
-                key={summary.date}
-                type="button"
-                onClick={() => setSelectedLabel(summary.date)}
-                className={[
-                  'flex shrink-0 flex-col items-start gap-0.5 border px-3 py-2 text-left transition',
-                  summary.date === selectedLabel
-                    ? 'border-amber bg-amber/8 text-amber'
-                    : 'border-line text-ink-dim hover:border-amber-dim hover:text-ink',
-                ].join(' ')}
-              >
-                <span className="font-mono text-sm tabular-nums">{summary.date}</span>
-                <span className="text-[0.65rem] text-ink-faint tabular-nums">
+          <Calendar
+            entries={summaries.map((s) => ({ date: s.date, count: s.thumbnails }))}
+            selected={selectedLabel}
+            onSelect={setSelectedLabel}
+          />
+          {selectedLabel ? (
+            (() => {
+              const summary = summaries.find((s) => s.date === selectedLabel)
+              return summary ? (
+                <p className="font-mono text-xs text-ink-faint tabular-nums">
                   {summary.thumbnails} frames · {summary.raws} raw · {formatBytes(summary.total_bytes)}
-                </span>
-              </button>
-            ))}
-          </div>
+                </p>
+              ) : null
+            })()
+          ) : null}
 
           {selectedLabel ? (
             <PeriodDetail
@@ -190,11 +194,63 @@ function PeriodDetail({
   onDeleteWholePeriod: (utcDates: string[]) => void
   onChanged: () => Promise<void>
 }) {
+  const [view, setView] = useState<View>('captures')
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2">
+        {(['captures', 'derivatives'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setView(option)}
+            className={[
+              'border px-3 py-1.5 text-xs font-semibold tracking-wide uppercase transition',
+              view === option ? 'border-amber bg-amber/10 text-amber' : 'border-line text-ink-dim hover:border-amber-dim',
+            ].join(' ')}
+          >
+            {option === 'captures' ? 'Captures' : 'Derivatives'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'captures' ? (
+        <CapturesGallery
+          mode={mode}
+          label={label}
+          timezone={timezone}
+          isAdmin={isAdmin}
+          onDeleteWholePeriod={onDeleteWholePeriod}
+          onChanged={onChanged}
+        />
+      ) : (
+        <DerivativesGallery mode={mode} label={label} />
+      )}
+    </div>
+  )
+}
+
+function CapturesGallery({
+  mode,
+  label,
+  timezone,
+  isAdmin,
+  onDeleteWholePeriod,
+  onChanged,
+}: {
+  mode: GroupMode
+  label: string
+  timezone: string | null
+  isAdmin: boolean
+  onDeleteWholePeriod: (utcDates: string[]) => void
+  onChanged: () => Promise<void>
+}) {
   const [listing, setListing] = useState<FrameListResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selection, setSelection] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [page, setPage] = useState(0)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const [reloadToken, setReloadToken] = useState(0)
   const reload = useCallback(async () => setReloadToken((n) => n + 1), [])
@@ -224,14 +280,6 @@ function PeriodDetail({
       cancelled = true
     }
   }, [mode, label, page, reloadToken])
-
-  const totals = useMemo(() => {
-    const frames = listing?.frames ?? []
-    return {
-      raws: frames.filter((f) => f.raw).length,
-      bytes: frames.reduce((sum, f) => sum + f.total_bytes, 0),
-    }
-  }, [listing])
 
   function toggle(time: string) {
     setSelection((current) => {
@@ -286,6 +334,13 @@ function PeriodDetail({
   const currentPage = Math.floor(listing.offset / PAGE_SIZE)
   const rangeStart = listing.total_frames === 0 ? 0 : listing.offset + 1
   const rangeEnd = Math.min(listing.offset + listing.frames.length, listing.total_frames)
+  const totalRaws = listing.frames.filter((f) => f.raw).length
+  const totalBytes = listing.frames.reduce((sum, f) => sum + f.total_bytes, 0)
+
+  const lightboxItems: LightboxItem[] = listing.frames.map((frame) => ({
+    src: frameImageUrl(frame) ?? '',
+    caption: <FrameCaption frame={frame} timezone={timezone} />,
+  }))
 
   return (
     <div className="flex flex-col gap-4">
@@ -302,7 +357,7 @@ function PeriodDetail({
               >
                 Delete {selection.size || ''} selected
               </Button>
-              <Button variant="danger" disabled={busy || totals.raws === 0} onClick={() => void deleteRawOnlyOnPage()}>
+              <Button variant="danger" disabled={busy || totalRaws === 0} onClick={() => void deleteRawOnlyOnPage()}>
                 Delete raw on page
               </Button>
               <Button
@@ -320,53 +375,23 @@ function PeriodDetail({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Readout label="Captures (page)" value={listing.frames.length} />
           <Readout label="Total captures" value={listing.total_frames} />
-          <Readout label="Derivatives" value={listing.derivatives.length} />
-          <Readout label="Page size" value={formatBytes(totals.bytes)} />
+          <Readout label="Raw on page" value={totalRaws} />
+          <Readout label="Page size" value={formatBytes(totalBytes)} />
         </div>
       </Panel>
-
-      {listing.derivatives.length > 0 ? (
-        <Panel title="Derivatives">
-          <div className="flex flex-col gap-3">
-            {listing.derivatives.map((entry) => (
-              <div key={entry.path} className="flex flex-col gap-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-ink-dim">{entry.name}</span>
-                  <span className="font-mono text-xs text-ink-faint">{formatBytes(entry.size)}</span>
-                </div>
-                {entry.media === 'image' ? (
-                  // Not `w-full`: a keogram is wide once a night's worth of
-                  // columns has built up, but the "live" one starts as just
-                  // a handful of columns — portrait, not landscape — and
-                  // `w-full` would stretch that sliver to full width, which
-                  // blows the height up proportionally to match. Capping
-                  // height and letting width follow (object-contain) scales
-                  // correctly either way, mid-night or finished.
-                  <img
-                    src={localApiClient.fileContentUrl(entry.path)}
-                    alt={entry.name}
-                    loading="lazy"
-                    className="mx-auto max-h-40 max-w-full border border-line-soft bg-void object-contain"
-                  />
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      ) : null}
 
       {listing.frames.length === 0 ? (
         <EmptyState>No captures on this page.</EmptyState>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {listing.frames.map((frame) => (
+          {listing.frames.map((frame, index) => (
             <FrameTile
               key={frame.time}
               frame={frame}
-              timezone={timezone}
               selected={selection.has(frame.time)}
               selectable={isAdmin}
               onToggle={() => toggle(frame.time)}
+              onOpen={() => setLightboxIndex(index)}
             />
           ))}
         </div>
@@ -390,8 +415,27 @@ function PeriodDetail({
           </div>
         </div>
       ) : null}
+
+      {lightboxIndex !== null ? (
+        <Lightbox
+          items={lightboxItems}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      ) : null}
     </div>
   )
+}
+
+/** Prefer the thumbnail; fall back to a rendered raw preview for captures
+ * whose thumbnail has already been rotated away by retention. */
+function frameImageUrl(frame: FrameEntry): string | null {
+  return frame.thumbnail
+    ? localApiClient.fileContentUrl(frame.thumbnail)
+    : frame.raw
+      ? localApiClient.filePreviewUrl(frame.raw, 1600)
+      : null
 }
 
 /** One availability chip. Present parts are links to the actual file;
@@ -422,92 +466,208 @@ function AssetChip({ label, path, title }: { label: string; path: string | null;
   )
 }
 
+/** Everything that used to live in the grid tile's caption now lives in the
+ * lightbox instead — the grid itself shows only the image (see `FrameTile`). */
+function FrameCaption({ frame, timezone }: { frame: FrameEntry; timezone: string | null }) {
+  const site = timezone ? formatSiteTime(frame.captured_at, timezone) : null
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span className="tabular-nums" title={formatCaptureTime(frame.time)}>
+        {site ? `${site.clock} ${site.zone}` : formatCaptureTime(frame.time)}
+      </span>
+      <div className="flex items-center gap-1">
+        <AssetChip label="IMG" path={frame.thumbnail} title="thumbnail" />
+        <AssetChip label="RAW" path={frame.raw} title="raw FITS frame" />
+        <AssetChip label="JSON" path={frame.metadata} title="metadata sidecar" />
+      </div>
+      <span className="tabular-nums">{formatBytes(frame.total_bytes)}</span>
+    </div>
+  )
+}
+
 function FrameTile({
   frame,
-  timezone,
   selected,
   selectable,
   onToggle,
+  onOpen,
 }: {
   frame: FrameEntry
-  timezone: string | null
   selected: boolean
   selectable: boolean
   onToggle: () => void
+  onOpen: () => void
 }) {
-  // Prefer the thumbnail; fall back to a rendered raw preview for captures
-  // whose thumbnail has already been rotated away by retention.
-  const imageUrl = frame.thumbnail
-    ? localApiClient.fileContentUrl(frame.thumbnail)
-    : frame.raw
-      ? localApiClient.filePreviewUrl(frame.raw, 400)
-      : null
-
-  // The site's local time is the primary reading (what a human standing at
-  // the camera would see on a clock); the raw UTC stem stays available as a
-  // tooltip so the two can always be cross-checked, never just one or the
-  // other silently.
-  const site = timezone ? formatSiteTime(frame.captured_at, timezone) : null
+  const imageUrl = frameImageUrl(frame)
 
   return (
-    <figure
-      className={[
-        'flex flex-col overflow-hidden border bg-panel transition',
-        selected ? 'border-amber' : 'border-line',
-      ].join(' ')}
-    >
-      <div className="relative aspect-4/3 bg-void">
+    <div className={['relative overflow-hidden border transition', selected ? 'border-amber' : 'border-line'].join(' ')}>
+      <button type="button" onClick={onOpen} className="block aspect-4/3 w-full bg-void">
         {imageUrl ? (
           <img src={imageUrl} alt={frame.time} loading="lazy" className="h-full w-full object-cover" />
         ) : (
-          <span className="flex h-full items-center justify-center text-xs text-ink-faint">
-            no image
-          </span>
+          <span className="flex h-full items-center justify-center text-xs text-ink-faint">no image</span>
         )}
-        {selectable ? (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggle}
-            aria-label={`Select capture ${frame.time}`}
-            className="absolute top-2 left-2 h-4 w-4 accent-amber"
-          />
-        ) : null}
-        {frame.raw === null && frame.thumbnail !== null ? (
-          <span className="absolute top-2 right-2 bg-void/85 px-1.5 py-0.5 font-mono text-[0.6rem] tracking-wide text-ink-faint">
-            thumb only
-          </span>
-        ) : null}
+      </button>
+      {selectable ? (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select capture ${frame.time}`}
+          className="absolute top-2 left-2 z-10 h-4 w-4 accent-amber"
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function DerivativesGallery({ mode, label }: { mode: GroupMode; label: string }) {
+  const [kinds, setKinds] = useState<DerivativeKindSummary[] | null>(null)
+  const [kind, setKind] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const params = { [mode]: label } as Parameters<typeof localApiClient.listDerivativeKinds>[0]
+    localApiClient
+      .listDerivativeKinds(params)
+      .then((next) => {
+        if (cancelled) return
+        setKinds(next)
+        setKind((current) => (current && next.some((k) => k.kind === current) ? current : (next[0]?.kind ?? null)))
+        setError(null)
+      })
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
+    return () => {
+      cancelled = true
+    }
+  }, [mode, label])
+
+  if (error) return <Message kind="error">{error}</Message>
+  if (kinds === null) return <Loading />
+  if (kinds.length === 0) return <EmptyState>No derivatives for this period yet.</EmptyState>
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {kinds.map((k) => (
+          <button
+            key={k.kind}
+            type="button"
+            onClick={() => setKind(k.kind)}
+            className={[
+              'shrink-0 border px-3 py-1.5 font-mono text-xs transition',
+              k.kind === kind
+                ? 'border-amber bg-amber/8 text-amber'
+                : 'border-line text-ink-dim hover:border-amber-dim hover:text-ink',
+            ].join(' ')}
+          >
+            {k.kind} ({k.count})
+          </button>
+        ))}
       </div>
 
-      <figcaption className="flex flex-col gap-1.5 border-t border-line-soft px-2 py-1.5">
-        {/* Which of the three files this capture actually has on disk.
-            Retention deletes raw frames long before thumbnails, so these
-            diverge as a night ages. */}
-        <div className="flex items-center gap-1">
-          <AssetChip label="IMG" path={frame.thumbnail} title="thumbnail" />
-          <AssetChip label="RAW" path={frame.raw} title="raw FITS frame" />
-          <AssetChip label="JSON" path={frame.metadata} title="metadata sidecar" />
-          <span className="ml-auto font-mono text-[0.65rem] text-ink-faint tabular-nums">
-            {formatBytes(frame.total_bytes)}
-          </span>
-        </div>
+      {/* Keyed by kind so switching tabs remounts fresh (page/listing reset
+          for free) instead of resetting that state manually in an effect. */}
+      {kind ? <DerivativeKindGallery key={kind} mode={mode} label={label} kind={kind} /> : null}
+    </div>
+  )
+}
 
-        <div className="flex items-center justify-between gap-2" title={formatCaptureTime(frame.time)}>
-          <span className="font-mono text-xs text-ink-dim tabular-nums">
-            {site ? `${site.clock} ${site.zone}` : formatCaptureTime(frame.time)}
-          </span>
-          {frame.raw ? (
-            <a
-              href={localApiClient.fileContentUrl(frame.raw, true)}
-              title="Download raw FITS"
-              className="text-ink-faint hover:text-amber"
+function DerivativeKindGallery({ mode, label, kind }: { mode: GroupMode; label: string; kind: string }) {
+  const [listing, setListing] = useState<{ entries: DerivativeEntry[]; total: number; offset: number } | null>(null)
+  const [page, setPage] = useState(0)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const params = {
+      [mode]: label,
+      kind,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    } as Parameters<typeof localApiClient.listDerivatives>[0]
+    localApiClient
+      .listDerivatives(params)
+      .then((next) => {
+        if (!cancelled) setListing(next)
+      })
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
+    return () => {
+      cancelled = true
+    }
+  }, [mode, label, kind, page])
+
+  if (error) return <Message kind="error">{error}</Message>
+  if (!listing) return <Loading />
+
+  const pageCount = Math.max(1, Math.ceil(listing.total / PAGE_SIZE))
+  const currentPage = Math.floor(listing.offset / PAGE_SIZE)
+
+  const lightboxItems: LightboxItem[] = listing.entries.map((entry) => ({
+    src: localApiClient.fileContentUrl(entry.full),
+    caption: (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="tabular-nums">{formatCaptureTime(entry.stem)}</span>
+        <span className="tabular-nums">{formatBytes(entry.size)}</span>
+      </div>
+    ),
+  }))
+
+  return (
+    <div className="flex flex-col gap-4">
+      {listing.entries.length === 0 ? (
+        <EmptyState>No derivatives on this page.</EmptyState>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {listing.entries.map((entry, index) => (
+            <button
+              key={entry.stem}
+              type="button"
+              onClick={() => setLightboxIndex(index)}
+              className="aspect-square overflow-hidden border border-line bg-void"
             >
-              <DownloadIcon size={14} />
-            </a>
-          ) : null}
+              <img
+                src={localApiClient.fileContentUrl(entry.thumbnail ?? entry.full)}
+                alt={entry.stem}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            </button>
+          ))}
         </div>
-      </figcaption>
-    </figure>
+      )}
+
+      {listing.total > PAGE_SIZE ? (
+        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-3">
+          <span className="font-mono text-xs text-ink-faint tabular-nums">
+            {listing.offset + 1}–{Math.min(listing.offset + listing.entries.length, listing.total)} of {listing.total}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button disabled={currentPage === 0} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </Button>
+            <span className="font-mono text-xs text-ink-faint tabular-nums">
+              Page {currentPage + 1} / {pageCount}
+            </span>
+            <Button disabled={currentPage + 1 >= pageCount} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {lightboxIndex !== null ? (
+        <Lightbox
+          items={lightboxItems}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      ) : null}
+    </div>
   )
 }

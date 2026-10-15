@@ -87,6 +87,13 @@ export function CameraPicker({ onConfigChange }: { onConfigChange: (config: AppC
     >
       <div className="flex flex-col gap-4">
         {error ? <Message kind="error">{error}</Message> : null}
+        {options.backend_override ? (
+          <Message kind="error">
+            The <code>CAELUM_CAMERA_BACKEND={options.backend_override}</code> environment variable is
+            pinning the backend regardless of what is selected here — remove it from the service
+            environment to let this picker take effect.
+          </Message>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field

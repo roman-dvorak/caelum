@@ -36,6 +36,8 @@ data/
       20260919-210433_meteor_detection_meteor_crop.jpg
   darks/
     dark_1000000us_4.0g_4056x3040.npy
+  overlay_assets/
+    logo.png
   manifest.json
 ```
 
@@ -48,7 +50,11 @@ here is **UTC**, always, taken from the frame's `captured_at` — the local
 site time only ever shows up already converted, in the [web UI](/guide/web-ui),
 with the zone made explicit. The three managed subdirectories — `raw`, `thumbnails`, `derivatives` — are
 the ones retention sweeps. `darks` is a hand-curated calibration library and
-is never touched.
+is never touched, and neither is `overlay_assets` — the images an admin
+uploads for `custom_image` overlay elements in the [overlay editor](/guide/plugins),
+which are config, not capture output. Both ride along on the uploader's
+whole-tree reconciliation pass, so `overlay_assets` reaches the remote
+archive the same way `darks` does.
 
 Derivative filenames carry more than a timestamp, because several workers may
 emit on the same second:

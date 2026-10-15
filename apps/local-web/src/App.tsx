@@ -3,9 +3,12 @@ import { HashRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
   AppShell,
   Button,
+  CpuIcon,
+  DropletIcon,
   FolderIcon,
   GaugeIcon,
   ImagesIcon,
+  LayersIcon,
   LiveIcon,
   Loading,
   LogoutIcon,
@@ -25,6 +28,7 @@ import { LiveStream } from './pages/LiveStream.tsx'
 import { Login } from './pages/Login.tsx'
 import { Logs } from './pages/Logs.tsx'
 import { Plugins } from './pages/Plugins.tsx'
+import { System } from './pages/System.tsx'
 import { Users } from './pages/Users.tsx'
 
 // xterm.js and json-edit-react are together most of this app's JavaScript,
@@ -34,6 +38,12 @@ import { Users } from './pages/Users.tsx'
 const Settings = lazy(() => import('./pages/Settings.tsx').then((m) => ({ default: m.Settings })))
 const TerminalPage = lazy(() =>
   import('./pages/Terminal.tsx').then((m) => ({ default: m.TerminalPage })),
+)
+const OverlayEditor = lazy(() =>
+  import('./pages/OverlayEditor.tsx').then((m) => ({ default: m.OverlayEditor })),
+)
+const WhiteBalance = lazy(() =>
+  import('./pages/WhiteBalance.tsx').then((m) => ({ default: m.WhiteBalance })),
 )
 
 const VIEW_SECTION: NavSection = {
@@ -51,8 +61,11 @@ const ADMIN_SECTION: NavSection = {
   items: [
     { to: '/settings', label: 'Settings', icon: SlidersIcon },
     { to: '/plugins', label: 'Plugins', icon: PuzzleIcon },
+    { to: '/overlay', label: 'Overlay', icon: LayersIcon },
+    { to: '/white-balance', label: 'White balance', icon: DropletIcon },
     { to: '/terminal', label: 'Terminal', icon: TerminalIcon },
     { to: '/logs', label: 'Logs', icon: LogsIcon },
+    { to: '/system', label: 'System', icon: CpuIcon },
     { to: '/users', label: 'Accounts', icon: UsersIcon },
   ],
 }
@@ -132,10 +145,19 @@ export default function App() {
             <Route path="/settings" element={isAdmin ? <Settings /> : <Navigate to="/" replace />} />
             <Route path="/plugins" element={isAdmin ? <Plugins /> : <Navigate to="/" replace />} />
             <Route
+              path="/overlay"
+              element={isAdmin ? <OverlayEditor /> : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/white-balance"
+              element={isAdmin ? <WhiteBalance /> : <Navigate to="/" replace />}
+            />
+            <Route
               path="/terminal"
               element={isAdmin ? <TerminalPage /> : <Navigate to="/" replace />}
             />
             <Route path="/logs" element={isAdmin ? <Logs /> : <Navigate to="/" replace />} />
+            <Route path="/system" element={isAdmin ? <System /> : <Navigate to="/" replace />} />
             <Route path="/users" element={isAdmin ? <Users /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

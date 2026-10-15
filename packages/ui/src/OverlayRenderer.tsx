@@ -2,9 +2,20 @@ import type { FrameMetadata, OverlayElement } from '@caelum/api-client'
 import { periodLabel } from './periods.js'
 import { readFractionalBox, readNumber, readString } from './overlayPayload.js'
 
+/** Resolves a `custom_image` element's `payload.asset` (a bare filename) to
+ * a fetchable URL. Each app supplies its own — local-web resolves against
+ * its own API, remote-web against a camera's static archive prefix — since
+ * that's the one thing this shared component cannot know on its own.
+ * Defaults to treating `asset` as already a full URL, so callers that don't
+ * pass one (or elements with no `custom_image` in play) are unaffected. */
+export type AssetUrlResolver = (asset: string) => string
+
+const defaultResolveAssetUrl: AssetUrlResolver = (asset) => asset
+
 export interface OverlayRendererProps {
   metadata: FrameMetadata
   className?: string
+  resolveAssetUrl?: AssetUrlResolver
 }
 
 /**
@@ -17,17 +28,27 @@ export interface OverlayRendererProps {
  * enough shape to place a marker) rather than throwing — overlay types are
  * an open set by design, since plugins can introduce new ones.
  */
-export function OverlayRenderer({ metadata, className }: OverlayRendererProps) {
+export function OverlayRenderer({ metadata, className, resolveAssetUrl }: OverlayRendererProps) {
   return (
     <div className={['pointer-events-none absolute inset-0 overflow-hidden', className ?? ''].join(' ')}>
       {metadata.overlay_elements.map((element, index) => (
-        <OverlayElementView key={`${element.source}:${element.type}:${index}`} element={element} />
+        <OverlayElementView
+          key={`${element.source}:${element.type}:${index}`}
+          element={element}
+          resolveAssetUrl={resolveAssetUrl ?? defaultResolveAssetUrl}
+        />
       ))}
     </div>
   )
 }
 
-function OverlayElementView({ element }: { element: OverlayElement }) {
+function OverlayElementView({
+  element,
+  resolveAssetUrl,
+}: {
+  element: OverlayElement
+  resolveAssetUrl: AssetUrlResolver
+}) {
   switch (element.type) {
     case 'timestamp':
       return <TimestampLabel payload={element.payload} />
@@ -37,6 +58,14 @@ function OverlayElementView({ element }: { element: OverlayElement }) {
       return <SkyStateBadgeLabel payload={element.payload} />
     case 'detection_box':
       return <DetectionBoxMarker payload={element.payload} label={readString(element.payload, 'label')} />
+    case 'mask':
+      return <MaskBox payload={element.payload} />
+    case 'custom_label':
+      return <CustomLabel payload={element.payload} />
+    case 'custom_image':
+      return <CustomImage payload={element.payload} resolveAssetUrl={resolveAssetUrl} />
+    case 'telescope_marker':
+      return <TelescopeMarker payload={element.payload} />
     default:
       return <UnknownOverlayMarker element={element} />
   }
@@ -98,6 +127,88 @@ function DetectionBoxMarker({
     >
       {label ? (
         <span className="absolute -top-5 left-0 bg-amber px-1 text-[10px] font-semibold whitespace-nowrap text-void">
+          {label}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function MaskBox({ payload }: { payload: Record<string, unknown> }) {
+  const box = readFractionalBox(payload)
+  if (!box) return null
+  const color = readString(payload, 'color') ?? '#000000'
+  const opacity = readNumber(payload, 'opacity') ?? 1
+  return (
+    <div
+      className="absolute"
+      style={{
+        left: `${box.x * 100}%`,
+        top: `${box.y * 100}%`,
+        width: `${box.w * 100}%`,
+        height: `${box.h * 100}%`,
+        backgroundColor: color,
+        opacity,
+      }}
+    />
+  )
+}
+
+function CustomLabel({ payload }: { payload: Record<string, unknown> }) {
+  const text = readString(payload, 'text')
+  const x = readNumber(payload, 'x')
+  const y = readNumber(payload, 'y')
+  if (!text || x === undefined || y === undefined) return null
+  const color = readString(payload, 'color') ?? '#e5e5e5'
+  const fontSize = readNumber(payload, 'font_size_px')
+  return (
+    <div
+      className="absolute -translate-x-1/2 -translate-y-1/2 font-mono whitespace-nowrap"
+      style={{ left: `${x * 100}%`, top: `${y * 100}%`, color, fontSize: fontSize ? `${fontSize}px` : undefined }}
+    >
+      {text}
+    </div>
+  )
+}
+
+function CustomImage({
+  payload,
+  resolveAssetUrl,
+}: {
+  payload: Record<string, unknown>
+  resolveAssetUrl: AssetUrlResolver
+}) {
+  const box = readFractionalBox(payload)
+  const asset = readString(payload, 'asset')
+  if (!box || !asset) return null
+  return (
+    <img
+      src={resolveAssetUrl(asset)}
+      alt=""
+      className="absolute h-full w-full object-contain"
+      style={{
+        left: `${box.x * 100}%`,
+        top: `${box.y * 100}%`,
+        width: `${box.w * 100}%`,
+        height: `${box.h * 100}%`,
+      }}
+    />
+  )
+}
+
+function TelescopeMarker({ payload }: { payload: Record<string, unknown> }) {
+  const x = readNumber(payload, 'x')
+  const y = readNumber(payload, 'y')
+  if (x === undefined || y === undefined) return null
+  const label = readString(payload, 'label')
+  return (
+    <div
+      className="absolute -translate-x-1/2 -translate-y-1/2"
+      style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+    >
+      <div className="h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-amber bg-amber/30" />
+      {label ? (
+        <span className="absolute top-2 left-1/2 -translate-x-1/2 bg-void/70 px-1 text-[10px] whitespace-nowrap text-amber-bright">
           {label}
         </span>
       ) : null}

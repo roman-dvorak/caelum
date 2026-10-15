@@ -1,12 +1,17 @@
-import { ImageViewer, SkyStateBadge, StatusTile } from '@caelum/ui'
+import { useState } from 'react'
+import { Button, ImageViewer, SkyStateBadge, StatusTile } from '@caelum/ui'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
 import { useSkyState } from '../hooks/useSkyState.ts'
 import { useStatus } from '../hooks/useStatus.ts'
+import { localApiClient } from '../services/client.ts'
 
 export function Dashboard() {
   const { status, error: statusError } = useStatus()
   const { skyState, error: skyError } = useSkyState()
   const { frame, status: streamStatus } = useFrameStream()
+  const [showJson, setShowJson] = useState(false)
+
+  const diag = status?.exposure_diagnostics ?? null
 
   return (
     <div className="flex flex-col gap-6">
@@ -23,7 +28,12 @@ export function Dashboard() {
 
       <section className="overflow-hidden border border-line bg-void">
         {frame ? (
-          <ImageViewer src={frame.imageBlobUrl} metadata={frame.metadata} alt="Live camera feed" />
+          <ImageViewer
+            src={frame.imageBlobUrl}
+            metadata={frame.metadata}
+            alt="Live camera feed"
+            resolveAssetUrl={localApiClient.overlayAssetUrl}
+          />
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-faint">
             {streamStatus === 'connecting' ? 'Connecting to live stream…' : 'Waiting for first frame…'}
@@ -49,6 +59,83 @@ export function Dashboard() {
           />
         </div>
       ) : null}
+
+      {status?.last_stats || diag ? (
+        <section className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold tracking-[0.15em] text-ink-faint uppercase">
+            Exposure control
+          </h2>
+          <div className="grid grid-cols-2 gap-px bg-line-soft sm:grid-cols-3 lg:grid-cols-4">
+            <StatusTile
+              label="Mean pixel"
+              value={status?.last_stats ? status.last_stats.mean.toFixed(1) : '—'}
+              unit="ADU"
+            />
+            <StatusTile label="Setpoint" value={diag ? diag.target_mean_adu.toFixed(1) : '—'} unit="ADU" />
+            <StatusTile
+              label="Error vs. setpoint"
+              value={diag?.error_adu != null ? formatSigned(diag.error_adu) : '—'}
+              unit="ADU"
+            />
+            <StatusTile
+              label="Next correction"
+              value={diag?.correction_factor != null ? formatSigned((diag.correction_factor - 1) * 100) : '—'}
+              unit="%"
+              hint={diag?.within_deadband ? 'within deadband — holding steady' : undefined}
+            />
+            <StatusTile
+              label="p99"
+              value={status?.last_stats ? status.last_stats.p99.toFixed(1) : '—'}
+              unit="ADU"
+            />
+            <StatusTile
+              label="Saturated"
+              value={status?.last_stats ? (status.last_stats.saturated_fraction * 100).toFixed(1) : '—'}
+              unit="%"
+            />
+            <StatusTile label="Deadband" value={diag ? (diag.deadband_pct * 100).toFixed(0) : '—'} unit="%" />
+            <StatusTile label="Max step" value={diag ? (diag.max_step_pct * 100).toFixed(0) : '—'} unit="%" />
+          </div>
+        </section>
+      ) : null}
+
+      {frame ? (
+        <section className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold tracking-[0.15em] text-ink-faint uppercase">
+              Frame metadata
+            </h2>
+            <Button variant="ghost" onClick={() => setShowJson((v) => !v)}>
+              {showJson ? 'Hide JSON' : 'Show JSON'}
+            </Button>
+          </div>
+          {showJson ? (
+            <pre className="max-h-96 overflow-auto border border-line bg-void p-3 font-mono text-xs text-ink-dim">
+              {JSON.stringify(
+                { metadata: frame.metadata, stats: status?.last_stats ?? null, exposure: diag },
+                null,
+                2,
+              )}
+            </pre>
+          ) : (
+            <div className="grid grid-cols-2 gap-px bg-line-soft sm:grid-cols-3 lg:grid-cols-4">
+              <StatusTile label="Captured at" value={new Date(frame.metadata.captured_at).toLocaleTimeString()} />
+              <StatusTile label="Exposure" value={formatExposure(frame.metadata.exposure_us)} />
+              <StatusTile label="Gain" value={frame.metadata.analogue_gain.toFixed(2)} unit="×" />
+              <StatusTile label="Sky period" value={frame.metadata.sky_state.period.replaceAll('_', ' ')} />
+              <StatusTile label="Sun altitude" value={frame.metadata.sky_state.sun_altitude_deg.toFixed(1)} unit="°" />
+              <StatusTile label="Moon altitude" value={frame.metadata.sky_state.moon_altitude_deg.toFixed(1)} unit="°" />
+              <StatusTile
+                label="Moon illumination"
+                value={(frame.metadata.sky_state.moon_illumination * 100).toFixed(0)}
+                unit="%"
+              />
+              <StatusTile label="Focus score" value={frame.metadata.focus_score.toFixed(1)} />
+              <StatusTile label="Overlay elements" value={String(frame.metadata.overlay_elements.length)} />
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   )
 }
@@ -57,4 +144,9 @@ function formatExposure(exposureUs: number): string {
   if (exposureUs >= 1_000_000) return `${(exposureUs / 1_000_000).toFixed(2)} s`
   if (exposureUs >= 1_000) return `${(exposureUs / 1_000).toFixed(1)} ms`
   return `${exposureUs} µs`
+}
+
+function formatSigned(value: number): string {
+  const rounded = value.toFixed(1)
+  return value > 0 ? `+${rounded}` : rounded
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FrameMetadata } from '@caelum/api-client'
+import type { AssetUrlResolver } from './OverlayRenderer.js'
 import { OverlayRenderer } from './OverlayRenderer.js'
 
 export interface ImageViewerProps {
@@ -16,6 +17,10 @@ export interface ImageViewerProps {
    * the wrapper an explicit size — by default the wrapper just hugs the
    * image's natural aspect ratio. */
   fit?: 'contain' | 'cover'
+  /** Resolves a `custom_image` overlay element's asset filename to a URL —
+   * see `OverlayRenderer`'s `AssetUrlResolver`. Omit if this view never
+   * shows `custom_image` elements. */
+  resolveAssetUrl?: AssetUrlResolver
 }
 
 /**
@@ -23,7 +28,7 @@ export interface ImageViewerProps {
  * up with the rendered image, regardless of whether it came from a live WS
  * blob or a static history URL.
  */
-export function ImageViewer({ src, metadata, alt, className, fit = 'contain' }: ImageViewerProps) {
+export function ImageViewer({ src, metadata, alt, className, fit = 'contain', resolveAssetUrl }: ImageViewerProps) {
   const [failed, setFailed] = useState(false)
 
   return (
@@ -41,7 +46,7 @@ export function ImageViewer({ src, metadata, alt, className, fit = 'contain' }: 
           onLoad={() => setFailed(false)}
         />
       )}
-      {!failed && metadata ? <OverlayRenderer metadata={metadata} /> : null}
+      {!failed && metadata ? <OverlayRenderer metadata={metadata} resolveAssetUrl={resolveAssetUrl} /> : null}
     </div>
   )
 }
