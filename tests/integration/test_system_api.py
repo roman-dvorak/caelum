@@ -32,3 +32,17 @@ async def test_admin_gets_system_info(tmp_path, redis_url):
             assert any(d["path"] == "/" for d in body["disks"])
     finally:
         await harness.config_manager.stop()
+
+
+async def test_update_status_outside_a_managed_install(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "systest3")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            body = (await client.get("/api/update/status")).json()
+            assert body["managed"] is False
+            assert body["current_version"]
+            assert body["manifest_url"].endswith("manifest.json")
+            assert (await client.post("/api/update/check")).status_code == 409
+    finally:
+        await harness.config_manager.stop()

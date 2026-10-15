@@ -31,5 +31,5 @@ htmlcov/
 # Local Claude Code session state
 .claude/
 
-# Web UI copied in by scripts/install-system.sh --web-dist
-/web/
+# Web UI bundled into the wheel by scripts/build-release.sh
+/src/caelum/webui/

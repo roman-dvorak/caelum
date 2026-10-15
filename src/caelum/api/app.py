@@ -6,12 +6,28 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import auth, camera, config, files, frames, logs, overlay, plugins, status, stream, system, terminal
+from caelum import __version__
+
+from .routes import (
+    auth,
+    camera,
+    config,
+    files,
+    frames,
+    logs,
+    overlay,
+    plugins,
+    status,
+    stream,
+    system,
+    terminal,
+    update,
+)
 from .security import require_admin, require_preview
 
 
 def create_app(static_dir: Path | None = None) -> FastAPI:
-    app = FastAPI(title="caelum", version="0.1.0")
+    app = FastAPI(title="caelum", version=__version__)
 
     app.add_middleware(
         CORSMiddleware,
@@ -40,6 +56,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     app.include_router(camera.router, prefix="/api", dependencies=admin_only)
     app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
     app.include_router(system.router, prefix="/api", dependencies=admin_only)
+    app.include_router(update.router, prefix="/api", dependencies=admin_only)
     # files/frames/overlay declare per-route levels: reads are preview, writes admin.
     app.include_router(files.router, prefix="/api")
     app.include_router(frames.router, prefix="/api")
@@ -49,6 +66,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     app.include_router(stream.router)  # paths are already fully qualified (/api/frame/*, /ws/*)
     app.include_router(terminal.router)
     app.include_router(logs.router)  # paths are already fully qualified (/api/logs, /ws/logs)
+    app.include_router(update.ws_router)
 
     if static_dir is not None and static_dir.exists():
         # local-web's built assets — the Pi runs a single service, no nginx.

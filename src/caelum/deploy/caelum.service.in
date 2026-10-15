@@ -1,0 +1,22 @@
+# Rendered by install-system.sh (@PREFIX@, @USER@, @CONFIG_DIR@, @DATA_DIR@
+# are substituted) to /etc/systemd/system/caelum.service.
+[Unit]
+Description=caelum — allsky/astro camera capture engine
+After=network-online.target redis-server.service
+Wants=network-online.target redis-server.service
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DATA_DIR@
+EnvironmentFile=@CONFIG_DIR@/caelum.env
+Environment=CAELUM_RELEASES_DIR=@PREFIX@
+# The boot guard picks (and if need be rolls back) the release to run.
+ExecStart=@PREFIX@/bin/caelum-launch
+# always, not on-failure: after a web update caelum exits cleanly so that
+# this restart starts the newly linked release.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -14,6 +14,7 @@ from caelum.config.manager import ConfigManager
 from caelum.control.skystate import SkyStateCalculator
 from caelum.logging_conf import LogBuffer
 from caelum.settings import Settings
+from caelum.update.job import Updater
 
 
 def get_config_manager(conn: HTTPConnection) -> ConfigManager:
@@ -38,3 +39,8 @@ def get_capture_worker(conn: HTTPConnection) -> CaptureWorker:
 
 def get_skystate_calculator(conn: HTTPConnection) -> SkyStateCalculator:
     return conn.app.state.skystate_calculator
+
+
+def get_updater(conn: HTTPConnection) -> Updater | None:
+    """None outside a managed install (see caelum/update/)."""
+    return getattr(conn.app.state, "updater", None)

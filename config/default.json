@@ -6,7 +6,18 @@
     "resolution": [
       4056,
       3040
-    ]
+    ],
+    "lens": {
+      "projection": "equidistant_fisheye",
+      "center_x": 0.5,
+      "center_y": 0.5,
+      "radius": 0.48,
+      "azimuth_offset_deg": 0.0,
+      "mirror": false
+    },
+    "wb_auto": true,
+    "wb_red_gain": 1.0,
+    "wb_blue_gain": 1.0
   },
   "location": {
     "lat": 50.0755,
@@ -22,7 +33,9 @@
         "gain_min": 1.0,
         "gain_max": 2.0,
         "target_mean_adu": 128.0,
-        "saturation_threshold": 250.0
+        "saturation_threshold": 250.0,
+        "deadband_pct": 0.05,
+        "max_step_pct": 0.15
       },
       "civil_twilight": {
         "exposure_us_min": 200,
@@ -30,7 +43,9 @@
         "gain_min": 1.0,
         "gain_max": 4.0,
         "target_mean_adu": 120.0,
-        "saturation_threshold": 250.0
+        "saturation_threshold": 250.0,
+        "deadband_pct": 0.05,
+        "max_step_pct": 0.15
       },
       "nautical_twilight": {
         "exposure_us_min": 1000,
@@ -38,7 +53,9 @@
         "gain_min": 1.0,
         "gain_max": 8.0,
         "target_mean_adu": 110.0,
-        "saturation_threshold": 250.0
+        "saturation_threshold": 250.0,
+        "deadband_pct": 0.05,
+        "max_step_pct": 0.15
       },
       "astronomical_twilight": {
         "exposure_us_min": 10000,
@@ -46,7 +63,9 @@
         "gain_min": 1.0,
         "gain_max": 12.0,
         "target_mean_adu": 100.0,
-        "saturation_threshold": 250.0
+        "saturation_threshold": 250.0,
+        "deadband_pct": 0.05,
+        "max_step_pct": 0.15
       },
       "night": {
         "exposure_us_min": 100000,
@@ -54,7 +73,9 @@
         "gain_min": 1.0,
         "gain_max": 16.0,
         "target_mean_adu": 100.0,
-        "saturation_threshold": 250.0
+        "saturation_threshold": 250.0,
+        "deadband_pct": 0.05,
+        "max_step_pct": 0.15
       }
     }
   },
@@ -100,6 +121,9 @@
   "docs": {
     "base_url": "https://caelum.astrometers.eu"
   },
+  "update": {
+    "manifest_url": "https://github.com/roman-dvorak/caelum/releases/latest/download/manifest.json"
+  },
   "plugins": {
     "keogram": {
       "enabled": true,
@@ -109,6 +133,29 @@
     "meteor_detection": {
       "enabled": true,
       "order": 20,
+      "settings": {}
+    },
+    "overlay": {
+      "enabled": false,
+      "order": 30,
+      "settings": {
+        "templates": [
+          {
+            "name": "Default",
+            "elements": []
+          }
+        ],
+        "active_template": "Default"
+      }
+    },
+    "telescope_position": {
+      "enabled": false,
+      "order": 40,
+      "settings": {}
+    },
+    "timelapse": {
+      "enabled": false,
+      "order": 50,
       "settings": {}
     }
   }

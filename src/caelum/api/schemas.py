@@ -282,6 +282,8 @@ class NetworkInterfaceInfo(BaseModel):
 
 
 class SystemInfoResponse(BaseModel):
+    #: Running caelum version — the UI watches it change to see an update land.
+    version: str
     hostname: str
     uptime_s: float
     cpu_percent: float
@@ -313,3 +315,31 @@ class DeleteFramesRequest(BaseModel):
     kinds: list[Literal["raw", "thumbnails", "derivatives"]] = Field(
         default_factory=lambda: ["raw", "thumbnails", "derivatives"]
     )
+
+
+# ---- /api/update/* ----
+
+
+class UpdateAvailable(BaseModel):
+    version: str
+    notes: str
+
+
+class UpdateStartRequest(BaseModel):
+    version: str
+
+
+class UpdateStatusResponse(BaseModel):
+    current_version: str
+    #: False outside an install made by scripts/install-system.sh — the UI
+    #: then shows the version only, with no update controls.
+    managed: bool
+    manifest_url: str
+    available: UpdateAvailable | None = None
+    checked_at: str | None = None
+    check_error: str | None = None
+    job_state: Literal["idle", "downloading", "installing", "restarting", "failed"] = "idle"
+    job_target: str | None = None
+    job_error: str | None = None
+    #: Last outcome recorded on disk: {"state": "pending"|"success"|"rolled_back", "from", "to", "at"}.
+    last_result: dict[str, str] | None = None

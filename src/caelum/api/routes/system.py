@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from caelum import __version__
 from caelum.api.deps import get_settings
 from caelum.api.schemas import (
     DiskUsageInfo,
@@ -19,6 +20,7 @@ router = APIRouter()
 def get_system_info(settings: Settings = Depends(get_settings)) -> SystemInfoResponse:
     info = system_info.collect(data_dir=str(settings.data_dir))
     return SystemInfoResponse(
+        version=__version__,
         hostname=info.hostname,
         uptime_s=info.uptime_s,
         cpu_percent=info.cpu_percent,

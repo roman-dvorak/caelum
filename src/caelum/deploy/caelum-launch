@@ -1,0 +1,36 @@
+#!/bin/sh
+# Boot guard for a managed caelum install — systemd's ExecStart.
+#
+# After a web update (caelum/update/releases.py: switch_to) `update-pending`
+# exists and counts starts of the new release. caelum deletes it once it has
+# run healthy for a minute; if instead the release keeps dying, the fourth
+# start rolls `current` back to `previous` before exec'ing anything from it.
+#
+# Deliberately outside every release venv, and plain sh: a broken release
+# must not be able to break its own rollback. File names are shared with
+# caelum/update/releases.py.
+set -eu
+
+ROOT="${CAELUM_RELEASES_DIR:-$(dirname "$(dirname "$(readlink -f "$0")")")}"
+MAX_STARTS=3
+cd "$ROOT"
+
+if [ -f update-pending ]; then
+    starts=$(( $(cat update-pending 2>/dev/null || echo 0) + 1 ))
+    if [ "$starts" -gt "$MAX_STARTS" ] && [ -L previous ]; then
+        failed=$(basename "$(readlink current)")
+        restored=$(basename "$(readlink previous)")
+        echo "caelum-launch: $failed failed to start $MAX_STARTS times, rolling back to $restored" >&2
+        ln -sfn "$(readlink previous)" current.tmp
+        mv -T current.tmp current
+        at=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)
+        printf '{"state": "rolled_back", "from": "%s", "to": "%s", "at": "%s"}\n' \
+            "$restored" "$failed" "$at" > update-result.tmp
+        mv update-result.tmp update-result.json
+        rm -f update-pending
+    else
+        echo "$starts" > update-pending
+    fi
+fi
+
+exec "$ROOT/current/venv/bin/caelum" "$@"

@@ -9,6 +9,7 @@ import logging
 
 import uvicorn
 
+from caelum import __version__
 from caelum.api.app import create_app
 from caelum.auth import UserStore
 from caelum.cameras.base import CameraBackend
@@ -34,9 +35,15 @@ from caelum.scheduling.interval_scheduler import IntervalScheduler
 from caelum.settings import Settings, load_settings
 from caelum.storage.retention import RetentionSweeper
 from caelum.storage.writer import StorageWriter
+from caelum.update import releases as update_releases
+from caelum.update.job import Updater
 from caelum.upload.uploader import UploadWorker
 
 logger = logging.getLogger(__name__)
+
+# How long a freshly updated release has to stay up before the boot guard
+# (scripts/caelum-launch) stops counting its starts towards a rollback.
+_UPDATE_HEALTHY_AFTER_S = 60
 
 async def _async_main(settings: Settings) -> None:
     log_buffer = configure_logging(settings.log_level)
@@ -130,7 +137,8 @@ async def _async_main(settings: Settings) -> None:
     interval_scheduler.start()
     upload_worker.start()
     logger.info(
-        "caelum starting: camera=%s http=%s:%d local-web=%s auth=%s",
+        "caelum %s starting: camera=%s http=%s:%d local-web=%s auth=%s",
+        __version__,
         settings.camera_backend_override or cfg.camera.backend,
         settings.http_host,
         settings.http_port,
@@ -143,10 +151,30 @@ async def _async_main(settings: Settings) -> None:
             app, host=settings.http_host, port=settings.http_port, log_level=settings.log_level.lower()
         )
     )
+
+    # Self-update only exists in a managed install; the restart after an
+    # update is a plain clean exit that systemd (Restart=always) turns into
+    # a start of the newly linked release.
+    layout = update_releases.managed_layout()
+    if layout is not None:
+
+        def request_restart() -> None:
+            server.should_exit = True
+
+        app.state.updater = Updater(layout, request_restart)
+
+        async def confirm_update_when_healthy() -> None:
+            await asyncio.sleep(_UPDATE_HEALTHY_AFTER_S)
+            if capture_worker.is_alive() and update_releases.confirm_healthy(layout):
+                logger.info("Update to %s confirmed healthy", __version__)
+
+        health_task = asyncio.create_task(confirm_update_when_healthy(), name="update-health")
     try:
         await server.serve()
     finally:
         logger.info("caelum shutting down")
+        if layout is not None:
+            health_task.cancel()
         capture_worker.request_stop()
         interval_scheduler.request_stop()
         upload_worker.request_stop()

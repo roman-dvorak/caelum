@@ -216,6 +216,18 @@ class DocsConfig(StrictModel):
     base_url: str = "https://caelum.astrometers.eu"
 
 
+class UpdateConfig(StrictModel):
+    """Where the web UI looks for new caelum releases (see caelum/update/).
+
+    A static JSON manifest listing releases, with wheel paths relative to the
+    manifest itself — so any web server can host a channel by copying the
+    files a release build produces, and stable/beta channels are just two
+    URLs. Only consulted when an admin presses "check" in the UI.
+    """
+
+    manifest_url: str = "https://github.com/roman-dvorak/caelum/releases/latest/download/manifest.json"
+
+
 class PluginConfig(StrictModel):
     """One entry per plugin id under AppConfig.plugins.
 
@@ -269,4 +281,5 @@ class AppConfig(StrictModel):
     redis: RedisConfig = Field(default_factory=RedisConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     docs: DocsConfig = Field(default_factory=DocsConfig)
+    update: UpdateConfig = Field(default_factory=UpdateConfig)
     plugins: dict[str, PluginConfig] = Field(default_factory=_default_plugins)

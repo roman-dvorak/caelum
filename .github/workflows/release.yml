@@ -1,0 +1,52 @@
+# Push a tag matching pyproject's version to publish a release:
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The release's assets are what cameras update from: the default
+# update.manifest_url is .../releases/latest/download/manifest.json.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Tag matches the package version
+        run: |
+          version="$(uv version --short)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match pyproject version $version" >&2
+            exit 1
+          fi
+
+      - run: uv sync --group dev
+      - run: uv run pytest -q
+
+      - name: Build
+        run: scripts/build-release.sh --notes "$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "caelum $GITHUB_REF_NAME" --generate-notes

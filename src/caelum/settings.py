@@ -17,8 +17,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# ../caelum-web/apps/local-web/dist next to this checkout — see caelum-web.
-_DEV_WEB_DIST = Path(__file__).resolve().parents[3] / "caelum-web" / "apps" / "local-web" / "dist"
+# Where the built local-web UI is found, in order of preference after
+# CAELUM_WEB_DIR: bundled into the installed package by
+# scripts/build-release.sh, else the source checkout's own build output.
+_PACKAGED_WEB_DIR = Path(__file__).resolve().parent / "webui"
+_DEV_WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "apps" / "local-web" / "dist"
+
+
+def _default_web_dir() -> Path:
+    if (_PACKAGED_WEB_DIR / "index.html").is_file():
+        return _PACKAGED_WEB_DIR
+    return _DEV_WEB_DIST
 
 
 def _env_path(name: str, default: str) -> Path:
@@ -34,7 +43,7 @@ class Settings:
     redis_url: str
     camera_backend_override: str | None
     log_level: str
-    # Built caelum-web local-web app (its `dist/`), served at `/`. None, or a
+    # Built local-web app (its `dist/`), served at `/`. None, or a
     # directory that doesn't exist, means API-only.
     web_dir: Path | None = None
 
@@ -59,7 +68,5 @@ def load_settings() -> Settings:
         # auto-detect on real hardware. Unset by default.
         camera_backend_override=os.environ.get("CAELUM_CAMERA_BACKEND"),
         log_level=os.environ.get("CAELUM_LOG_LEVEL", "INFO"),
-        # A system install points this at its copy of the web build; a dev
-        # checkout falls back to the sibling caelum-web repo's build output.
-        web_dir=_env_path("CAELUM_WEB_DIR", str(_DEV_WEB_DIST)),
+        web_dir=_env_path("CAELUM_WEB_DIR", str(_default_web_dir())),
     )
