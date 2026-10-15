@@ -16,10 +16,6 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7
-        ports: ["6379:6379"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -40,6 +36,8 @@ jobs:
             exit 1
           fi
 
+      # tests/conftest.py starts a throwaway redis-server per test.
+      - run: sudo apt-get install -y -qq redis-server
       - run: uv sync --group dev
       - run: uv run pytest -q
 
