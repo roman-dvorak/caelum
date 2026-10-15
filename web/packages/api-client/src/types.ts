@@ -223,6 +223,11 @@ export interface DocsConfig {
   base_url: string
 }
 
+/** Where the web UI looks for new releases — see `caelum/update/manifest.py`. */
+export interface UpdateConfig {
+  manifest_url: string
+}
+
 export interface AppConfig {
   config_version: number
   camera: CameraConfig
@@ -234,6 +239,7 @@ export interface AppConfig {
   redis: RedisConfig
   auth: AuthConfig
   docs: DocsConfig
+  update: UpdateConfig
   plugins: Record<string, PluginConfig>
 }
 
@@ -556,6 +562,8 @@ export interface NetworkInterfaceInfo {
 }
 
 export interface SystemInfoResponse {
+  /** Running caelum version — changes when a web update lands. */
+  version: string
   hostname: string
   uptime_s: number
   cpu_percent: number
@@ -574,6 +582,33 @@ export interface SystemInfoResponse {
 export interface SystemActionResponse {
   ok: boolean
   message: string
+}
+
+// ---- /api/update/* --------------------------------------------------------
+
+export type UpdateJobState = 'idle' | 'downloading' | 'installing' | 'restarting' | 'failed'
+
+export interface UpdateResult {
+  state: 'pending' | 'success' | 'rolled_back'
+  /** On `rolled_back`: the version restored. Otherwise the version updated from. */
+  from: string
+  /** On `rolled_back`: the version that failed to start. */
+  to: string
+  at: string
+}
+
+export interface UpdateStatusResponse {
+  current_version: string
+  /** False outside a managed install (dev checkout, plain pip) — no update controls then. */
+  managed: boolean
+  manifest_url: string
+  available: { version: string; notes: string } | null
+  checked_at: string | null
+  check_error: string | null
+  job_state: UpdateJobState
+  job_target: string | null
+  job_error: string | null
+  last_result: UpdateResult | null
 }
 
 // ---- /api/overlay/assets ---------------------------------------------------

@@ -5,12 +5,12 @@ is built for a machine you own and administer yourself — typically a Raspberry
 Pi with a camera module bolted under an acrylic dome, left outside and expected
 to keep working without anyone logging in.
 
-The stack is two repositories:
+The stack is one repository with two halves:
 
-- **`caelum`** — the Python backend. A headless capture engine plus a FastAPI
+- **the Python backend** (`src/caelum`). A headless capture engine plus a FastAPI
   HTTP/WebSocket interface. This is where all of the behaviour described in
   this guide lives.
-- **`caelum-web`** — a pnpm workspace with two React apps and two shared
+- **`web/`** — a pnpm workspace with two React apps and two shared
   packages. `local-web` is the interactive control UI served by the backend
   itself; `remote-web` is a read-only, multi-camera viewer that talks to
   nothing but static files on a web host.

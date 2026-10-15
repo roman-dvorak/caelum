@@ -65,6 +65,7 @@ export default defineConfig({
             { text: 'Web interface', link: '/guide/web-ui' },
             { text: 'Access & security', link: '/guide/security' },
             { text: 'Deployment', link: '/guide/deployment' },
+            { text: 'Updates', link: '/guide/updates' },
             { text: 'Plugins', link: '/guide/plugins' },
           ],
         },

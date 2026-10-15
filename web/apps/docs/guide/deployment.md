@@ -10,124 +10,96 @@ A production caelum installation is three pieces on (usually) two machines:
 
 ### Install
 
-Install as a dedicated system user with no login shell, into `/opt/caelum`:
+Install from a release with the one-line installer — no source checkout, no
+build on the Pi:
 
 ```bash
-sudo useradd --system --home /opt/caelum --shell /usr/sbin/nologin caelum
-sudo mkdir -p /opt/caelum /etc/caelum /var/lib/caelum
-sudo chown caelum:caelum /opt/caelum /etc/caelum /var/lib/caelum
-
-sudo -u caelum git clone <your-remote>/caelum.git /opt/caelum
-cd /opt/caelum
-sudo -u caelum uv sync --extra picamera2
+curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/install.sh | sudo bash
 ```
 
-The `picamera2` extra carries an `aarch64`/`armv7l` marker, so it installs on
-the Pi and is skipped everywhere else.
+It installs `redis-server` and (on a Pi) `python3-picamera2` from apt,
+creates a `caelum` system user, and lays the install out as:
 
-Redis:
-
-```bash
-sudo apt install redis-server
-sudo systemctl enable --now redis-server
+```
+/opt/caelum/releases/<version>/venv   one virtualenv per release
+/opt/caelum/current -> releases/...   the release systemd runs
+/opt/caelum/previous -> releases/...  the rollback target
+/opt/caelum/bin/caelum-launch         boot guard, systemd's ExecStart
+/etc/caelum/                          caelum.env, config.json, auth.json
+/var/lib/caelum/                      captured data
 ```
 
-Environment file at `/opt/caelum/.env`:
+The release wheel carries the backend *and* the built local web UI, so there is
+nothing else to deploy. Options: `--camera picamera2|opencv|mock` (seeds a new
+`config.json`; default `picamera2` on a Pi), `--wheel FILE|URL`,
+`--manifest URL`, `--no-start`.
 
-```ini
-CAELUM_CONFIG_DIR=/etc/caelum
-CAELUM_DATA_DIR=/var/lib/caelum
-
-CAELUM_HTTP_HOST=127.0.0.1
-CAELUM_HTTP_PORT=8000
-
-CAELUM_REDIS_URL=redis://127.0.0.1:6379/0
-CAELUM_LOG_LEVEL=INFO
-```
+On a Pi the release venv is created with `--system-site-packages`, so it sees
+apt's picamera2/libcamera (which have no PyPI wheels), and pip installs with
+the numpy/astropy/opencv pins shipped inside the wheel
+(`caelum/constraints-rpi.txt`) to match the system numpy's ABI.
 
 Leave `CAELUM_CAMERA_BACKEND` unset on real hardware and set
-`camera.backend` to `"picamera2"` in `config.json` instead — the environment
-variable is an explicit dev override, not a configuration mechanism, and
-leaving it set is how you end up quietly recording synthetic frames.
+`camera.backend` in the config instead — the environment variable is an
+explicit dev override, not a configuration mechanism, and leaving it set is
+how you end up quietly recording synthetic frames.
 
-`CAELUM_HTTP_HOST=127.0.0.1` assumes a reverse proxy in front. Use `0.0.0.0`
-only if you are deliberately serving uvicorn directly on a trusted LAN.
+The installer binds the HTTP server to `0.0.0.0` in `/etc/caelum/caelum.env`.
+Change it to `127.0.0.1` if you put a reverse proxy in front.
+
+Updates then happen from the web UI — see [Updates](/guide/updates).
 
 ### The systemd unit
 
-The repository ships `systemd/caelum.service.template`. Copy it, adjust the
-paths and the user, install it:
+The installer renders the unit from the release
+(`caelum/deploy/caelum.service.in`). The parts that matter:
 
 ```ini
-[Unit]
-Description=caelum — allsky/astro camera capture engine
-After=network-online.target redis-server.service
-Wants=network-online.target
-
 [Service]
-Type=simple
 User=caelum
-WorkingDirectory=/opt/caelum
-EnvironmentFile=/opt/caelum/.env
-ExecStart=/opt/caelum/.venv/bin/caelum
-Restart=on-failure
+WorkingDirectory=/var/lib/caelum
+EnvironmentFile=/etc/caelum/caelum.env
+Environment=CAELUM_RELEASES_DIR=/opt/caelum
+ExecStart=/opt/caelum/bin/caelum-launch
+Restart=always
 RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
 ```
 
-```bash
-sudo cp /opt/caelum/systemd/caelum.service.template /etc/systemd/system/caelum.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now caelum
-journalctl -u caelum -f
-```
+`Restart=always`, not `on-failure`: after a web update caelum exits cleanly so
+that systemd starts the newly linked release. `After=redis-server.service`
+orders startup but does not require it — caelum starts fine without Redis,
+logging a warning and running off the disk config alone.
 
-`ExecStart` points at the console script inside the uv-created virtualenv, so
-systemd starts the interpreter directly with no shell and no `uv run` wrapper
-in the process tree. `After=redis-server.service` orders startup but does not
-require it — caelum starts fine without Redis, logging a warning and running
-off the disk config alone.
-
-Things worth adding for an unattended box:
+Things worth adding for an unattended box (a drop-in via
+`systemctl edit caelum`):
 
 ```ini
-# under [Service]
+[Service]
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
-ReadWritePaths=/var/lib/caelum /etc/caelum
-SupplementaryGroups=video
+ReadWritePaths=/var/lib/caelum /etc/caelum /opt/caelum
 ```
 
-`SupplementaryGroups=video` is what lets the service user reach `/dev/video*`
-and the camera devices. `ReadWritePaths` must cover both the data directory and
-the config directory — the config manager rewrites `config.json` atomically via
-a temporary file in the same directory, so that directory must be writable, not
-just the file.
+`ReadWritePaths` must cover the data directory, the config directory — the
+config manager rewrites `config.json` atomically via a temporary file in the
+same directory — and `/opt/caelum`, where web updates install new releases.
+The installer already puts the service user in the `video` group for camera
+access.
 
 A healthy startup logs:
 
 ```
-caelum starting: camera=picamera2 http=127.0.0.1:8000 local-web=bundled
+caelum 0.2.0 starting: camera=picamera2 http=0.0.0.0:8000 local-web=/opt/caelum/releases/0.2.0/venv/.../caelum/webui
 ```
-
-If it says `local-web=not built`, the frontend has not been built where the
-backend expects it.
 
 ### Serving the local web UI from FastAPI
 
-There is no nginx on the Pi and no second process. `main.py` computes the
-path to the built frontend relative to the installed package:
-
-```
-<repo parent>/caelum-web/apps/local-web/dist
-```
-
-so `caelum` and `caelum-web` must be checked out as siblings. If that directory
-exists at startup, `create_app()` mounts it:
+There is no nginx on the Pi and no second process. caelum looks for the built
+frontend in this order: `CAELUM_WEB_DIR`, then `caelum/webui` inside the
+installed package (where a release wheel carries it), then
+`web/apps/local-web/dist` in a source checkout. Whichever exists is mounted:
 
 ```python
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="local-web")
@@ -137,20 +109,6 @@ The mount is a bare `StaticFiles` with `html=True` — it serves `index.html` fo
 directory requests but performs no SPA fallback rewrite for arbitrary paths,
 which is why `local-web` uses a hash router. API routes are registered before
 the mount, so `/api/*` and `/ws/*` are matched first and are never shadowed.
-
-Building on the Pi is slow and wants a lot of RAM. Build on a workstation and
-copy the result:
-
-```bash
-# on the workstation
-cd caelum-web
-pnpm install
-pnpm --filter local-web build
-
-rsync -az apps/local-web/dist/ pi:/opt/caelum-web/apps/local-web/dist/
-```
-
-Then restart caelum — the static mount is decided once, at startup.
 
 ### Reverse proxy and TLS
 
@@ -218,7 +176,7 @@ different host.
 ### Build and deploy the viewer
 
 ```bash
-cd caelum-web
+cd caelum/web
 pnpm install
 pnpm --filter remote-web build
 rsync -az apps/remote-web/dist/ archive.example.org:/var/www/allsky-data/
@@ -303,11 +261,11 @@ capacity plan of its own.
 
 ## These docs
 
-The docs are a VitePress site in `caelum-web/apps/docs`, and they build to
+The docs are a VitePress site in `web/apps/docs`, and they build to
 static HTML like everything else.
 
 ```bash
-cd caelum-web
+cd caelum/web
 pnpm --filter docs build
 rsync -az --delete apps/docs/.vitepress/dist/ archive.example.org:/var/www/caelum-docs/
 ```
@@ -367,5 +325,5 @@ Two failure modes are worth watching for specifically. Repeated `rsync failed`
 warnings with no successful `Running full upload reconciliation pass` mean
 nothing is being archived *and* nothing is being rotated, because retention
 refuses to delete files it cannot confirm were uploaded. And a
-`local-web=not built` line after a frontend deploy means the `dist/` directory
-is not where the backend looks for it.
+`local-web=not built` line means the installed package carries no UI — a
+wheel built without `scripts/build-release.sh`.

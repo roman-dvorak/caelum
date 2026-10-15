@@ -2,8 +2,8 @@
 
 ## Requirements
 
-- **Python 3.13 or newer.** `pyproject.toml` declares
-  `requires-python = ">=3.13"` and ruff targets `py313`; older interpreters
+- **Python 3.11 or newer.** `pyproject.toml` declares
+  `requires-python = ">=3.11"` (Raspberry Pi OS Bookworm's Python); older interpreters
   will not resolve.
 - **[uv](https://docs.astral.sh/uv/)** for dependency management. The project
   ships a `uv.lock` and uses `uv_build` as its build backend.
@@ -131,12 +131,12 @@ curl -s localhost:8000/api/frame/latest.jpg -o latest.jpg
 
 ## Building the frontend
 
-The frontend lives in the sibling `caelum-web` repository, checked out next to
-`caelum` — the backend looks for the built assets at
-`../caelum-web/apps/local-web/dist` relative to the installed package.
+The frontend lives in `web/` in the same repository; a source checkout serves
+the built assets from `web/apps/local-web/dist`. (A release wheel carries its
+own copy instead — see [Deployment](/guide/deployment).)
 
 ```bash
-cd ../caelum-web
+cd web
 pnpm install
 pnpm -r build          # typechecks packages, builds both apps to dist/
 ```

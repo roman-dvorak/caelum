@@ -1,12 +1,13 @@
-# caelum-web
+# caelum web frontends
 
-Frontend monorepo for [caelum](../caelum), a headless allsky/astro camera
-capture backend. Two apps share one component/client library:
+The `web/` half of [caelum](../README.md) — a pnpm workspace next to the
+Python backend in `../src/caelum`. Two apps share one component/client library:
 
 - **`apps/local-web`** — full interactive control, talking to a live caelum
   backend on the same device (e.g. a Raspberry Pi) over its REST API and
   `/ws/stream` WebSocket. Built to `apps/local-web/dist`, which
-  `caelum/src/caelum/main.py` serves directly at `/` if present.
+  the backend serves at `/` in a source checkout; release wheels carry their
+  own copy (`../scripts/build-release.sh`).
 - **`apps/remote-web`** — read-only, multi-camera visualization. Talks only
   to static JSON/JPEG files (no backend at all) served from an Apache host
   that caelum's uploader rsyncs data to.
@@ -76,7 +77,7 @@ caelum's uploader syncs into the same directory.
 ## Layout
 
 ```
-caelum-web/
+web/
   packages/
     ui/           @caelum/ui — shared React components
     api-client/   @caelum/api-client — typed clients + shared types
@@ -96,9 +97,9 @@ typechecks each package standalone via `tsc --noEmit`.
 
 The exact REST/WS/static-file shapes this frontend is built against are
 documented as TypeScript types in `packages/api-client/src/types.ts`, kept
-in sync with `caelum/src/caelum/api/schemas.py`,
-`caelum/src/caelum/config/schema.py` and
-`caelum/src/caelum/capture/metadata.py`.
+in sync with `../src/caelum/api/schemas.py`,
+`../src/caelum/config/schema.py` and
+`../src/caelum/capture/metadata.py`.
 
 
 ## Documentation links from the UI

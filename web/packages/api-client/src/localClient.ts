@@ -33,6 +33,7 @@ import type {
   OverlayAssetInfo,
   SystemActionResponse,
   SystemInfoResponse,
+  UpdateStatusResponse,
   UsageResponse,
   UserSummary,
   WhiteBalanceAutoCalibrateRequest,
@@ -316,6 +317,29 @@ export class LocalApiClient {
     return this.postJson<SystemActionResponse>('/system/reboot', {})
   }
 
+  // ---- software update -----------------------------------------------
+
+  getUpdateStatus(): Promise<UpdateStatusResponse> {
+    return this.request<UpdateStatusResponse>('/update/status')
+  }
+
+  /** Fetches the configured release manifest (server-side). */
+  checkUpdate(): Promise<UpdateStatusResponse> {
+    return this.postJson<UpdateStatusResponse>('/update/check', {})
+  }
+
+  /** Starts installing `version`, which must be the one the last check found. */
+  startUpdate(version: string): Promise<UpdateStatusResponse> {
+    return this.postJson<UpdateStatusResponse>('/update/start', { version })
+  }
+
+  /** Installs an uploaded `caelum-<version>-*.whl` — for cameras without internet. */
+  uploadUpdate(file: File): Promise<UpdateStatusResponse> {
+    const body = new FormData()
+    body.append('file', file)
+    return this.request<UpdateStatusResponse>('/update/upload', { method: 'POST', body })
+  }
+
   // ---- overlay assets --------------------------------------------------
 
   /** Direct URL for a `custom_image` overlay element's `asset` field —
@@ -547,4 +571,16 @@ export function connectLogs(options: LogStreamOptions): LogStreamHandle {
   }
 
   return { close: () => ws.close() }
+}
+
+// ---- /ws/update ------------------------------------------------------
+
+/**
+ * The software-update install log: same frame protocol as `/ws/logs`
+ * (backlog, then one line at a time), from the update job's own buffer.
+ */
+export function connectUpdateLog(options: LogStreamOptions): LogStreamHandle {
+  if (options.url) return connectLogs(options)
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return connectLogs({ ...options, url: `${protocol}//${window.location.host}/ws/update` })
 }

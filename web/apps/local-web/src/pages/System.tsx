@@ -3,6 +3,7 @@ import type { NetworkInterfaceInfo } from '@caelum/api-client'
 import { Button, Message, PageHeader, Panel, PowerIcon, Readout, StatusTile, formatBytes } from '@caelum/ui'
 import { useSystemInfo } from '../hooks/useSystemInfo.ts'
 import { localApiClient } from '../services/client.ts'
+import { SoftwareUpdate } from '../components/SoftwareUpdate.tsx'
 
 /**
  * Host machine vitals — CPU/RAM/disk/temperature/network — plus the two
@@ -64,6 +65,7 @@ export function System() {
       {!info ? null : (
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-px bg-line-soft sm:grid-cols-3 lg:grid-cols-4">
+            <StatusTile label="caelum" value={info.version} />
             <StatusTile label="Hostname" value={info.hostname} />
             <StatusTile label="Uptime" value={formatUptime(info.uptime_s)} />
             <StatusTile label="CPU" value={info.cpu_percent.toFixed(0)} unit="%" />
@@ -114,6 +116,8 @@ export function System() {
           <Panel title="Network interfaces">
             <NetworkTable interfaces={info.network} />
           </Panel>
+
+          <SoftwareUpdate runningVersion={info.version} />
         </div>
       )}
     </>
