@@ -1,0 +1,13 @@
+# Pins for a Raspberry Pi OS (Bookworm) install, used as `pip install -c`.
+#
+# apt's python3-picamera2/python3-libcamera (there is no PyPI wheel for
+# libcamera) and their C extensions (simplejpeg, ...) are built against the
+# system Python 3.11 and system numpy 1.24. A numpy 2.x in the venv imports
+# fine but crashes with "numpy.dtype size changed" as soon as picamera2 loads.
+#
+# The test suite passes under exactly this set (Python 3.11).
+numpy==1.24.2
+# 6.1.x is the newest astropy line that still supports numpy 1.x.
+astropy==6.1.7
+# 4.12+ requires numpy>=2.
+opencv-python-headless<4.12

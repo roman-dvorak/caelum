@@ -26,6 +26,13 @@ from astropy.utils import iers
 from caelum.config.schema import SkyPeriod
 
 iers.conf.auto_download = False
+# Without downloads the bundled IERS table only ever ages. astropy >= 7 then
+# refuses to transform once it is > auto_max_age (30 days) old, and every
+# version refuses past the table's predictive range — so a field install would
+# stop computing sky state a month after release. UT1-UTC is < 1 s either way,
+# irrelevant for twilight classification: accept the stale/absent values.
+iers.conf.auto_max_age = None
+iers.conf.iers_degraded_accuracy = "ignore"
 
 # Standard astronomical twilight thresholds (sun altitude, degrees) — the
 # same convention used by NOAA/USNO almanacs.
