@@ -5,7 +5,7 @@ website that shows every camera publishing to one archive — the latest image
 from each, and for every camera a browsable history of nights with keograms
 and frame galleries.
 
-AstroMeters runs one at **[viewer.astrometers.eu](https://viewer.astrometers.eu)**.
+AstroMeters runs one at **[viewer.caelum.astrometers.eu](https://viewer.caelum.astrometers.eu/)**.
 
 ![The remote viewer's camera list](/images/screenshots/viewer-cameras.webp)
 
@@ -62,7 +62,7 @@ a slug and a name:
 viewer (`/#/camera/brno-north`); `camera_name` is the label people see. SSH
 keys, transports and the full layout are in [Upload & archive](/guide/upload).
 
-Want your camera on viewer.astrometers.eu? Contact AstroMeters at
+Want your camera on viewer.caelum.astrometers.eu? Contact AstroMeters at
 [info@astrometers.eu](mailto:info@astrometers.eu).
 
 ::: warning Location is public
