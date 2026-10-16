@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
+import threading
 
 import uvicorn
 
@@ -49,6 +51,13 @@ logger = logging.getLogger(__name__)
 # How long a freshly updated release has to stay up before the boot guard
 # (scripts/caelum-launch) stops counting its starts towards a rollback.
 _UPDATE_HEALTHY_AFTER_S = 60
+_SHUTDOWN_GRACE_S = 5
+_RESTART_DEADLINE_S = 60
+
+
+def _exit_stuck_restart() -> None:
+    logger.critical("Restart after update did not finish within %ds — exiting hard", _RESTART_DEADLINE_S)
+    os._exit(1)
 
 async def _async_main(settings: Settings) -> None:
     log_buffer = configure_logging(settings.log_level)
@@ -173,7 +182,16 @@ async def _async_main(settings: Settings) -> None:
 
     server = uvicorn.Server(
         uvicorn.Config(
-            app, host=settings.http_host, port=settings.http_port, log_level=settings.log_level.lower()
+            app,
+            host=settings.http_host,
+            port=settings.http_port,
+            log_level=settings.log_level.lower(),
+            # Without a limit a graceful shutdown waits for every open
+            # connection to end — and an open browser tab holds WebSockets
+            # (/ws/stream, /ws/logs, /ws/update) that never do, so the
+            # restart after a web update hung with the HTTP side already
+            # down. Close them after a few seconds instead.
+            timeout_graceful_shutdown=_SHUTDOWN_GRACE_S,
         )
     )
 
@@ -185,6 +203,12 @@ async def _async_main(settings: Settings) -> None:
 
         def request_restart() -> None:
             server.should_exit = True
+            # Last resort if the clean shutdown still doesn't finish (a
+            # worker that won't join, ...): the new release is already
+            # linked, so a hard exit just gets systemd to start it.
+            watchdog = threading.Timer(_RESTART_DEADLINE_S, _exit_stuck_restart)
+            watchdog.daemon = True
+            watchdog.start()
 
         app.state.updater = Updater(layout, request_restart)
 
