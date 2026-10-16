@@ -42,7 +42,11 @@ jobs:
       - run: uv run pytest -q
 
       - name: Build
-        run: scripts/build-release.sh --notes "$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
+        run: |
+          # checkout fetches the commit, not the annotated tag object that
+          # holds the release notes shown in the camera's update dialog.
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          scripts/build-release.sh --notes "$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
 
       - name: Publish
         env:
