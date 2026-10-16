@@ -42,7 +42,7 @@ caelum, and it is the hardware caelum is developed and tested against.
 | Ventilation | Active ventilation of the enclosure plus dedicated CPU cooling |
 | Environmental sensors | Dome temperature; body temperature, humidity and pressure; optional external sensor |
 | Timekeeping | Battery-backed RTC, so frames are timestamped correctly with no network |
-| Network and power | Gigabit Ethernet (1000BASE-T) with PoE+ (IEEE 802.3at) — one cable. Plain 802.3af PoE is not enough. A separate power input is available on request |
+| Network and power | Gigabit Ethernet (1000BASE-T) with PoE+ (IEEE 802.3at) — one cable. A separate power input is available on request |
 | Control electronics | Custom AstroMeters board managing heating, ventilation and peripherals |
 
 ## Example images
