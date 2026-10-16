@@ -32,6 +32,20 @@ def get_latest_thumbnail(
     return Response(content=latest.thumbnail_jpeg, media_type="image/jpeg")
 
 
+@router.get("/api/frame/overlay.png")
+def get_latest_overlay(
+    _: Principal = Depends(require_preview), frame_store: FrameStore = Depends(get_frame_store)
+) -> Response:
+    """The latest frame's rendered overlay — a transparent PNG at the
+    thumbnail's size, to stack over `latest.jpg` / the stream. 404 until
+    every plugin has contributed and it has been rendered (see
+    `DerivativePool._finalize_overlay`), or with `overlay_mode = "off"`."""
+    latest = frame_store.get_latest()
+    if latest is None or latest.overlay_png is None:
+        raise HTTPException(status_code=404, detail="no rendered overlay for the latest frame")
+    return Response(content=latest.overlay_png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
 @router.get("/api/frame/raw")
 def get_frame_raw(
     captured_at: datetime | None = Query(

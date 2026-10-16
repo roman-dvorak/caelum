@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import io
+
+from PIL import Image
+
+from tests.factories import make_image, make_processed_frame
+
 from .test_api_endpoints import VIEWER_PASSWORD, _build_harness, login
 
 
@@ -58,5 +64,30 @@ async def test_unsupported_content_type_is_rejected(tmp_path, redis_url):
                 "/api/overlay/assets", files={"file": ("script.js", b"alert(1)", "application/javascript")}
             )
             assert resp.status_code == 415
+    finally:
+        await harness.config_manager.stop()
+
+
+async def test_overlay_preview_renders_a_draft_template_on_the_latest_frame(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "ovtest3")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            draft = [{"id": "m", "kind": "mask", "x": 0, "y": 0, "w": 0.5, "h": 0.5, "color": "#00ff00"}]
+            assert (await client.post("/api/overlay/preview.png", json=draft)).status_code == 404
+
+            harness.frame_store.update(make_processed_frame(image=make_image(width=400, height=200)))
+            response = await client.post("/api/overlay/preview.png", json=draft)
+            assert response.status_code == 200
+            layer = Image.open(io.BytesIO(response.content))
+            assert layer.size == (400, 200)
+            assert layer.getpixel((50, 50)) == (0, 255, 0, 255)
+
+            # The live layer only exists once the pool has rendered it.
+            assert (await client.get("/api/frame/overlay.png")).status_code == 404
+            latest = harness.frame_store.get_latest()
+            harness.frame_store.set_overlay(latest.metadata.captured_at, [], "file", response.content)
+            live = await client.get("/api/frame/overlay.png")
+            assert live.status_code == 200 and live.content == response.content
     finally:
         await harness.config_manager.stop()

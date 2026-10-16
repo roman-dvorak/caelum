@@ -110,9 +110,7 @@ the local UI requests live viewing (`POST /api/camera/mode`), the worker takes
 
 Every frame carries a `FrameMetadata` document. The same JSON shape is pushed
 live over the WebSocket, written as a `<YYYYMMDD-HHMMSS>.json` sidecar next to every
-stored image, and mirrored to the remote server by the uploader — so the
-overlay renderer in `@caelum/ui` draws from an identical structure regardless
-of where it came from.
+stored image, and mirrored to the remote server by the uploader.
 
 ```json
 {
@@ -128,7 +126,8 @@ of where it came from.
     "period": "night"
   },
   "focus_score": 118.3,
-  "overlay_elements": []
+  "overlay_elements": [],
+  "overlay": "file"
 }
 ```
 
@@ -151,20 +150,18 @@ It is a useful trend to watch, not a calibrated measurement.
 ```
 
 `type` is deliberately *not* an enum, so a plugin can introduce its own kind
-without a schema change on the backend. `source` is `"system"` for the
-built-ins, or the plugin id for anything a plugin contributed.
+without a schema change on the backend. `source` is the id of the plugin
+that contributed it.
 
-Three system elements are attached to every frame in the capture thread:
-
-- `timestamp` — payload `{ "text": <ISO 8601 capture time> }`
-- `exposure_readout` — payload `{ "exposure_us": …, "analogue_gain": … }`
-- `sky_state_badge` — payload `{ "period": …, "sun_altitude_deg": …, "moon_illumination": … }`,
-  rounded for display
-
-Derivative workers and plugins append further elements asynchronously through
-`FrameStore.update_metadata()`, which attaches them to whichever frame is
-currently latest and re-broadcasts it to WebSocket subscribers. There is no
-per-frame identifier to address a specific past frame with, so this assumes
-derivative processing completes well within one capture interval. In practice
-that holds comfortably — a frame difference takes milliseconds, capture
-intervals are tens of seconds — but it is an assumption, not a guarantee.
+A frame starts with no elements. Everything on the overlay — including the
+capture time, exposure and gain — comes from plugins, most of it from the
+`overlay` plugin's template (see [Plugins](/guide/plugins#worked-example-the-overlay-plugin)).
+Derivative workers and plugins add elements through
+`provide_overlay_elements()`. When every worker is done with the frame,
+`DerivativePool` renders the complete list once into an overlay image
+(`derivatives/overlay_render.py`), stores it according to
+`storage_policy.overlay_mode` — a PNG in `overlays/`, or burned into the
+thumbnail — rewrites the thumbnail's sidecar with the full list and
+`"overlay": "file" | "burned"`, and re-broadcasts the frame to WebSocket
+subscribers. The viewers only ever show that image; see
+[Overlays](/guide/storage#overlays).

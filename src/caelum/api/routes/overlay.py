@@ -2,9 +2,12 @@
 watermarks, static markers) an admin attaches to overlay elements from the
 visual editor. Stored under `data_dir/overlay_assets/`, which — like
 `darks/` — is never swept by retention (see `storage/paths.py`'s
-`MANAGED_SUBDIRS`, which retention walks instead of the whole data dir) and
-is mirrored to the remote archive as a whole directory by the uploader, so
-`custom_image` elements resolve the same way on remote-web as they do here.
+`MANAGED_SUBDIRS`, which retention walks instead of the whole data dir). They
+are not uploaded: the camera renders them into the overlay image itself
+(`derivatives/overlay_render.py`), and that image is what remote-web shows.
+
+Plus the editor's preview: the exact overlay the camera would render for a
+draft template, on the latest frame.
 """
 
 from __future__ import annotations
@@ -13,12 +16,17 @@ import logging
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 
-from caelum.api.deps import get_settings
+from caelum.api.deps import get_config_manager, get_frame_store, get_settings
 from caelum.api.schemas import OverlayAssetInfo
 from caelum.api.security import Principal, require_admin, require_preview
+from caelum.capture import thumbnail
+from caelum.capture.frame_store import FrameStore
+from caelum.config.manager import ConfigManager
+from caelum.derivatives import overlay_render
+from caelum.derivatives.overlay import OverlayElementDef, OverlayTemplate, build_elements, default_template
 from caelum.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -36,13 +44,13 @@ def _assets_dir(settings: Settings) -> Path:
     return directory
 
 
-def _resolve_asset(settings: Settings, name: str) -> Path:
+def _resolve_asset(settings: Settings, name: str, *, uploaded_only: bool = False) -> Path:
     if not _SAFE_NAME.match(name):
         raise HTTPException(status_code=400, detail=f"Invalid asset name: {name!r}")
-    path = _assets_dir(settings) / name
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail=f"No such overlay asset: {name}")
-    return path
+    for directory in (_assets_dir(settings), None if uploaded_only else overlay_render.BUILTIN_ASSETS_DIR):
+        if directory is not None and (directory / name).is_file():
+            return directory / name
+    raise HTTPException(status_code=404, detail=f"No such overlay asset: {name}")
 
 
 @router.get("/overlay/assets", response_model=list[OverlayAssetInfo])
@@ -50,11 +58,17 @@ def list_overlay_assets(
     _: Principal = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> list[OverlayAssetInfo]:
-    directory = _assets_dir(settings)
-    return sorted(
-        (OverlayAssetInfo(name=p.name, size=p.stat().st_size) for p in directory.iterdir() if p.is_file()),
-        key=lambda a: a.name,
+    assets = {
+        p.name: OverlayAssetInfo(name=p.name, size=p.stat().st_size, builtin=True)
+        for p in overlay_render.BUILTIN_ASSETS_DIR.iterdir()
+        if p.is_file()
+    }
+    assets.update(
+        (p.name, OverlayAssetInfo(name=p.name, size=p.stat().st_size))
+        for p in _assets_dir(settings).iterdir()
+        if p.is_file()
     )
+    return sorted(assets.values(), key=lambda a: a.name)
 
 
 @router.get("/overlay/assets/{name}")
@@ -97,7 +111,39 @@ def delete_overlay_asset(
     _: Principal = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    path = _resolve_asset(settings, name)
+    path = _resolve_asset(settings, name, uploaded_only=True)
     path.unlink()
     logger.info("Overlay asset deleted: %s", name)
     return {"deleted": name}
+
+
+@router.get("/overlay/default-template", response_model=OverlayTemplate)
+def get_default_template(_: Principal = Depends(require_admin)) -> OverlayTemplate:
+    """The overlay a new camera starts with — for the editor's "add the
+    default template" action."""
+    return default_template()
+
+
+@router.post("/overlay/preview.png")
+def preview_overlay(
+    elements: list[OverlayElementDef],
+    _: Principal = Depends(require_admin),
+    settings: Settings = Depends(get_settings),
+    frame_store: FrameStore = Depends(get_frame_store),
+    config_manager: ConfigManager = Depends(get_config_manager),
+) -> Response:
+    """Renders `elements` (the editor's unsaved template) the way the camera
+    would for the latest frame — its labels filled from that frame's
+    metadata, together with the system readouts and every other plugin's
+    elements — as a transparent PNG at the thumbnail's size."""
+    latest = frame_store.get_latest()
+    if latest is None:
+        raise HTTPException(status_code=404, detail="no frame captured yet")
+    others = [e for e in latest.metadata.overlay_elements if e.source != "overlay"]
+    rendered = others + build_elements(elements, latest.metadata)
+    max_dim = config_manager.current.storage_policy.thumbnail_max_dim
+    height, width = thumbnail.resize(latest.image, max_dim).shape[:2]
+    layer = overlay_render.render_layer(rendered, (width, height), _assets_dir(settings))
+    return Response(
+        content=overlay_render.encode_png(layer), media_type="image/png", headers={"Cache-Control": "no-store"}
+    )

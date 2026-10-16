@@ -65,8 +65,9 @@ class InlineFrameSink:
                 submission.raw.image, info, self._dark_library, timer
             )
             metadata = pipeline.build_metadata(info, stats)
+            thumb_path = None
             if self._data_dir is not None:
-                pipeline.persist_thumbnail(self._data_dir, metadata, webp, info)
+                thumb_path = pipeline.persist_thumbnail(self._data_dir, metadata, webp, info)
                 timer.lap("write_thumbnail")
         except Exception:
             logger.exception("Processing frame captured at %s failed", info.captured_at)
@@ -81,6 +82,7 @@ class InlineFrameSink:
                 stats=stats,
                 metadata=metadata,
                 save_raw=submission.save_raw,
+                thumbnail_path=thumb_path,
             )
             self._frame_store.update(processed)
             self._event_bus.publish(FRAME_CAPTURED, processed)

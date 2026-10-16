@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
-from caelum.derivatives.overlay import OverlaySettings, OverlayWorker
+from caelum.derivatives.overlay import ASTROMETERS_LOGO, OverlaySettings, OverlayWorker
 from tests.factories import make_processed_frame
 
 
@@ -110,3 +111,44 @@ def test_label_align_defaults_to_center():
         .payload
     )
     assert payload["align"] == "center"
+
+
+def _with_provenance(**provenance):
+    frame = make_processed_frame()
+    return replace(frame, metadata=frame.metadata.model_copy(update={"provenance": provenance}))
+
+
+def test_provenance_placeholders():
+    frame = _with_provenance(caelum_version="0.4.0", camera_model="imx477", camera_name="Ondřejov")
+    worker = OverlayWorker({"elements": [
+        {"id": "l1", "kind": "label", "x": 0, "y": 0, "template": "{software} | {camera_model} | {camera_name}"},
+    ]})
+    assert worker.provide_overlay_elements(frame)[0].payload["text"] == "caelum 0.4.0 | imx477 | Ondřejov"
+
+
+def test_provenance_placeholders_degrade_gracefully():
+    assert _render("[{camera_model}][{camera_name}] {software}") == "[][] caelum"
+    frame = _with_provenance(camera_backend="MockCameraBackend")
+    worker = OverlayWorker({"elements": [{"id": "l1", "kind": "label", "x": 0, "y": 0, "template": "{camera_model}"}]})
+    assert worker.provide_overlay_elements(frame)[0].payload["text"] == "MockCameraBackend"
+
+
+def test_formatted_exposure_placeholder():
+    assert _render("{exposure}") == "1.00s"
+
+
+def test_default_settings_are_the_default_template():
+    elements = OverlaySettings().active_elements()
+    assert {e.id for e in elements} == {"time", "station", "logo", "software", "camera"}
+    logo = next(e for e in elements if e.id == "logo")
+    assert logo.asset == ASTROMETERS_LOGO
+
+
+def test_the_old_shipped_empty_default_gets_the_default_template():
+    old = {"templates": [{"name": "Default", "elements": []}], "active_template": "Default"}
+    assert len(OverlaySettings.model_validate(old).active_elements()) == 5
+
+
+def test_a_template_someone_edited_is_left_alone():
+    edited = {"templates": [{"name": "Mine", "elements": []}], "active_template": "Mine"}
+    assert OverlaySettings.model_validate(edited).active_elements() == []

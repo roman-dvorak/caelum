@@ -658,6 +658,7 @@ class CaptureWorker(threading.Thread):
             "params": params,
             "caelum_version": __version__,
             "camera_model": caps.model or None,
+            "camera_name": cfg.upload.camera_name,
             "camera_backend": type(camera).__name__,
             "camera_capabilities": caps.to_dict(),
             "config_sha256": hashlib.sha256(cfg.model_dump_json().encode()).hexdigest(),

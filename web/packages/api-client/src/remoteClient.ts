@@ -81,9 +81,11 @@ export class RemoteApiClient {
     return this.fetchJson<CameraManifest>(this.resolveCameraUrl(slug, 'manifest.json'))
   }
 
-  /** Fetched lazily — only call this once a specific date is opened. */
+  /** Fetched lazily — only call this once a specific date is opened.
+   * `date` is the manifest's `YYYY-MM-DD`; on disk it is nested
+   * `YYYY/MM/DD`. */
   getDateIndex(slug: string, date: string): Promise<DateIndex> {
-    return this.fetchJson<DateIndex>(this.resolveCameraUrl(slug, `thumbnails/${date}/index.json`))
+    return this.fetchJson<DateIndex>(this.resolveCameraUrl(slug, `thumbnails/${date.replaceAll('-', '/')}/index.json`))
   }
 
   /** `relativeMetadataPath` is a `DateIndexImageEntry.metadata` value, e.g.
@@ -96,12 +98,5 @@ export class RemoteApiClient {
    * frames exist, so it is normal for this to be absent for a given date. */
   keogramUrl(slug: string, date: string): string {
     return this.resolveCameraUrl(slug, `derivatives/${date}/keogram.png`)
-  }
-
-  /** A `custom_image` overlay element's `asset` field, resolved against this
-   * camera's synced `overlay_assets/` directory — the whole-tree upload
-   * reconciliation pass mirrors it here alongside thumbnails/raw/derivatives. */
-  overlayAssetUrl(slug: string, asset: string): string {
-    return this.resolveCameraUrl(slug, `overlay_assets/${asset}`)
   }
 }

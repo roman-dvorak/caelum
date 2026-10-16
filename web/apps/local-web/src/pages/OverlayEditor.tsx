@@ -4,6 +4,9 @@ import type {
   LensConfig,
   OverlayAssetInfo,
   OverlayElementDef,
+  OverlayLabelAlign,
+  OverlayLabelVAlign,
+  OverlayMode,
   OverlayElementKind,
   OverlaySettings,
   OverlayTemplate,
@@ -15,20 +18,26 @@ import { localApiClient } from '../services/client.ts'
 
 type Tab = 'elements' | 'telescope' | 'lens'
 
-// Mirrors OverlayWorker.LABEL_PLACEHOLDERS in
-// caelum/src/caelum/derivatives/overlay.py — the single fixed set of
-// `str.format()` fields a label template may reference.
+// Quick-insert buttons for the fields in LABEL_PLACEHOLDERS
+// (caelum/src/caelum/derivatives/overlay.py — the single fixed set of
+// `str.format()` fields a label template may reference), some with a
+// ready-made format spec.
 const LABEL_PLACEHOLDERS = [
+  'captured_at:%Y-%m-%d %H:%M:%S',
+  'exposure',
   'exposure_us',
-  'analogue_gain',
+  'analogue_gain:.1f',
+  'camera_name',
+  'camera_model',
+  'software',
   'sky_state.period',
-  'sky_state.sun_altitude_deg',
+  'sky_state.sun_altitude_deg:.1f',
   'sky_state.sun_azimuth_deg',
   'sky_state.moon_altitude_deg',
   'sky_state.moon_azimuth_deg',
   'sky_state.moon_illumination',
   'focus_score',
-  'captured_at',
+  'captured_at_local:%H:%M:%S',
 ]
 
 const DEFAULT_TELESCOPE_SETTINGS: TelescopePositionSettings = {
@@ -114,6 +123,8 @@ export function OverlayEditor() {
   const [seeded, setSeeded] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [previewToken, setPreviewToken] = useState(0)
+  const [overlayPreviewUrl, setOverlayPreviewUrl] = useState<string | null>(null)
+  const [overlayMode, setOverlayMode] = useState<OverlayMode | null>(null)
   const [assets, setAssets] = useState<OverlayAssetInfo[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -164,6 +175,29 @@ export function OverlayEditor() {
     setSelectedId(null)
   }
 
+  function uniqueName(base: string): string {
+    let candidate = base
+    let n = 2
+    while (templates.some((t) => t.name === candidate)) {
+      candidate = `${base} ${n}`
+      n += 1
+    }
+    return candidate
+  }
+
+  async function addDefaultTemplate() {
+    try {
+      const template = await localApiClient.getDefaultOverlayTemplate()
+      const name = uniqueName('AstroMeters default')
+      setTemplates((current) => [...withCurrentElements(current), { name, elements: template.elements }])
+      setActiveTemplateName(name)
+      setElements(template.elements)
+      setSelectedId(null)
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   function duplicateTemplate() {
     let candidate = `${activeTemplateName} copy`
     let n = 2
@@ -210,7 +244,9 @@ export function OverlayEditor() {
     localApiClient
       .getConfig()
       .then((cfg) => {
-        if (!cancelled) setLens(cfg.camera.lens)
+        if (cancelled) return
+        setLens(cfg.camera.lens)
+        setOverlayMode(cfg.storage_policy.overlay_mode ?? 'file')
       })
       .catch(() => {
         // The lens tab just keeps its defaults — Settings.tsx surfaces
@@ -223,6 +259,16 @@ export function OverlayEditor() {
       cancelled = true
     }
   }, [lensSeeded])
+
+  async function saveOverlayMode(mode: OverlayMode) {
+    setMessage(null)
+    try {
+      const updated = await localApiClient.updateConfig({ storage_policy: { overlay_mode: mode } })
+      setOverlayMode(updated.storage_policy.overlay_mode ?? mode)
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   async function saveLens() {
     setSaving(true)
@@ -294,11 +340,36 @@ export function OverlayEditor() {
 
   const previewUrl = `${localApiClient.latestFrameUrl()}?t=${previewToken}`
 
+  // The camera renders the (unsaved) template exactly as it will on stored
+  // frames — what's under the drag handles is the real thing, not a sketch.
+  useEffect(() => {
+    let cancelled = false
+    let url: string | null = null
+    const timer = window.setTimeout(() => {
+      localApiClient
+        .previewOverlay(elements)
+        .then((blob) => {
+          if (cancelled) return
+          url = URL.createObjectURL(blob)
+          setOverlayPreviewUrl(url)
+        })
+        .catch(() => {
+          if (!cancelled) setOverlayPreviewUrl(null)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      // Revoked once the next preview replaced it (or on unmount).
+      if (url) window.setTimeout(() => URL.revokeObjectURL(url as string), 1000)
+    }
+  }, [elements, previewToken])
+
   return (
     <>
       <PageHeader
         title="Overlay editor"
-        description="Configure masks, text labels and images drawn over the live view — and the demo telescope-position widget. Changes only take effect once saved."
+        description="Configure masks, text labels and images the camera draws into every frame's overlay — and the demo telescope-position widget. The preview shows the real rendering; changes take effect once saved."
         actions={<Button onClick={() => setPreviewToken((n) => n + 1)}>Refresh preview</Button>}
       />
 
@@ -318,8 +389,16 @@ export function OverlayEditor() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <div ref={containerRef} className="relative overflow-hidden border border-line bg-void">
+        <div ref={containerRef} className="relative self-start overflow-hidden border border-line bg-void">
           <img src={previewUrl} alt="Latest camera frame" className="block w-full" onClick={() => setSelectedId(null)} />
+          {overlayPreviewUrl ? (
+            <img
+              src={overlayPreviewUrl}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute inset-0 h-full w-full"
+            />
+          ) : null}
           {tab === 'elements'
             ? elements.map((element) => (
                 <ElementBox
@@ -367,6 +446,26 @@ export function OverlayEditor() {
               ) : null}
             </Panel>
 
+            <Panel title="Stored overlay">
+              <div className="flex flex-col gap-2">
+                <select
+                  className={inputClass}
+                  value={overlayMode ?? 'file'}
+                  disabled={overlayMode === null}
+                  onChange={(e) => void saveOverlayMode(e.target.value as OverlayMode)}
+                >
+                  <option value="file">Separate file (PNG over the clean image)</option>
+                  <option value="burn">Burned into the WebP</option>
+                  <option value="off">Off</option>
+                </select>
+                <p className="text-xs text-ink-faint">
+                  The camera renders the overlay once per frame — the live view, the Frames page and the remote
+                  viewer all show that same image. A separate file keeps the clean thumbnail and can be hidden;
+                  burned in, it is part of the picture. Applies to frames captured from now on.
+                </p>
+              </div>
+            </Panel>
+
             <Panel title="Template">
               <div className="flex flex-col gap-2">
                 <select
@@ -382,6 +481,9 @@ export function OverlayEditor() {
                 </select>
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={newTemplate}>New</Button>
+                  <Button onClick={() => void addDefaultTemplate()} title="Time, exposure and gain, camera name, AstroMeters logo, software and camera model">
+                    From default
+                  </Button>
                   <Button onClick={duplicateTemplate}>Duplicate</Button>
                   <Button onClick={renameTemplate}>Rename</Button>
                   <Button variant="danger" onClick={deleteTemplate}>
@@ -634,15 +736,19 @@ function ElementBox({
 
   const borderColor = selected ? 'border-amber' : 'border-cyan/70'
 
+  // Handles only — the element itself is in the camera-rendered preview
+  // underneath. A label's handle sits on its anchor the way the renderer
+  // aligns the text: its left/middle/right edge at `x`, top/middle/bottom at `y`.
   if (def.kind === 'label') {
+    const alignClass = { left: '', center: '-translate-x-1/2', right: '-translate-x-full' }[def.align ?? 'center']
+    const valignClass = { top: '', middle: '-translate-y-1/2', bottom: '-translate-y-full' }[def.valign ?? 'middle']
     return (
       <div
         onPointerDown={(e) => startDrag(e, 'move')}
-        className={['absolute -translate-x-1/2 -translate-y-1/2 cursor-move border px-1.5 py-0.5 font-mono text-[10px] whitespace-nowrap', borderColor].join(' ')}
-        style={{ left: `${def.x * 100}%`, top: `${def.y * 100}%`, color: def.color, backgroundColor: 'rgba(0,0,0,0.5)' }}
-      >
-        {def.template || 'label'}
-      </div>
+        title={def.template ?? undefined}
+        className={['absolute h-5 min-w-5 cursor-move border border-dashed', alignClass, valignClass, borderColor].join(' ')}
+        style={{ left: `${def.x * 100}%`, top: `${def.y * 100}%` }}
+      />
     )
   }
 
@@ -655,8 +761,6 @@ function ElementBox({
         top: `${def.y * 100}%`,
         width: `${(def.w ?? 0.1) * 100}%`,
         height: `${(def.h ?? 0.1) * 100}%`,
-        backgroundColor: def.kind === 'mask' ? def.color : 'transparent',
-        opacity: def.kind === 'mask' ? def.opacity : 1,
       }}
     >
       <div
@@ -787,7 +891,7 @@ function ElementProperties({
                 </button>
               ))}
             </div>
-            <Field label="Font size (px)">
+            <Field label="Font size (px)" hint="At a 1024 px wide image; scales with the frame. Default 16.">
               <input
                 type="number"
                 className={inputClass}
@@ -796,6 +900,59 @@ function ElementProperties({
                 onChange={(e) => onChange({ font_size_px: e.target.value ? Number(e.target.value) : null })}
               />
             </Field>
+            <Field label="Align" hint="Which edge of the text sits on the anchor; new lines in the template break lines.">
+              <select
+                className={inputClass}
+                value={element.align ?? 'center'}
+                onChange={(e) => onChange({ align: e.target.value as OverlayLabelAlign })}
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </Field>
+            <Field label="Vertical anchor" hint="Which edge of the text block sits on the anchor.">
+              <select
+                className={inputClass}
+                value={element.valign ?? 'middle'}
+                onChange={(e) => onChange({ valign: e.target.value as OverlayLabelVAlign })}
+              >
+                <option value="top">Top</option>
+                <option value="middle">Middle</option>
+                <option value="bottom">Bottom</option>
+              </select>
+            </Field>
+            <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase">
+              <input
+                type="checkbox"
+                checked={Boolean(element.background)}
+                onChange={(e) => onChange({ background: e.target.checked ? '#000000' : null })}
+                className="accent-amber"
+              />
+              Background box
+            </label>
+            {element.background ? (
+              <div className="flex items-end gap-3">
+                <Field label="Box color">
+                  <input
+                    type="color"
+                    value={element.background}
+                    onChange={(e) => onChange({ background: e.target.value })}
+                    className="h-8 w-16 border border-line bg-void"
+                  />
+                </Field>
+                <Field label={`Box opacity (${(element.background_opacity ?? 0.55).toFixed(2)})`}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={element.background_opacity ?? 0.55}
+                    onChange={(e) => onChange({ background_opacity: Number(e.target.value) })}
+                  />
+                </Field>
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -810,7 +967,7 @@ function ElementProperties({
                 <option value="">— choose —</option>
                 {assets.map((a) => (
                   <option key={a.name} value={a.name}>
-                    {a.name}
+                    {a.builtin ? `${a.name} (built-in)` : a.name}
                   </option>
                 ))}
               </select>

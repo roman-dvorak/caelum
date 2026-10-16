@@ -30,6 +30,10 @@ data/
       20260919-210501.jpg
       20260919-210501.json
       index.json
+  overlays/
+    2026/09/19/
+      20260919-210431.png
+      20260919-210501.png
   derivatives/
     2026/09/19/
       20260919-235959_keogram_keogram.png
@@ -48,13 +52,36 @@ anything, and the full timestamp in the name means any single file, on its
 own, is enough to know exactly when it was captured. Every date and time
 here is **UTC**, always, taken from the frame's `captured_at` — the local
 site time only ever shows up already converted, in the [web UI](/guide/web-ui),
-with the zone made explicit. The three managed subdirectories — `raw`, `thumbnails`, `derivatives` — are
-the ones retention sweeps. `darks` is a hand-curated calibration library and
+with the zone made explicit. The four managed subdirectories — `raw`, `thumbnails`, `overlays`, `derivatives` — are
+the ones retention sweeps and the uploader publishes. `darks` is a hand-curated calibration library and
 is never touched, and neither is `overlay_assets` — the images an admin
 uploads for `custom_image` overlay elements in the [overlay editor](/guide/plugins),
-which are config, not capture output. Both ride along on the uploader's
-whole-tree reconciliation pass, so `overlay_assets` reaches the remote
-archive the same way `darks` does.
+which are config, not capture output. Neither is uploaded: an asset only
+ever reaches the remote archive as pixels of a rendered overlay.
+
+## Overlays
+
+The overlay of every frame — the overlay editor's template (by default the
+capture time, exposure and gain, the camera name, the AstroMeters logo, the
+capture software and the camera model), and whatever other plugins
+contribute (meteor boxes, the telescope marker) — is rendered **once, on the
+camera**, after all plugins have finished with the frame
+(`derivatives/overlay_render.py`). The viewers never draw overlay elements
+themselves; they show that image, so the live view, the local history and
+the remote archive look exactly the same.
+
+`storage_policy.overlay_mode` decides what happens to it:
+
+| Mode | Stored thumbnail | Overlay |
+|---|---|---|
+| `file` (default) | clean | transparent PNG with the same stem in `overlays/`, stacked over the thumbnail by the viewers (which can also hide it) |
+| `burn` | overlay drawn into the WebP | no separate file |
+| `off` | clean | none |
+
+The live view always gets the rendered layer (`/api/frame/overlay.png`)
+unless the mode is `off`. Overlay text sizes are given in pixels of a
+1024 px wide image and scale with the actual size. Changing the mode only
+affects frames captured from then on.
 
 Derivative filenames carry more than a timestamp, because several workers may
 emit on the same second:
@@ -75,12 +102,13 @@ Every stored image gets a JSON sidecar with the same stem and a `.json`
 extension — `210431.fits` and `210431.json`, `210431.jpg` and `210431.json`. It
 is the frame's `FrameMetadata` serialised with `indent=2`: capture time,
 exposure, gain, the full sky state, the focus score and the overlay elements.
-The identical document is written next to the raw file and next to the
-thumbnail.
+The same document is written next to the raw file and next to the
+thumbnail; the thumbnail's copy is rewritten once the overlay is rendered,
+with every plugin's elements and `overlay` saying where the rendered image
+is (`"file"` or `"burned"`).
 
-That redundancy is on purpose. The remote viewer reads a thumbnail and its
-sidecar and can render the complete overlay without any backend, and a raw FITS
-pulled off the archive months later carries its own provenance next to it.
+That redundancy is on purpose: a raw FITS pulled off the archive months later
+carries its own provenance next to it.
 
 The raw FITS file additionally carries the key values in its header, so
 standard astronomy tools see them without reading the sidecar:

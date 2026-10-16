@@ -58,6 +58,7 @@ def write_local_manifests(
     manifest or to disk uses `date_path`, never `date` directly.
     """
     thumbs_by_date = _dated_files(data_dir, "thumbnails")
+    overlays_dir = data_dir / "overlays"
     raws_by_date = _dated_files(data_dir, "raw")
 
     dates = []
@@ -80,6 +81,10 @@ def write_local_manifests(
                     "time": path.stem,
                     "thumbnail": f"thumbnails/{date_path}/{path.name}",
                     "metadata": f"thumbnails/{date_path}/{path.stem}.json",
+                    # The rendered overlay to stack over the thumbnail, when
+                    # it is a separate file (not burned in, not switched off).
+                    **({"overlay": f"overlays/{date_path}/{path.stem}.png"}
+                       if (overlays_dir / date_path / f"{path.stem}.png").is_file() else {}),
                 }
                 for path in thumb_files
             ],

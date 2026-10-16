@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { DateIndex } from '@caelum/api-client'
-import { DateStrip, KeogramStrip } from '@caelum/ui'
+import { DateStrip, KeogramStrip, OverlayToggle } from '@caelum/ui'
 import { GalleryItem } from '../components/GalleryItem.tsx'
 import { useCameraManifest } from '../hooks/useCameraManifest.ts'
 import { useDateIndex } from '../hooks/useDateIndex.ts'
@@ -79,17 +79,28 @@ function DateGallery({ slug, date }: { slug: string; date: string }) {
 }
 
 function Gallery({ slug, dateIndex }: { slug: string; dateIndex: DateIndex }) {
+  const [showOverlay, setShowOverlay] = useState(true)
+  const hasOverlays = dateIndex.images.some((image) => image.overlay)
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {dateIndex.images.map((image) => (
-        <GalleryItem
-          key={image.time}
-          slug={slug}
-          time={image.time}
-          thumbnailPath={image.thumbnail}
-          metadataPath={image.metadata}
-        />
-      ))}
+    <div className="flex flex-col gap-2">
+      {hasOverlays ? (
+        <div className="flex justify-end">
+          <OverlayToggle checked={showOverlay} onChange={setShowOverlay} />
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {dateIndex.images.map((image) => (
+          <GalleryItem
+            key={image.time}
+            slug={slug}
+            time={image.time}
+            thumbnailPath={image.thumbnail}
+            overlayPath={image.overlay}
+            showOverlay={showOverlay}
+          />
+        ))}
+      </div>
     </div>
   )
 }

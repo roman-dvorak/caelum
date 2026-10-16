@@ -4,7 +4,7 @@
   (`upload.thumbnail_interval_s`), so new thumbnails/raw/derivatives show up
   on the remote promptly.
 - **Reconciliation pass** — every published capture (thumbnails, raw,
-  derivatives — nothing else in the data directory), run less often
+  derivatives, rendered overlays — nothing else in the data directory), run less often
   (`upload.reconcile_interval_s`). The transport (rsync, or the listing
   diff of transport_scp.py / transport_s3.py) compares source vs. destination
   itself, so this is naturally idempotent and self-healing: anything an
@@ -164,7 +164,7 @@ class UploadWorker(threading.Thread):
             # remote target mirror that layout exactly.
             today_path = datetime.now(UTC).date().isoformat().replace("-", "/")
             ok = True
-            for subdir in ("thumbnails", "raw", "derivatives"):
+            for subdir in paths.MANAGED_SUBDIRS:
                 local = self._data_dir / subdir / today_path
                 if local.exists():
                     target = f"{cfg.camera_slug}/{subdir}/{today_path}"

@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-MANAGED_SUBDIRS = ("raw", "thumbnails", "derivatives")
+MANAGED_SUBDIRS = ("raw", "thumbnails", "derivatives", "overlays")
 
 #: What new captures are written as (first entry) plus the legacy formats
 #: older captures on disk may still be in — every reader filters with these
@@ -76,6 +76,13 @@ def member_path(data_dir: Path, subdir: str, when: datetime, index: int, suffix:
     """`<data_dir>/<subdir>/YYYY/MM/DD/<stem>_set/<stem>_mNN<suffix>`, `when`
     being the representative's capture time."""
     return date_dir(data_dir, subdir, when) / set_dir_name(when) / f"{member_stem(when, index)}{suffix}"
+
+
+def overlay_path(data_dir: Path, thumbnail: Path) -> Path:
+    """`overlays/` mirrors `thumbnails/` with the same stems: the rendered
+    overlay of `thumbnails/<…>/<stem>.webp` is `overlays/<…>/<stem>.png`."""
+    relative = thumbnail.relative_to(data_dir / "thumbnails")
+    return (data_dir / "overlays" / relative).with_suffix(".png")
 
 
 def sidecar_path(image_path: Path) -> Path:

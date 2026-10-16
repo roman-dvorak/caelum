@@ -10,10 +10,9 @@ component library and one typed API client.
 - **`remote-web`** — a read-only, multi-camera viewer. It talks to nothing but
   static JSON and JPEG files on a web host. No backend, no API, no credentials.
 
-Both render frame overlays with the same `OverlayRenderer` component from
-`@caelum/ui`, driven by the identical `FrameMetadata` shape — whether it
-arrived live over a WebSocket or was read out of a `.json` sidecar months
-later.
+Neither draws overlays itself: both stack the overlay image the camera
+rendered (see [Overlays](/guide/storage#overlays)) over the frame, so the
+live view and the remote archive show exactly the same thing.
 
 ::: tip
 `local-web` uses a hash router (`/#/live`, `/#/settings`). That is not a
@@ -51,10 +50,10 @@ thumbnail as binary — metadata first so the client can size and prepare before
 the image lands. On connect, the currently latest frame is sent immediately so
 a fresh page is never blank.
 
-Frames also arrive when nothing was captured: if a derivative worker or plugin
-appends an overlay element after the fact, the latest frame is re-broadcast
-with the updated metadata, so a meteor detection box appears on a frame already
-on screen.
+Each frame arrives twice: once as soon as it is captured, and again a moment
+later when every plugin has contributed its overlay elements and the overlay
+has been rendered — `metadata.overlay` is then set and the view stacks
+`/api/frame/overlay.png` over the image, meteor boxes included.
 
 This is also where the two capture-cadence controls live:
 

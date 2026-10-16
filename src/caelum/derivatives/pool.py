@@ -18,18 +18,23 @@ import logging
 import multiprocessing
 import os
 from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
 import cv2
+import numpy as np
+from PIL import Image
 
 from caelum.capture import thumbnail as thumbnail_module
 from caelum.capture.frame_store import FrameStore, ProcessedFrame
+from caelum.capture.metadata import OverlayElement
 from caelum.config.manager import ConfigManager
+from caelum.config.schema import StoragePolicyConfig
 from caelum.events import FRAME_CAPTURED, EventBus
 from caelum.storage import paths
 
+from . import overlay_render
 from .base import Derivative, DerivativeWorker
 
 logger = logging.getLogger(__name__)
@@ -102,6 +107,10 @@ class DerivativePool:
         self._data_dir = data_dir
         self._config_manager = config_manager
         self._thread_pool = ThreadPoolExecutor(max_workers=max_thread_workers, thread_name_prefix="derivative")
+        # One thread of its own: it waits for a frame's worker tasks, which
+        # would deadlock `_thread_pool` if every one of its threads were
+        # such a waiter. Serial also means overlays are written in frame order.
+        self._overlay_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="overlay")
         # "spawn", not the default fork: forked workers would inherit the
         # main process's threads (libcamera, asyncio, redis) mid-state and,
         # forked while uvicorn is serving, its SIGTERM handler — which only
@@ -156,8 +165,8 @@ class DerivativePool:
         enough that giving it a whole one is not a cost worth avoiding.
         """
         frame = self._run_modify_chain(frame)
-        for worker in self._workers:
-            self._thread_pool.submit(self._run_worker, worker, frame)
+        futures = [self._thread_pool.submit(self._run_worker, worker, frame) for worker in self._workers]
+        self._overlay_pool.submit(self._finalize_overlay, frame, futures)
 
     def _run_modify_chain(self, frame: ProcessedFrame) -> ProcessedFrame:
         """Chains `modify_image` across every registered worker in ascending
@@ -197,13 +206,14 @@ class DerivativePool:
             return frame
         return replace(frame, image=image)
 
-    def _run_worker(self, worker: DerivativeWorker, frame: ProcessedFrame) -> None:
+    def _run_worker(self, worker: DerivativeWorker, frame: ProcessedFrame) -> list[OverlayElement]:
+        """Returns the worker's overlay elements for this frame — collected
+        by `_finalize_overlay` once every worker is done."""
+        elements: list[OverlayElement] = []
         try:
             worker.on_frame(frame)
 
             elements = worker.provide_overlay_elements(frame)
-            if elements:
-                self._frame_store.update_metadata(elements)
 
             derivative = worker.create_derivative({"frame": frame, "data_dir": self._data_dir})
             if derivative is not None:
@@ -211,7 +221,61 @@ class DerivativePool:
                 logger.info("Derivative %s (%s) written to %s", worker.id, derivative.kind, path)
         except Exception:
             logger.exception("Derivative worker %r failed processing a frame", worker.id)
+        return elements
+
+    def _finalize_overlay(self, frame: ProcessedFrame, futures: list[Future[list[OverlayElement]]]) -> None:
+        """The last step of a frame: once every worker has contributed, the
+        complete element list is rendered once (`overlay_render`) and
+        stored as `storage_policy.overlay_mode` says — a PNG under
+        `overlays/`, or burned into the thumbnail WebP — the sidecar is
+        rewritten with the full list, and the live view gets the layer."""
+        elements = list(frame.metadata.overlay_elements)
+        for future in futures:
+            try:
+                elements.extend(future.result())
+            except Exception:  # a cancelled task on shutdown; _run_worker itself never raises
+                logger.debug("Worker task for the overlay of %s did not finish", frame.metadata.captured_at)
+        try:
+            policy = self._config_manager.current.storage_policy if self._config_manager else StoragePolicyConfig()
+            overlay, png = None, None
+            if policy.overlay_mode != "off":
+                small = thumbnail_module.resize(frame.image, policy.thumbnail_max_dim)
+                layer = overlay_render.render_layer(
+                    elements, (small.shape[1], small.shape[0]), self._data_dir / "overlay_assets"
+                )
+                png = overlay_render.encode_png(layer)
+                overlay = self._store_overlay(frame, policy, small, layer, png)
+            self._rewrite_sidecar(frame, elements, overlay)
+            if self._frame_store is not None:
+                self._frame_store.set_overlay(frame.metadata.captured_at, elements, overlay, png)
+        except Exception:
+            logger.exception("Overlay for the frame captured at %s failed", frame.metadata.captured_at)
+
+    def _store_overlay(
+        self, frame: ProcessedFrame, policy: StoragePolicyConfig, small: np.ndarray, layer: Image.Image, png: bytes
+    ) -> str | None:
+        thumb = frame.thumbnail_path
+        if thumb is None or not thumb.is_file():
+            return None
+        if policy.overlay_mode == "burn":
+            # From the full frame again rather than decoding the stored WebP:
+            # one lossy encode, not two.
+            burned = overlay_render.composite(small, layer)
+            _write_atomic(thumb, thumbnail_module.encode_webp(burned, policy.webp_quality))
+            return "burned"
+        path = paths.overlay_path(self._data_dir, thumb)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomic(path, png)
+        return "file"
+
+    def _rewrite_sidecar(self, frame: ProcessedFrame, elements: list[OverlayElement], overlay: str | None) -> None:
+        thumb = frame.thumbnail_path
+        if thumb is None or not thumb.is_file():
+            return
+        metadata = frame.metadata.model_copy(update={"overlay_elements": elements, "overlay": overlay})
+        _write_atomic(paths.sidecar_path(thumb), metadata.model_dump_json(indent=2).encode())
 
     def shutdown(self) -> None:
         self._thread_pool.shutdown(wait=True, cancel_futures=True)
+        self._overlay_pool.shutdown(wait=True, cancel_futures=True)
         self.process_pool.shutdown(wait=True, cancel_futures=True)

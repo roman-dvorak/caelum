@@ -4,6 +4,8 @@ import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons.js'
 
 export interface LightboxItem {
   src: string
+  /** A camera-rendered overlay (same aspect ratio) stacked over `src`. */
+  overlaySrc?: string | null
   caption?: ReactNode
 }
 
@@ -76,12 +78,25 @@ export function Lightbox({ items, index, onIndexChange, onClose }: LightboxProps
           </button>
         ) : null}
 
-        <img
-          src={item.src}
-          alt=""
-          onClick={(e) => e.stopPropagation()}
-          className="max-h-full max-w-full object-contain"
-        />
+        {item.overlaySrc ? (
+          // Both fitted the same way into the same box, so they line up.
+          <div className="relative h-full w-full" onClick={(e) => e.stopPropagation()}>
+            <img src={item.src} alt="" className="absolute inset-0 h-full w-full object-contain" />
+            <img
+              src={item.overlaySrc}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+            />
+          </div>
+        ) : (
+          <img
+            src={item.src}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-full max-w-full object-contain"
+          />
+        )}
 
         {items.length > 1 ? (
           <button

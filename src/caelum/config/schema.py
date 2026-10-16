@@ -224,6 +224,10 @@ class StoragePolicyConfig(StrictModel):
     #: thumbnail is WebP, see `webp_quality`.
     jpeg_quality: int = 85
     webp_quality: int = Field(default=80, ge=1, le=100)
+    #: The rendered overlay of each stored thumbnail: "file" — a transparent
+    #: PNG in `overlays/` stacked over the clean WebP by the viewers;
+    #: "burn" — drawn into the WebP itself; "off" — not rendered at all.
+    overlay_mode: Literal["file", "burn", "off"] = "file"
     #: Store raw DNGs with lossless JPEG compression (bit-identical data,
     #: ~30 % smaller). Off = uncompressed, slightly less CPU.
     dng_compress: bool = True
@@ -380,15 +384,13 @@ def _default_plugins() -> dict[str, PluginConfig]:
         # anything a later plugin does.
         "keogram": PluginConfig(enabled=True, order=10),
         "meteor_detection": PluginConfig(enabled=True, order=20),
-        # Disabled by default: both require the admin to configure them
-        # (elements to draw, a calibrated projection) before they should
-        # show anything — an empty mask or a fake telescope marker
-        # appearing unasked would be a bad default.
-        "overlay": PluginConfig(
-            enabled=False,
-            order=30,
-            settings={"templates": [{"name": "Default", "elements": []}], "active_template": "Default"},
-        ),
+        # On by default with its built-in default template (time, exposure,
+        # camera name, logo, software, camera model — see
+        # `derivatives.overlay.default_template`); empty settings mean "the
+        # plugin's own defaults".
+        "overlay": PluginConfig(enabled=True, order=30),
+        # Disabled by default: needs a calibrated projection first, and a
+        # fake telescope marker appearing unasked would be a bad default.
         "telescope_position": PluginConfig(enabled=False, order=40),
         "timelapse": PluginConfig(enabled=False, order=50),
     }

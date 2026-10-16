@@ -1,14 +1,15 @@
 """The single JSON representation of "everything needed to render an
 overlay for this frame" — pushed live over the WebSocket, written as a
 `<HHMMSS>.json` sidecar next to every stored image, and mirrored to the
-remote server by the uploader. `packages/ui/OverlayRenderer.tsx` on the web
-side renders exactly this shape, whichever source it came from.
+remote server by the uploader. The overlay itself is rendered from
+`overlay_elements` on the camera (`derivatives/overlay_render.py`), never by
+the viewers — they show the resulting image (see `overlay`).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,6 +54,11 @@ class FrameMetadata(BaseModel):
     sky_state: SkyStateModel
     focus_score: float
     overlay_elements: list[OverlayElement] = Field(default_factory=list)
+    #: Where this frame's rendered overlay is: "file" — a transparent PNG
+    #: under `overlays/` with the thumbnail's stem; "burned" — inside the
+    #: stored thumbnail itself. None until the overlay has been rendered
+    #: (and for frames from before overlays were stored).
+    overlay: Literal["file", "burned"] | None = None
     #: The exposure regulator's cycle on this frame — its measurement of it
     #: and what it set for the next one (see `exposure_control_snapshot`).
     #: None for frames from before this was recorded.
@@ -70,24 +76,3 @@ class FrameMetadata(BaseModel):
     capture_set: dict[str, Any] | None = None
     #: Free-form notes the capture program attached to the frame / its set.
     annotations: dict[str, Any] | None = None
-
-
-def default_overlay_elements(metadata_without_elements: FrameMetadata) -> list[OverlayElement]:
-    """The handful of overlay elements every frame gets regardless of
-    plugins — timestamp, exposure/gain readout, sky-state badge."""
-    m = metadata_without_elements
-    return [
-        OverlayElement(type="timestamp", payload={"text": m.captured_at.isoformat()}),
-        OverlayElement(
-            type="exposure_readout",
-            payload={"exposure_us": m.exposure_us, "analogue_gain": m.analogue_gain},
-        ),
-        OverlayElement(
-            type="sky_state_badge",
-            payload={
-                "period": m.sky_state.period,
-                "sun_altitude_deg": round(m.sky_state.sun_altitude_deg, 1),
-                "moon_illumination": round(m.sky_state.moon_illumination, 2),
-            },
-        ),
-    ]

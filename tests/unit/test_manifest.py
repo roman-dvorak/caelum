@@ -34,6 +34,20 @@ def test_write_local_manifests_builds_expected_camera_manifest_and_date_index(tm
     assert [img["time"] for img in index["images"]] == ["20260101-120000", "20260101-130000"]
 
 
+def test_date_index_points_at_a_rendered_overlay_when_there_is_one(tmp_path):
+    _touch(tmp_path / "thumbnails" / "2026" / "01" / "01" / "20260101-120000.webp")
+    _touch(tmp_path / "thumbnails" / "2026" / "01" / "01" / "20260101-130000.webp")
+    _touch(tmp_path / "overlays" / "2026" / "01" / "01" / "20260101-130000.png")
+
+    camera_manifest = manifest.write_local_manifests(tmp_path, "cam0", "Test Camera", {})
+
+    assert camera_manifest["dates"][0]["thumbnail_count"] == 2
+    index = json.loads((tmp_path / "thumbnails" / "2026" / "01" / "01" / "index.json").read_text())
+    first, second = index["images"]
+    assert "overlay" not in first
+    assert second["overlay"] == "overlays/2026/01/01/20260101-130000.png"
+
+
 def test_write_local_manifests_with_no_data_yet_produces_empty_dates(tmp_path):
     camera_manifest = manifest.write_local_manifests(tmp_path, "cam0", "Test Camera", {})
     assert camera_manifest["dates"] == []

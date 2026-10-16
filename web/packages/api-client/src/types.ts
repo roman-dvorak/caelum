@@ -104,8 +104,8 @@ export interface StatusResponse {
 /**
  * One entry in `FrameMetadata.overlay_elements`. `type` is intentionally an
  * open string (not a union) so plugin-contributed overlay kinds don't
- * require a contract change here — renderers must treat unknown `type`
- * values gracefully rather than throwing.
+ * require a contract change here. The UI never draws these — the camera
+ * renders them into an overlay image (see `FrameMetadata.overlay`).
  */
 export interface OverlayElement {
   type: string
@@ -121,36 +121,17 @@ export interface FrameMetadata {
   sky_state: SkyState
   focus_score: number
   overlay_elements: OverlayElement[]
+  /** Where the camera put this frame's rendered overlay: "file" — a
+   * transparent PNG in `overlays/` (live: `/api/frame/overlay.png`);
+   * "burned" — inside the stored thumbnail. Absent/null until rendered. */
+  overlay?: OverlayLocation | null
 }
 
-// ---- Known overlay element payload shapes -------------------------------
-// These are documented shapes for the overlay types the backend emits
-// today. They are not exhaustive (plugins may introduce new ones) — treat
-// them as a best-effort narrowing aid, not a closed contract.
+export type OverlayLocation = 'file' | 'burned'
 
-export interface TimestampPayload {
-  text: string
-}
+/** `storage_policy.overlay_mode` — see the storage guide's "Overlays". */
+export type OverlayMode = 'file' | 'burn' | 'off'
 
-export interface ExposureReadoutPayload {
-  exposure_us: number
-  analogue_gain: number
-}
-
-export interface SkyStateBadgePayload {
-  period: string
-  sun_altitude_deg: number
-  moon_illumination: number
-}
-
-export interface DetectionBoxPayload {
-  /** Fractional (0..1) coordinates relative to image width/height. */
-  x: number
-  y: number
-  w: number
-  h: number
-  label: string
-}
 
 // ---- AppConfig ------------------------------------------------------------
 
@@ -201,6 +182,8 @@ export interface StoragePolicyConfig {
   raw_periods: SkyPeriod[]
   thumbnail_max_dim: number
   jpeg_quality: number
+  webp_quality?: number
+  overlay_mode?: OverlayMode
   night_capture_interval_s: number
   day_capture_interval_s: number
   realtime_stream_fps: number
@@ -391,6 +374,9 @@ export interface DateIndexImageEntry {
   thumbnail: string
   /** Path relative to the camera's own `<slug>/` prefix. */
   metadata: string
+  /** The rendered overlay PNG to stack over `thumbnail` (relative to the
+   * camera's prefix) — absent when it is burned in or switched off. */
+  overlay?: string
 }
 
 /** `<baseUrl>/<slug>/thumbnails/<date>/index.json` */
@@ -485,6 +471,8 @@ export interface FrameEntry {
   thumbnail: string | null
   raw: string | null
   metadata: string | null
+  /** Rendered overlay PNG (data-dir-relative) to stack over `thumbnail`. */
+  overlay?: string | null
   total_bytes: number
 }
 
@@ -641,6 +629,8 @@ export interface UpdateStatusResponse {
 export interface OverlayAssetInfo {
   name: string
   size: number
+  /** Shipped with caelum (the AstroMeters logo); an upload of the same name overrides it. */
+  builtin?: boolean
 }
 
 // ---- `overlay` / `telescope_position` plugin settings shapes ---------------
@@ -652,6 +642,9 @@ export interface OverlayAssetInfo {
 // overlay editor's own use when reading/writing those two plugins' settings.
 
 export type OverlayElementKind = 'mask' | 'label' | 'image'
+
+export type OverlayLabelAlign = 'left' | 'center' | 'right'
+export type OverlayLabelVAlign = 'top' | 'middle' | 'bottom'
 
 export interface OverlayElementDef {
   id: string
@@ -668,7 +661,15 @@ export interface OverlayElementDef {
   opacity: number
   /** label only — a placeholder template, e.g. "Exp: {exposure_us}us". */
   template?: string | null
+  /** label only — at a 1024 px wide image, scaled with the actual frame. */
   font_size_px?: number | null
+  /** label only — which edge of the (multi-line) text sits on `x`. */
+  align?: OverlayLabelAlign
+  /** label only — which edge of the text block sits on `y`. */
+  valign?: OverlayLabelVAlign
+  /** label only — a box behind the text, e.g. "#000000"; null for none. */
+  background?: string | null
+  background_opacity?: number
   /** image only — a filename under `data_dir/overlay_assets/`. */
   asset?: string | null
 }

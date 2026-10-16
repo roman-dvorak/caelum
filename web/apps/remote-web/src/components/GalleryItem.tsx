@@ -1,28 +1,26 @@
 import { ImageViewer, formatCaptureTime } from '@caelum/ui'
-import { useFrameMetadata } from '../hooks/useFrameMetadata.ts'
 import { remoteApiClient } from '../services/client.ts'
 
 export interface GalleryItemProps {
   slug: string
   time: string
   thumbnailPath: string
-  metadataPath: string
+  /** The camera-rendered overlay PNG, when it is a separate file — absent
+   * when it is burned into the thumbnail or overlays are switched off. */
+  overlayPath?: string
+  showOverlay?: boolean
 }
 
-/** One gallery tile: resolves its own thumbnail URL and lazily fetches its
- * `<HHMMSS>.json` sidecar so the overlay (timestamp, exposure, sky state,
- * any detection boxes) renders once it arrives. */
-export function GalleryItem({ slug, time, thumbnailPath, metadataPath }: GalleryItemProps) {
-  const metadata = useFrameMetadata(slug, metadataPath)
-  const thumbnailUrl = remoteApiClient.resolveCameraUrl(slug, thumbnailPath)
-
+/** One gallery tile: the thumbnail with the overlay the camera rendered for
+ * it stacked on top — the same pixels the camera's own live view shows. */
+export function GalleryItem({ slug, time, thumbnailPath, overlayPath, showOverlay = true }: GalleryItemProps) {
   return (
     <figure className="overflow-hidden border border-line bg-void">
       <ImageViewer
-        src={thumbnailUrl}
-        metadata={metadata}
+        src={remoteApiClient.resolveCameraUrl(slug, thumbnailPath)}
+        overlaySrc={overlayPath ? remoteApiClient.resolveCameraUrl(slug, overlayPath) : null}
+        showOverlay={showOverlay}
         alt={`Frame at ${time}`}
-        resolveAssetUrl={(asset) => remoteApiClient.overlayAssetUrl(slug, asset)}
       />
       <figcaption className="border-t border-line-soft px-2 py-1 text-center font-mono text-xs text-ink-faint">
         {formatCaptureTime(time)}

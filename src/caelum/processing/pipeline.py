@@ -15,7 +15,7 @@ from caelum.capture import brightness as brightness_module
 from caelum.capture import stats as stats_module
 from caelum.capture import thumbnail as thumbnail_module
 from caelum.capture.calibration import DarkLibrary
-from caelum.capture.metadata import FrameMetadata, SkyStateModel, default_overlay_elements
+from caelum.capture.metadata import FrameMetadata, SkyStateModel
 from caelum.capture.stats import FrameStats
 from caelum.config.schema import adu_to_ev
 from caelum.storage import dng_multi, dng_writer, paths
@@ -54,7 +54,7 @@ def analyze(
 
 
 def build_metadata(info: FrameInfo, stats: FrameStats) -> FrameMetadata:
-    metadata = FrameMetadata(
+    return FrameMetadata(
         captured_at=info.captured_at,
         exposure_us=info.exposure_us,
         analogue_gain=info.analogue_gain,
@@ -66,7 +66,6 @@ def build_metadata(info: FrameInfo, stats: FrameStats) -> FrameMetadata:
         capture_set=info.capture_set,
         annotations=info.annotations or None,
     )
-    return metadata.model_copy(update={"overlay_elements": default_overlay_elements(metadata)})
 
 
 def _file_path(data_dir: Path, info: FrameInfo, subdir: str, suffix: str) -> Path:

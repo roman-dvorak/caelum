@@ -172,17 +172,9 @@
       "settings": {}
     },
     "overlay": {
-      "enabled": false,
+      "enabled": true,
       "order": 30,
-      "settings": {
-        "templates": [
-          {
-            "name": "Default",
-            "elements": []
-          }
-        ],
-        "active_template": "Default"
-      }
+      "settings": {}
     },
     "telescope_position": {
       "enabled": false,

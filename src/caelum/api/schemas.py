@@ -251,6 +251,9 @@ class FrameEntry(BaseModel):
     thumbnail: str | None
     raw: str | None
     metadata: str | None
+    #: The rendered overlay PNG to stack over `thumbnail`, when it is a
+    #: separate file (`storage_policy.overlay_mode = "file"`).
+    overlay: str | None = None
     total_bytes: int
 
 
@@ -318,6 +321,9 @@ class ObservationNightSummary(BaseModel):
 class OverlayAssetInfo(BaseModel):
     name: str
     size: int
+    #: Shipped with caelum (e.g. the AstroMeters logo) — can't be deleted;
+    #: an upload of the same name overrides it.
+    builtin: bool = False
 
 
 # ---- system ----------------------------------------------------------------

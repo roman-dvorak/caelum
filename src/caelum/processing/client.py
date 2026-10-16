@@ -433,6 +433,7 @@ class ProcessingClient:
             stats=result.stats,
             metadata=FrameMetadata.model_validate_json(result.metadata_json),
             save_raw=save_raw,
+            thumbnail_path=Path(result.thumbnail_path) if result.thumbnail_path else None,
         )
         self._frame_store.update(processed)
         self._event_bus.publish(FRAME_CAPTURED, processed)

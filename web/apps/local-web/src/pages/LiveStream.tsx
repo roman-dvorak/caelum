@@ -2,11 +2,13 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { ImageViewer } from '@caelum/ui'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
+import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
 import { useStatus } from '../hooks/useStatus.ts'
 import { localApiClient } from '../services/client.ts'
 
 export function LiveStream() {
   const { frame, status: streamStatus } = useFrameStream()
+  const overlaySrc = useLiveOverlay(frame?.metadata)
   const { status } = useStatus()
 
   const [exposureUs, setExposureUs] = useState('')
@@ -71,9 +73,8 @@ export function LiveStream() {
         {frame ? (
           <ImageViewer
             src={frame.imageBlobUrl}
-            metadata={frame.metadata}
+            overlaySrc={overlaySrc}
             alt="Live camera feed"
-            resolveAssetUrl={localApiClient.overlayAssetUrl}
           />
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-faint">

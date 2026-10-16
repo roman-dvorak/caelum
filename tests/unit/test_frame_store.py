@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from datetime import UTC, datetime, timedelta
 
 from caelum.capture.frame_store import FrameStore
 from caelum.capture.metadata import OverlayElement
@@ -44,31 +45,43 @@ async def test_unsubscribe_stops_further_delivery():
     assert queue.empty()
 
 
-def test_update_metadata_appends_to_latest_frame_and_returns_it():
+def test_set_overlay_replaces_elements_of_latest_frame_and_returns_it():
     store = FrameStore()
-    store.update(make_processed_frame())
+    frame = make_processed_frame()
+    store.update(frame)
 
-    new_elements = [OverlayElement(type="detection_box", source="meteor_detection", payload={"x": 0.1})]
-    updated = store.update_metadata(new_elements)
+    elements = [OverlayElement(type="detection_box", source="meteor_detection", payload={"x": 0.1})]
+    updated = store.set_overlay(frame.metadata.captured_at, elements, "file", b"png")
 
     assert updated is not None
-    assert updated.metadata.overlay_elements[-1].type == "detection_box"
-    assert store.get_latest().metadata.overlay_elements[-1].type == "detection_box"
+    assert updated.metadata.overlay_elements == elements
+    assert updated.metadata.overlay == "file"
+    assert store.get_latest().overlay_png == b"png"
 
 
-def test_update_metadata_with_no_frame_yet_is_a_noop():
+def test_set_overlay_with_no_frame_yet_is_a_noop():
     store = FrameStore()
-    assert store.update_metadata([OverlayElement(type="x", payload={})]) is None
+    assert store.set_overlay(datetime.now(UTC), [], None, None) is None
 
 
-def test_update_metadata_publishes_frame_metadata_updated_event():
+def test_set_overlay_ignores_a_frame_that_is_no_longer_latest():
+    store = FrameStore()
+    frame = make_processed_frame()
+    store.update(frame)
+    stale = frame.metadata.captured_at - timedelta(seconds=30)
+    assert store.set_overlay(stale, [OverlayElement(type="x", payload={})], "file", b"png") is None
+    assert store.get_latest().overlay_png is None
+
+
+def test_set_overlay_publishes_frame_metadata_updated_event():
     bus = EventBus()
     received = []
     bus.subscribe(FRAME_METADATA_UPDATED, received.append)
 
     store = FrameStore(event_bus=bus)
-    store.update(make_processed_frame())
-    store.update_metadata([OverlayElement(type="x", payload={})])
+    frame = make_processed_frame()
+    store.update(frame)
+    store.set_overlay(frame.metadata.captured_at, [OverlayElement(type="x", payload={})], None, None)
 
     assert len(received) == 1
     assert received[0].metadata.overlay_elements[-1].type == "x"

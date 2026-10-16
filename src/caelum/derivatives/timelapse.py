@@ -8,7 +8,9 @@ frames are enumerated lazily from disk for the closed `[start, end)` window
 frame when one was saved for a timestamp and falling back to the thumbnail
 otherwise. Encoding is a `subprocess` call to `ffmpeg` (see `video_encode.py`);
 overlay burn-in (optional, using whichever template is active *at generation
-time*) is `overlay_render.py`.
+time*) is the same `overlay_render.py` the live
+view and stored thumbnails use. Thumbnails stored with the overlay burned in
+(`storage_policy.overlay_mode = "burn"`) carry it in both variants.
 """
 
 from __future__ import annotations
@@ -23,8 +25,8 @@ from pydantic import BaseModel, Field
 
 from caelum.capture.metadata import FrameMetadata
 from caelum.derivatives.base import Derivative, PeriodTrackingMixin, PeriodWindow
-from caelum.derivatives.overlay import OverlayElementDef, OverlaySettings
-from caelum.derivatives.overlay_render import rasterize
+from caelum.derivatives.overlay import OverlayElementDef, OverlaySettings, build_elements
+from caelum.derivatives.overlay_render import composite_bgr, render_layer
 from caelum.derivatives.video_encode import encode_timelapse
 from caelum.plugins.base import Plugin
 from caelum.scheduling.decorators import on_period_end
@@ -176,8 +178,12 @@ class TimelapseWorker(PeriodTrackingMixin, Plugin):
                 continue
             if overlay_elements:
                 metadata = _load_metadata(path)
-                if metadata is not None:
-                    image = rasterize(image, overlay_elements, metadata, data_dir / "overlay_assets")
+                # A thumbnail stored with `overlay_mode = "burn"` already has
+                # an overlay in it — don't draw a second one on top.
+                if metadata is not None and metadata.overlay != "burned":
+                    elements = build_elements(overlay_elements, metadata)
+                    layer = render_layer(elements, (image.shape[1], image.shape[0]), data_dir / "overlay_assets")
+                    image = composite_bgr(image, layer)
             frames.append(image)
         if not frames:
             return None

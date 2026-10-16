@@ -264,6 +264,12 @@ def _gather_frames(data_dir: Path, utc_dates: list[str], window: tuple[datetime,
                 key = "metadata" if child.suffix.lower() == ".json" else "thumbnail"
                 entry[key] = browse.relative_to(data_dir, child)
 
+        overlays_dir = paths.date_dir_for_iso(data_dir, "overlays", iso_date)
+        for entry in by_stem.values():
+            overlay = overlays_dir / f"{entry['time']}.png"
+            if entry.get("overlay") is None and overlay.is_file():
+                entry["overlay"] = browse.relative_to(data_dir, overlay)
+
         raw_dir = paths.date_dir_for_iso(data_dir, "raw", iso_date)
         if raw_dir.is_dir():
             for child in raw_dir.iterdir():
@@ -308,6 +314,7 @@ def list_frames(
             thumbnail=e["thumbnail"],
             raw=e["raw"],
             metadata=e["metadata"],
+            overlay=e.get("overlay"),
             total_bytes=e["total_bytes"],
         )
         for e in page
@@ -442,12 +449,14 @@ def delete_frames(
     """
     data_dir = settings.data_dir
     removed = 0
+    # A thumbnail's rendered overlay (overlays/, same stem) goes with it.
+    kinds = [*body.kinds, "overlays"] if "thumbnails" in body.kinds else list(body.kinds)
 
     if not body.times:
         if body.date is None:
             raise HTTPException(status_code=400, detail="`date` is required when `times` is empty")
         _validate_iso_date(body.date)
-        for kind in body.kinds:
+        for kind in kinds:
             directory = paths.date_dir_for_iso(data_dir, kind, body.date)
             if not directory.is_dir():
                 continue
@@ -460,7 +469,7 @@ def delete_frames(
         iso_date = _stem_to_iso_date(stem)
         if iso_date is None:
             continue
-        for kind in body.kinds:
+        for kind in kinds:
             directory = paths.date_dir_for_iso(data_dir, kind, iso_date)
             if not directory.is_dir():
                 continue

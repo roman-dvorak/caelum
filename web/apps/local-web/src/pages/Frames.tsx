@@ -13,6 +13,7 @@ import {
   Lightbox,
   Loading,
   Message,
+  OverlayToggle,
   PageHeader,
   Panel,
   Readout,
@@ -251,6 +252,7 @@ function CapturesGallery({
   const [selection, setSelection] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [page, setPage] = useState(0)
+  const [showOverlay, setShowOverlay] = useState(true)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const [reloadToken, setReloadToken] = useState(0)
@@ -340,8 +342,10 @@ function CapturesGallery({
 
   const lightboxItems: LightboxItem[] = listing.frames.map((frame) => ({
     src: frameImageUrl(frame) ?? '',
+    overlaySrc: showOverlay ? frameOverlayUrl(frame) : null,
     caption: <FrameCaption frame={frame} timezone={timezone} />,
   }))
+  const hasOverlays = listing.frames.some((frame) => frame.overlay)
 
   return (
     <div className="flex flex-col gap-4">
@@ -379,6 +383,11 @@ function CapturesGallery({
           <Readout label="Raw on page" value={totalRaws} />
           <Readout label="Page size" value={formatBytes(totalBytes)} />
         </div>
+        {hasOverlays ? (
+          <div className="mt-3 flex justify-end">
+            <OverlayToggle checked={showOverlay} onChange={setShowOverlay} />
+          </div>
+        ) : null}
       </Panel>
 
       {listing.frames.length === 0 ? (
@@ -391,6 +400,7 @@ function CapturesGallery({
               frame={frame}
               selected={selection.has(frame.time)}
               selectable={isAdmin}
+              showOverlay={showOverlay}
               onToggle={() => toggle(frame.time)}
               onOpen={() => setLightboxIndex(index)}
             />
@@ -427,6 +437,12 @@ function CapturesGallery({
       ) : null}
     </div>
   )
+}
+
+/** The camera-rendered overlay to stack over the thumbnail, when stored
+ * as a separate file (not for a raw-preview fallback, whose size differs). */
+function frameOverlayUrl(frame: FrameEntry): string | null {
+  return frame.thumbnail && frame.overlay ? localApiClient.fileContentUrl(frame.overlay) : null
 }
 
 /** Prefer the thumbnail; fall back to a rendered raw preview for captures
@@ -490,22 +506,36 @@ function FrameTile({
   frame,
   selected,
   selectable,
+  showOverlay,
   onToggle,
   onOpen,
 }: {
   frame: FrameEntry
   selected: boolean
   selectable: boolean
+  showOverlay: boolean
   onToggle: () => void
   onOpen: () => void
 }) {
   const imageUrl = frameImageUrl(frame)
+  const overlayUrl = showOverlay ? frameOverlayUrl(frame) : null
 
   return (
     <div className={['relative overflow-hidden border transition', selected ? 'border-amber' : 'border-line'].join(' ')}>
       <button type="button" onClick={onOpen} className="block aspect-4/3 w-full bg-void">
         {imageUrl ? (
-          <img src={imageUrl} alt={frame.time} loading="lazy" className="h-full w-full object-cover" />
+          <span className="relative block h-full w-full">
+            <img src={imageUrl} alt={frame.time} loading="lazy" className="h-full w-full object-cover" />
+            {overlayUrl ? (
+              <img
+                src={overlayUrl}
+                alt=""
+                aria-hidden
+                loading="lazy"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+              />
+            ) : null}
+          </span>
         ) : (
           <span className="flex h-full items-center justify-center text-xs text-ink-faint">no image</span>
         )}

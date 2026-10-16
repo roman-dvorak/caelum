@@ -1,15 +1,15 @@
 import { useState } from 'react'
-import type { FrameMetadata } from '@caelum/api-client'
-import type { AssetUrlResolver } from './OverlayRenderer.js'
-import { OverlayRenderer } from './OverlayRenderer.js'
 
 export interface ImageViewerProps {
   /** A live blob URL (from the WS binary frame, local-web) or a static URL
    * (remote-web history browsing) — both are just `<img src>` values. */
   src: string
-  /** Overlay metadata for this exact image, if any. Omit to show the plain
-   * image with no overlay (e.g. while metadata hasn't loaded yet). */
-  metadata?: FrameMetadata | null
+  /** The overlay the camera rendered for this exact image — a transparent
+   * image of the same size, stacked on top. Omit when there is none (not
+   * rendered yet, burned into `src`, or overlays switched off). */
+  overlaySrc?: string | null
+  /** Hide the overlay without dropping it, e.g. from an on/off toggle. */
+  showOverlay?: boolean
   alt?: string
   className?: string
   /** How the image fills its container. "contain" (default) never crops;
@@ -17,19 +17,17 @@ export interface ImageViewerProps {
    * the wrapper an explicit size — by default the wrapper just hugs the
    * image's natural aspect ratio. */
   fit?: 'contain' | 'cover'
-  /** Resolves a `custom_image` overlay element's asset filename to a URL —
-   * see `OverlayRenderer`'s `AssetUrlResolver`. Omit if this view never
-   * shows `custom_image` elements. */
-  resolveAssetUrl?: AssetUrlResolver
 }
 
 /**
- * Wraps an `<img>` and an `OverlayRenderer` so overlay elements always line
- * up with the rendered image, regardless of whether it came from a live WS
- * blob or a static history URL.
+ * An `<img>` with the camera-rendered overlay stacked exactly over it. The
+ * overlay has the frame's aspect ratio and is fitted the same way, so it
+ * lines up at any display size — no overlay is ever drawn in the browser.
  */
-export function ImageViewer({ src, metadata, alt, className, fit = 'contain', resolveAssetUrl }: ImageViewerProps) {
+export function ImageViewer({ src, overlaySrc, showOverlay = true, alt, className, fit = 'contain' }: ImageViewerProps) {
   const [failed, setFailed] = useState(false)
+  const [overlayFailed, setOverlayFailed] = useState<string | null>(null)
+  const fitClass = fit === 'cover' ? 'h-full object-cover' : 'h-auto object-contain'
 
   return (
     <div className={['relative inline-block w-full leading-none', className ?? ''].join(' ')}>
@@ -41,12 +39,30 @@ export function ImageViewer({ src, metadata, alt, className, fit = 'contain', re
         <img
           src={src}
           alt={alt ?? 'Camera frame'}
-          className={['block w-full', fit === 'cover' ? 'h-full object-cover' : 'h-auto object-contain'].join(' ')}
+          className={['block w-full', fitClass].join(' ')}
           onError={() => setFailed(true)}
           onLoad={() => setFailed(false)}
         />
       )}
-      {!failed && metadata ? <OverlayRenderer metadata={metadata} resolveAssetUrl={resolveAssetUrl} /> : null}
+      {!failed && overlaySrc && showOverlay && overlayFailed !== overlaySrc ? (
+        <img
+          src={overlaySrc}
+          alt=""
+          aria-hidden
+          className={['pointer-events-none absolute inset-0 h-full w-full', fit === 'cover' ? 'object-cover' : 'object-contain'].join(' ')}
+          onError={() => setOverlayFailed(overlaySrc)}
+        />
+      ) : null}
     </div>
+  )
+}
+
+/** The "Overlay" on/off switch shown next to an `ImageViewer`. */
+export function OverlayToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase select-none">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-amber" />
+      Overlay
+    </label>
   )
 }

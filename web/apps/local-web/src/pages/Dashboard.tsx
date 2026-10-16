@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { Button, ImageViewer, SkyStateBadge, StatusTile } from '@caelum/ui'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
+import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
 import { useSkyState } from '../hooks/useSkyState.ts'
 import { useStatus } from '../hooks/useStatus.ts'
-import { localApiClient } from '../services/client.ts'
 
 export function Dashboard() {
   const { status, error: statusError } = useStatus()
   const { skyState, error: skyError } = useSkyState()
   const { frame, status: streamStatus } = useFrameStream()
+  const overlaySrc = useLiveOverlay(frame?.metadata)
   const [showJson, setShowJson] = useState(false)
 
   const diag = status?.exposure_diagnostics ?? null
@@ -30,9 +31,8 @@ export function Dashboard() {
         {frame ? (
           <ImageViewer
             src={frame.imageBlobUrl}
-            metadata={frame.metadata}
+            overlaySrc={overlaySrc}
             alt="Live camera feed"
-            resolveAssetUrl={localApiClient.overlayAssetUrl}
           />
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-faint">

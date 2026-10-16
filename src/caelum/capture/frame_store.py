@@ -13,6 +13,8 @@ import asyncio
 import threading
 from collections import deque
 from dataclasses import dataclass, replace
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -29,6 +31,12 @@ class ProcessedFrame:
     stats: FrameStats
     metadata: FrameMetadata
     save_raw: bool  # from StoragePolicy.decide() — whether this frame should get a persisted raw copy
+    #: The stored WebP thumbnail (None without a data dir) — where
+    #: `DerivativePool` puts the rendered overlay next to, or into.
+    thumbnail_path: Path | None = None
+    #: The rendered overlay layer (transparent PNG) for the live view, once
+    #: every plugin has contributed — see `FrameStore.set_overlay`.
+    overlay_png: bytes | None = None
 
 
 class FrameStore:
@@ -71,24 +79,25 @@ class FrameStore:
         with self._lock:
             return self._recent_stats[-1] if self._recent_stats else None
 
-    def update_metadata(self, new_elements: list[OverlayElement]) -> ProcessedFrame | None:
-        """Append overlay elements contributed asynchronously by a
-        derivative/plugin (e.g. a meteor detection) to whichever frame is
-        *currently* latest, and re-broadcast it.
-
-        There's no per-frame id to address a specific past frame by, so this
-        assumes derivative processing finishes well within one capture
-        interval — true in practice (a frame-diff is milliseconds; capture
-        intervals are seconds to minutes) but not strictly guaranteed."""
-        if not new_elements:
-            return None
+    def set_overlay(
+        self,
+        captured_at: datetime,
+        elements: list[OverlayElement],
+        overlay: str | None,
+        overlay_png: bytes | None,
+    ) -> ProcessedFrame | None:
+        """Attach a frame's final overlay — the complete element list, after
+        every plugin contributed, and its rendered layer — and re-broadcast
+        it. Done once per frame by `DerivativePool`. A frame that is no
+        longer the latest (a newer capture arrived meanwhile) is left alone:
+        the live view has moved on and the newer frame gets its own."""
         with self._lock:
-            if self._latest is None:
+            if self._latest is None or self._latest.metadata.captured_at != captured_at:
                 return None
             updated_metadata = self._latest.metadata.model_copy(
-                update={"overlay_elements": [*self._latest.metadata.overlay_elements, *new_elements]}
+                update={"overlay_elements": elements, "overlay": overlay}
             )
-            self._latest = replace(self._latest, metadata=updated_metadata)
+            self._latest = replace(self._latest, metadata=updated_metadata, overlay_png=overlay_png)
             updated = self._latest
             queues = list(self._queues)
         if self._loop is not None:

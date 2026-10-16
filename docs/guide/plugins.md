@@ -26,8 +26,12 @@ actually need.
   thread. This is where you accumulate state: append a keogram column, stash
   the previous frame for differencing, update a running histogram.
 - **`provide_overlay_elements(frame)`** — return a list of `OverlayElement` to
-  attach to the frame's metadata. They are appended to whichever frame is
-  currently latest and re-broadcast to live WebSocket viewers. Set
+  attach to the frame's metadata. Once every worker is done with the frame,
+  all elements are rendered into one overlay image (see
+  [Overlays](/guide/storage#overlays)), stored next to the thumbnail or
+  burned into it, and pushed to live WebSocket viewers. Unknown `type`s are
+  drawn as a labelled box if the payload has `x`/`y`/`w`/`h` fractions,
+  otherwise skipped — add a renderer to `overlay_render.py` for anything else. Set
   `source` to your plugin id so the renderer and the reader can tell where an
   element came from.
 - **`modify_image(image, frame)`** — return a transformed image. Declared on
@@ -273,13 +277,33 @@ job is `provide_overlay_elements`: it turns each `OverlayElementDef` in
 element. Label `template` strings are resolved with plain `str.format()`
 against the frame's metadata (`{exposure_us}`, `{sky_state.period}`, etc.) —
 an unknown placeholder falls back to showing the raw template rather than
-dropping the element or crashing the pipeline.
+dropping the element or crashing the pipeline. `{exposure}` is the exposure
+formatted for people ("15.00s"), and `{software}`, `{camera_model}` and
+`{camera_name}` (`upload.camera_name`) come from the frame's provenance.
+Labels anchor by any edge (`align` left/center/right, `valign`
+top/middle/bottom), so they can sit in a corner however many lines they
+have, and can have a `background` box to stay legible on a bright sky.
 
-Masking here means an opaque box drawn on top wherever the image is
-displayed — it is `provide_overlay_elements`, not `modify_image`, precisely
-because (per the note above) only an overlay element reaches the live view,
-the Dashboard and remote-web; it does not redact the stored thumbnail/raw
-file.
+It is enabled out of the box with a default template:
+
+| Corner | Shows |
+|---|---|
+| top left | capture time (UTC), exposure and gain |
+| top right | camera / observatory name (`upload.camera_name`) |
+| bottom left | AstroMeters logo and the capture software |
+| bottom right | camera model |
+
+It is an ordinary template — edit it, replace it, or add a fresh copy with
+**From default** in the editor. The logo is a built-in asset
+(`astrometers-logo.png`); uploading an asset of the same name replaces it.
+A config that still holds what older releases shipped — one empty
+"Default" template — gets the default template automatically.
+
+Masking here means an opaque box in the rendered overlay — it is
+`provide_overlay_elements`, not `modify_image`, precisely because (per the
+note above) only an overlay element reaches the live view, the Dashboard and
+remote-web. It redacts the stored thumbnail only with
+`storage_policy.overlay_mode = "burn"`, and never the raw file.
 
 ## Worked example: the telescope-position widget
 
@@ -293,15 +317,13 @@ querying real hardware; swapping in a query against an INDI/ASCOM server is a
 drop-in replacement for that one function, everything else about the plugin
 stays the same.
 
-Both `overlay` and `telescope_position` ship disabled by default (an empty
-mask list or a fake telescope marker showing up unasked would be a bad
-default) — enable them from the Overlay editor page or `PUT /api/plugins/{id}`.
+`telescope_position` ships disabled (a fake telescope marker showing up
+unasked would be a bad default) — enable it from the Overlay editor page or
+`PUT /api/plugins/{id}`.
 
 ::: warning
-`overlay`'s `custom_image` elements reference an asset by filename, resolved
-against `data_dir/overlay_assets/` locally (`GET /api/overlay/assets/{name}`,
-admin-only to upload/delete) and against `<camera_slug>/overlay_assets/` on
-the remote archive — the uploader's whole-tree reconciliation pass mirrors
-that directory the same way it mirrors `darks/`, so no separate sync step is
-needed.
+`overlay`'s `custom_image` elements reference an asset by filename in
+`data_dir/overlay_assets/` (`GET /api/overlay/assets/{name}`, admin-only to
+upload/delete). The camera renders the asset into the overlay image, so the
+remote archive needs no copy of it.
 :::

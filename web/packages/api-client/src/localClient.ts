@@ -31,6 +31,8 @@ import type {
   SkyStateResponse,
   StatusResponse,
   OverlayAssetInfo,
+  OverlayElementDef,
+  OverlayTemplate,
   SystemActionResponse,
   SystemInfoResponse,
   UpdateStatusResponse,
@@ -173,6 +175,13 @@ export class LocalApiClient {
    * fallback/poster image before the first WS frame arrives. */
   latestFrameUrl(): string {
     return this.apiUrl('/frame/latest.jpg')
+  }
+
+  /** The latest frame's camera-rendered overlay (transparent PNG). `key`
+   * busts the browser cache per frame/render — pass something that changes
+   * with it, e.g. `captured_at` plus the element count. */
+  latestOverlayUrl(key: string): string {
+    return this.apiUrl(`/frame/overlay.png?k=${encodeURIComponent(key)}`)
   }
 
   // ---- auth --------------------------------------------------------------
@@ -357,8 +366,36 @@ export class LocalApiClient {
     return this.request<OverlayAssetInfo>('/overlay/assets', { method: 'POST', body })
   }
 
+  /** The overlay a new camera starts with (time, exposure and gain, camera
+   * name, AstroMeters logo, software, camera model). */
+  getDefaultOverlayTemplate(): Promise<OverlayTemplate> {
+    return this.request<OverlayTemplate>('/overlay/default-template')
+  }
+
   deleteOverlayAsset(name: string): Promise<{ deleted: string }> {
     return this.request(`/overlay/assets/${encodeURIComponent(name)}`, { method: 'DELETE' })
+  }
+
+  /** Renders a draft template exactly as the camera would on the latest
+   * frame (with the system readouts and other plugins' elements) — a
+   * transparent PNG to lay under the editor's handles. */
+  async previewOverlay(elements: OverlayElementDef[]): Promise<Blob> {
+    const path = '/overlay/preview.png'
+    const res = await fetch(this.apiUrl(path), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(elements),
+    })
+    if (!res.ok) {
+      const detail = await this.errorDetail(res)
+      throw new LocalApiClientError(
+        `caelum API request failed: POST ${path} -> ${res.status}${detail ? ` (${detail})` : ''}`,
+        res.status,
+        path,
+      )
+    }
+    return res.blob()
   }
 }
 
