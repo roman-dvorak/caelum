@@ -13,8 +13,10 @@ Python backend in `../src/caelum`. Two apps share one component/client library:
   that caelum's uploader rsyncs data to.
 - **`packages/ui`** (`@caelum/ui`) — shared React components, most notably
   the image+overlay viewer used identically by both apps.
-- **`apps/docs`** — the public documentation site (VitePress), deployed as
-  static files alongside the gallery. The local UI deep-links into it, so
+- **`apps/docs`** — the VitePress tooling for the public documentation site;
+  the pages themselves are in the repository's top-level `docs/` (`srcDir`).
+  Published to GitHub Pages by `.github/workflows/docs.yml`, or as static
+  files alongside the gallery. The local UI deep-links into it, so
   its page paths are part of the contract (see below).
 - **`packages/ui`** entries worth knowing: `AppShell` (the sidebar frame
   both apps use), `ThemeProvider`/`ThemeToggle` (light/dark, persisted in
@@ -84,7 +86,7 @@ web/
   apps/
     local-web/    live control UI, built to apps/local-web/dist
     remote-web/   read-only static-data viewer
-    docs/         public documentation site (VitePress)
+    docs/         VitePress config + theme for the site in ../docs
   scripts/
     deploy-static.sh   builds + rsyncs remote-web and docs to an Apache host
 ```

@@ -1,0 +1,60 @@
+# Builds the VitePress site (pages in docs/, tooling in web/apps/docs) and
+# publishes it to GitHub Pages at https://caelum.astrometers.eu — the default
+# `docs.base_url` the web UI deep-links into. The domain comes from
+# docs/public/CNAME, so the site is served at the root and DOCS_BASE stays "/".
+#
+# One-time repo setup: Settings → Pages → Source: "GitHub Actions".
+name: Docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - docs/**
+      - web/apps/docs/**
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # lastUpdated reads each page's git history
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --filter docs
+      - run: pnpm --filter docs build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/apps/docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
