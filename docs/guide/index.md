@@ -88,6 +88,6 @@ remotely. A local disk that is genuinely full while upload lags far behind will
 not free space until upload catches up. That is a deliberate trade — data
 safety over guaranteed headroom — not an oversight.
 
-Where to go next: [Getting started](/guide/getting-started) to run it,
+Where to go next: [Getting started](/getting-started) to run it,
 [Concepts](/guide/concepts) for the domain model, or straight to
 [Exposure](/guide/exposure) for the control loop in detail.

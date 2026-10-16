@@ -53,12 +53,14 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
+      { text: 'Home', link: '/' },
+      { text: 'Getting started', link: '/getting-started' },
       {
         text: 'Documentation',
         link: '/guide/',
         activeMatch: '^/(guide/|capture-programs|dng-capture-sets)',
       },
-      { text: 'Hardware', link: '/hardware/', activeMatch: '^/hardware/' },
+      { text: 'Cameras', link: '/cameras/', activeMatch: '^/cameras/' },
       // The maintainer, as a top-level link rather than buried in the footer.
       { text: 'AstroMeters', link: 'https://astrometers.eu' },
     ],
@@ -69,52 +71,54 @@ export default defineConfig({
       pattern: 'https://github.com/roman-dvorak/caelum/edit/master/docs/:path',
     },
 
+    // One sidebar per top-level section. Getting started is a single page
+    // with its own outline, so it has none.
     sidebar: {
-      '/hardware/': [
+      '/cameras/': [
         {
-          text: 'Hardware',
+          text: 'Cameras',
           items: [
-            { text: 'Supported hardware', link: '/hardware/' },
-            { text: 'AMASC01', link: '/hardware/amasc01' },
-            { text: 'DIY cameras', link: '/hardware/diy' },
+            { text: 'Supported cameras', link: '/cameras/' },
+            { text: 'AMASC01', link: '/cameras/amasc01' },
+            { text: 'DIY cameras', link: '/cameras/diy' },
           ],
         },
       ],
       '/': [
-      {
-        text: 'Start here',
-        items: [
-          { text: 'Introduction', link: '/guide/' },
-          { text: 'Getting started', link: '/guide/getting-started' },
-          { text: 'Concepts', link: '/guide/concepts' },
-        ],
-      },
-      {
-        text: 'Running a camera',
-        items: [
-          { text: 'Cameras', link: '/guide/cameras' },
-          { text: 'Exposure control', link: '/guide/exposure' },
-          { text: 'Storage & retention', link: '/guide/storage' },
-          { text: 'Upload & archive', link: '/guide/upload' },
-        ],
-      },
-      {
-        text: 'Operating',
-        items: [
-          { text: 'Web interface', link: '/guide/web-ui' },
-          { text: 'Access & security', link: '/guide/security' },
-          { text: 'Deployment', link: '/guide/deployment' },
-          { text: 'Updates', link: '/guide/updates' },
-          { text: 'Plugins', link: '/guide/plugins' },
-        ],
-      },
-      {
-        text: 'Reference',
-        items: [
-          { text: 'Capture programs', link: '/capture-programs' },
-          { text: 'Capture sets in DNG', link: '/dng-capture-sets' },
-        ],
-      },
+        {
+          text: 'Overview',
+          items: [
+            { text: 'Introduction', link: '/guide/' },
+            { text: 'Concepts', link: '/guide/concepts' },
+          ],
+        },
+        {
+          text: 'Running a camera',
+          items: [
+            { text: 'Camera backends', link: '/guide/cameras' },
+            { text: 'Exposure control', link: '/guide/exposure' },
+            { text: 'Storage & retention', link: '/guide/storage' },
+            { text: 'Upload & archive', link: '/guide/upload' },
+          ],
+        },
+        {
+          text: 'Operating',
+          items: [
+            { text: 'Web interface', link: '/guide/web-ui' },
+            { text: 'Remote viewer', link: '/guide/remote-viewer' },
+            { text: 'Access & security', link: '/guide/security' },
+            { text: 'Deployment', link: '/guide/deployment' },
+            { text: 'Updates', link: '/guide/updates' },
+            { text: 'Plugins', link: '/guide/plugins' },
+          ],
+        },
+        {
+          text: 'Reference',
+          items: [
+            { text: 'Capture programs', link: '/capture-programs' },
+            { text: 'Capture sets in DNG', link: '/dng-capture-sets' },
+          ],
+        },
       ],
     },
 

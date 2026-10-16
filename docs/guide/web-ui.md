@@ -38,6 +38,10 @@ and a grid of status tiles fed by `GET /api/status` and `GET /api/skystate`:
 - time of the last capture
 - focus score from the most recent frame's statistics
 
+![Dashboard](/images/screenshots/dashboard.webp)
+
+*Screenshots on this page use the `mock` backend's synthetic frames.*
+
 If no frame has been captured yet the viewer shows "Waiting for first frame…"
 rather than an error — on a night preset the first capture can legitimately
 take a while.
@@ -54,6 +58,8 @@ Each frame arrives twice: once as soon as it is captured, and again a moment
 later when every plugin has contributed its overlay elements and the overlay
 has been rendered — `metadata.overlay` is then set and the view stacks
 `/api/frame/overlay.png` over the image, meteor boxes included.
+
+![Live stream](/images/screenshots/live.webp)
 
 This is also where the two capture-cadence controls live:
 
@@ -74,6 +80,8 @@ The whole runtime `AppConfig` as an editable JSON tree, loaded from
 `PUT /api/config`, and if the backend rejects it the tree reverts to its
 previous value and the error is shown. Type selection is restricted, so you
 cannot accidentally turn a number into a string.
+
+![Settings](/images/screenshots/settings.webp)
 
 Three sections are locked against editing:
 
@@ -139,4 +147,5 @@ Apache document root next to the data tree the uploader rsyncs there.
 
 It has no write path, no API client and no session. Everything it can show is
 everything the archive already serves publicly. See
-[Deployment](/guide/deployment) for putting it on a host.
+[Remote viewer](/guide/remote-viewer) for what it shows and how cameras get
+into it, and [Deployment](/guide/deployment) for putting it on a host.

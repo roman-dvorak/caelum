@@ -8,13 +8,13 @@ hero:
   actions:
     - theme: brand
       text: Get started
-      link: /guide/getting-started
+      link: /getting-started
     - theme: alt
       text: Documentation
       link: /guide/
     - theme: alt
-      text: Supported hardware
-      link: /hardware/
+      text: Cameras
+      link: /cameras/
 
 features:
   - title: Exposure follows the sky, not a clock
@@ -37,7 +37,7 @@ features:
     <p class="maintainer-label">Maintained by</p>
     <p class="maintainer-name"><a href="https://astrometers.eu">AstroMeters</a></p>
     <p>caelum is developed by AstroMeters, who also build the
-    <a href="/hardware/amasc01.html">AMASC01</a> allsky camera it is tested on.
+    <a href="/cameras/amasc01.html">AMASC01</a> allsky camera it is tested on.
     For hardware, custom development or support, see
     <a href="https://astrometers.eu">astrometers.eu</a> or write to
     <a href="mailto:info@astrometers.eu">info@astrometers.eu</a>.</p>

@@ -1,6 +1,71 @@
+---
+sidebar: false
+---
+
 # Getting started
 
-## Requirements
+There are two ways in: install a release on the camera's Raspberry Pi, which
+is what you want for a camera that will actually stand outside, or run from a
+source checkout with a synthetic camera, which needs no hardware at all.
+
+Don't have a camera yet? See [Cameras](/cameras/) — the AstroMeters
+[AMASC01](/cameras/amasc01), or [build your own](/cameras/diy).
+
+## On a Raspberry Pi
+
+### 1. Install
+
+One command, no source checkout and nothing to build on the Pi:
+
+```bash
+curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/install.sh | sudo bash
+```
+
+It installs Redis and libcamera's `picamera2` from apt, creates a `caelum`
+system user, installs the release (backend plus the built web UI) under
+`/opt/caelum` and starts it as a systemd service. The camera backend defaults
+to `picamera2` on a Pi; pass `--camera opencv` for a USB webcam. Details and
+options: [Deployment](/guide/deployment).
+
+### 2. Log in
+
+On first start caelum creates an `admin` account with a random password:
+
+```bash
+sudo cat /etc/caelum/initial-admin-password.txt
+```
+
+Open `http://<pi-address>:8000/`, log in as `admin`, change the password and
+delete the file. Roles and the `auth` settings: [Access & security](/guide/security).
+
+![The caelum dashboard](/images/screenshots/dashboard.webp)
+
+### 3. Tell it where it is
+
+Set the observing site under **Settings** — `location.lat` and `location.lon`.
+Exposure is driven by the real altitude of the sun and the moon at that site,
+so until it is right the camera exposes for someone else's sky. See
+[Concepts](/guide/concepts).
+
+![Settings, with the location section of the config](/images/screenshots/settings.webp)
+
+### 4. Check the first frames
+
+The dashboard shows the live frame, the current sky period and the exposure
+the control loop has chosen; [Web interface](/guide/web-ui) walks through the
+rest. To publish images to a web host and the [remote viewer](/guide/remote-viewer),
+set up [Upload & archive](/guide/upload).
+
+Later releases install from the web UI with automatic rollback — see
+[Updates](/guide/updates).
+
+## From source, with no hardware
+
+For development, or to try caelum on a laptop. The `mock` backend produces
+synthetic frames, so the whole pipeline — exposure loop, storage, derivatives,
+API and UI — runs without a camera.
+
+### Requirements
 
 - **Python 3.11 or newer.** `pyproject.toml` declares
   `requires-python = ">=3.11"` (Raspberry Pi OS Bookworm's Python); older interpreters
@@ -18,7 +83,7 @@ numpy, `opencv-python-headless`, astropy, python-dotenv. There is no ephemeris
 file to download and no runtime network access needed for sky calculations —
 astropy's bundled analytic ephemeris is used with IERS auto-download disabled.
 
-## Install
+### Install
 
 ```bash
 git clone <your-remote>/caelum.git
@@ -46,7 +111,7 @@ That creates `./data/raw`, `./data/thumbnails`, `./data/derivatives`,
 `./data/pending-upload` and `./config`, and copies `config/default.json` to
 `config/config.json` if the latter does not exist yet.
 
-## Environment variables
+### Environment variables
 
 These are bootstrap-only settings, read once from the environment (and from a
 `.env` file, via python-dotenv) at process start. They are deliberately
@@ -73,7 +138,7 @@ is authoritative; this variable exists so a developer or CI run can force
 unset and configure the backend properly.
 :::
 
-## First run
+### First run
 
 ```bash
 uv run caelum
@@ -93,7 +158,7 @@ local Redis, runs `scripts/install.sh`, and forces the mock backend:
 ./scripts/dev_run.sh
 ```
 
-## The initial admin password
+### The initial admin password
 
 On first start, if no user database exists, caelum creates an `admin` account
 with a randomly generated password and writes it to:
@@ -113,7 +178,7 @@ config document — that keeps password hashes out of the config editor in the
 web UI and out of anything that reads or exports `config.json`. See
 [Security](/guide/security) for roles and the `auth` config section.
 
-## Opening the web UI
+### Opening the web UI
 
 Point a browser at `http://<host>:8000/`. If `apps/local-web/dist` has been
 built, FastAPI mounts it at `/` as static files and you get the full UI. If it
@@ -129,7 +194,7 @@ curl -s localhost:8000/api/skystate
 curl -s localhost:8000/api/frame/latest.jpg -o latest.jpg
 ```
 
-## Building the frontend
+### Building the frontend
 
 The frontend lives in `web/` in the same repository; a source checkout serves
 the built assets from `web/apps/local-web/dist`. (A release wheel carries its
@@ -153,7 +218,7 @@ pnpm --filter local-web dev
 CAELUM_BACKEND_URL=http://raspberrypi.local:8000 pnpm --filter local-web dev
 ```
 
-## Tests
+### Tests
 
 ```bash
 uv run pytest
