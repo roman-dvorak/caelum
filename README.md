@@ -454,16 +454,46 @@ rebuilt.
 `AppConfig.plugins["keogram"]` / `["meteor_detection"]` control them via the
 usual `enabled` / `order` / `settings` fields (see `/api/plugins` and the
 Plugins page), and each declares a `config_schema` validating its own
-settings (column width and live-flush interval for the keogram; diff
-threshold, downscale size, and streak-shape thresholds for the detector).
+settings (column width, strip height, live-flush interval and `day_start`
+for the keogram; diff threshold, downscale size, and streak-shape
+thresholds for the detector).
 
 Changing a plugin's config takes effect on the next captured frame:
 `ConfigManager.on_change` triggers a full reload or the whole worker set,
 which is deliberate — a worker's accumulated state (a keogram buffer sized
 by the old `strip_height`, a detector's previous frame at the old `max_dim`)
 would not make sense under new settings, so it is rebuilt from scratch
-rather than patched in place. The one visible cost: an in-progress keogram
-restarts if its own settings change mid-night.
+rather than patched in place. The keogram is the exception that survives
+it: it picks the day's image back up from disk (see below).
+
+### Keogram
+
+One image per [observation day](#observation-day), rewritten in place every
+`live_flush_interval_s` (default 5 min) while the day runs and a last time
+when the next day starts — so a whole night is one file that grows, not a new
+partial copy every few minutes. The file
+(`derivatives/YYYY/MM/DD/keogram/<day-start>_keogram_keogram.png`, the
+directory being the UTC date of the day's start) is also the worker's
+memory: after a restart, a web update or a settings change it continues the
+same image. `day_start` (`"sunrise"` or local `"HH:MM"`) overrides the
+global `observation_day.start` for the keogram alone; leave it unset to
+follow it.
+
+## Observation day
+
+The unit a night is grouped by — the keogram makes one image per
+observation day, and Recordings' default view lists them. It runs from one
+start to the next and is named after the local date (`location.timezone`)
+it started on, so with a morning start a night is never split: the night of
+15/16 October is observation day `2026-10-15`.
+
+```json
+{ "observation_day": { "start": "sunrise" } }
+```
+
+`start` is `"sunrise"` (the default; moves with the season) or a fixed local
+time such as `"09:00"`. A fixed time follows the local clock across DST
+changes, so that day is 23 or 25 hours long.
 
 ## Logs
 

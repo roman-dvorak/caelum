@@ -19,11 +19,12 @@ Two ways to group frames into a "day", both available side by side:
   gallery/uploader use, but a real observing session almost always crosses
   UTC midnight partway through the night, so it silently splits one night's
   data across two "dates".
-- **night** (`?night=`) — an *observation night*, sunrise to sunrise, using
-  `SkyStateCalculator.next_sunrise`. A session that runs from dusk through
-  dawn stays one entry, labelled by the *local* calendar date (site
-  timezone) the preceding sunrise fell on — the date a human would actually
-  call "last night". This is the one worth defaulting the UI to.
+- **night** (`?night=`) — an *observation day* (`control/observation_day.py`):
+  from one `observation_day.start` (sunrise by default, or a fixed local
+  time) to the next. A session that runs from dusk through dawn stays one
+  entry, labelled by the *local* calendar date (site timezone) the day
+  started on — the date a human would actually call "last night". The
+  keogram uses the same days. This is the one worth defaulting the UI to.
 
 Both modes take and return "YYYY-MM-DD" strings — a stable, human-facing
 identifier independent of the nested `YYYY/MM/DD` disk layout underneath
@@ -33,12 +34,10 @@ the two). Every `captured_at`/timestamp in every response is UTC.
 
 from __future__ import annotations
 
-import bisect
 import logging
 import re
 import shutil
-from collections.abc import Iterable
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -57,6 +56,7 @@ from caelum.api.schemas import (
 )
 from caelum.api.security import Principal, require_admin, require_preview
 from caelum.config.manager import ConfigManager
+from caelum.control.observation_day import ObservationDays
 from caelum.control.skystate import SkyStateCalculator
 from caelum.derivatives.pool import thumbnail_path_for
 from caelum.settings import Settings
@@ -77,12 +77,14 @@ def _validate_iso_date(value: str) -> str:
     return value
 
 
-def _site_timezone(config_manager: ConfigManager) -> ZoneInfo:
-    name = config_manager.current.location.timezone
+def _observation_days(config_manager: ConfigManager, calculator: SkyStateCalculator) -> ObservationDays:
+    cfg = config_manager.current
     try:
-        return ZoneInfo(name)
+        ZoneInfo(cfg.location.timezone)
     except ZoneInfoNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=f"Configured location.timezone {name!r} is invalid") from exc
+        detail = f"Configured location.timezone {cfg.location.timezone!r} is invalid"
+        raise HTTPException(status_code=500, detail=detail) from exc
+    return ObservationDays.from_config(cfg, calculator)
 
 
 def _existing_dates(data_dir: Path, subdir: str) -> set[str]:
@@ -160,7 +162,7 @@ def list_nights(
     calculator: SkyStateCalculator = Depends(get_skystate_calculator),
 ) -> list[ObservationNightSummary]:
     data_dir = settings.data_dir
-    tz = _site_timezone(config_manager)
+    days = _observation_days(config_manager, calculator)
 
     utc_dates = sorted(
         _existing_dates(data_dir, "thumbnails") | _existing_dates(data_dir, "raw") | _existing_dates(
@@ -170,7 +172,6 @@ def list_nights(
     if not utc_dates:
         return []
 
-    sunrises = _sunrise_series(calculator, utc_dates)
     buckets: dict[str, dict[str, int]] = {}
 
     for subdir, suffixes, key in (
@@ -186,7 +187,7 @@ def list_nights(
                 if not child.is_file():
                     continue
                 captured = paths.capture_time_of(child) or _mtime(child)
-                night_label = _night_label(sunrises, captured, tz)
+                night_label = days.label_of(captured)
                 bucket = buckets.setdefault(
                     night_label, {"thumbnails": 0, "raws": 0, "derivatives": 0, "total_bytes": 0}
                 )
@@ -206,39 +207,6 @@ def _mtime(path: Path) -> datetime:
     — good enough for sorting into a night bucket, which only needs to be
     right to the minute, not the second."""
     return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
-
-
-def _sunrise_series(calculator: SkyStateCalculator, utc_dates: Iterable[str]) -> list[datetime]:
-    """One sunrise per calendar day spanning the dataset, with a day of
-    margin either side so files near the first/last UTC date still land in
-    a correctly-bounded bucket."""
-    sorted_dates = sorted(utc_dates)
-    start = date.fromisoformat(sorted_dates[0]) - timedelta(days=1)
-    stop = date.fromisoformat(sorted_dates[-1]) + timedelta(days=2)
-
-    sunrises: list[datetime] = []
-    cursor = datetime(start.year, start.month, start.day, tzinfo=UTC)
-    stop_at = datetime(stop.year, stop.month, stop.day, tzinfo=UTC)
-    while cursor < stop_at:
-        sunrise = calculator.next_sunrise(cursor)
-        sunrises.append(sunrise)
-        cursor = sunrise + timedelta(minutes=1)
-    return sunrises
-
-
-def _night_label(sunrises: list[datetime], when: datetime, tz: ZoneInfo) -> str:
-    """Local calendar date of the most recent sunrise at or before `when` —
-    the "night of" label a human would use."""
-    idx = max(bisect.bisect_right(sunrises, when) - 1, 0)
-    return sunrises[idx].astimezone(tz).date().isoformat()
-
-
-def _night_window(calculator: SkyStateCalculator, local_date: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
-    year, month, day_ = (int(part) for part in local_date.split("-"))
-    local_midnight_utc = datetime(year, month, day_, tzinfo=tz).astimezone(UTC)
-    start = calculator.next_sunrise(local_midnight_utc)
-    end = calculator.next_sunrise(start + timedelta(minutes=1))
-    return start, end
 
 
 def _utc_dates_between(start: datetime, end: datetime) -> list[str]:
@@ -266,8 +234,7 @@ def _resolve_period(
         _validate_iso_date(date)
         return [date], None, date
     _validate_iso_date(night)
-    tz = _site_timezone(config_manager)
-    window = _night_window(calculator, night, tz)
+    window = _observation_days(config_manager, calculator).window(night)
     return _utc_dates_between(*window), window, night
 
 

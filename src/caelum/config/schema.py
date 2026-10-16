@@ -75,6 +75,25 @@ class LocationConfig(StrictModel):
     timezone: str = "Europe/Prague"
 
 
+#: `"sunrise"` or a local wall-clock time `"HH:MM"` — shared by every setting
+#: that says when an observation day starts.
+OBSERVATION_DAY_START_PATTERN = r"^(sunrise|([01]\d|2[0-3]):[0-5]\d)$"
+
+
+class ObservationDayConfig(StrictModel):
+    """When an *observation day* begins (see `control/observation_day.py`).
+
+    It runs from one start to the next and is named after the local date it
+    started on, so a night is never split: with a morning start, the night
+    of 15/16 October belongs to observation day 2026-10-15. Recordings group
+    by it, and the keogram makes one image per observation day.
+    """
+
+    #: `"sunrise"` (moves with the season), or a fixed local time `"HH:MM"`
+    #: in `location.timezone`.
+    start: str = Field(default="sunrise", pattern=OBSERVATION_DAY_START_PATTERN)
+
+
 #: Image brightness in EV is relative to full scale: 0 EV = 255 ADU, -1 EV =
 #: half of it, and so on (`log2(adu / 255)`).
 FULL_SCALE_ADU = 255.0
@@ -389,6 +408,7 @@ class AppConfig(StrictModel):
     config_version: int = 1
     camera: CameraConfig = Field(default_factory=CameraConfig)
     location: LocationConfig = Field(default_factory=LocationConfig)
+    observation_day: ObservationDayConfig = Field(default_factory=ObservationDayConfig)
     exposure_policy: ExposurePolicyConfig = Field(default_factory=ExposurePolicyConfig)
     storage_policy: StoragePolicyConfig = Field(default_factory=StoragePolicyConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)

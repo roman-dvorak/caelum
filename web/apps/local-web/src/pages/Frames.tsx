@@ -38,9 +38,10 @@ const PAGE_SIZE = 60
  * time through the file browser is not a real option.
  *
  * Two groupings, picked with the toggle below:
- * - **Night** (default) — sunrise to sunrise, local time. A session that
- *   runs past UTC midnight (the normal case anywhere east of Greenwich)
- *   stays one entry instead of splitting in two.
+ * - **Observation day** (default) — from one `observation_day.start`
+ *   (sunrise, or a fixed local time) to the next, labelled by the local date
+ *   it started on. A session that runs past midnight stays one entry
+ *   instead of splitting in two; the keogram uses the same days.
  * - **Date (UTC)** — the on-disk calendar date, useful for cross-referencing
  *   the raw directory tree or the remote gallery, which both use it.
  *
@@ -127,7 +128,7 @@ export function Frames() {
                     mode === option ? 'bg-amber text-void font-semibold' : 'text-ink-dim hover:text-ink',
                   ].join(' ')}
                 >
-                  {option === 'night' ? 'Night' : 'Date (UTC)'}
+                  {option === 'night' ? 'Observation day' : 'Date (UTC)'}
                 </button>
               ))}
             </div>
@@ -345,7 +346,7 @@ function CapturesGallery({
   return (
     <div className="flex flex-col gap-4">
       <Panel
-        title={mode === 'night' ? `Night of ${label}` : label}
+        title={mode === 'night' ? `Observation day ${label}` : label}
         actions={
           isAdmin ? (
             <>
@@ -608,7 +609,7 @@ function DerivativeKindGallery({ mode, label, kind }: { mode: GroupMode; label: 
   const currentPage = Math.floor(listing.offset / PAGE_SIZE)
 
   const lightboxItems: LightboxItem[] = listing.entries.map((entry) => ({
-    src: localApiClient.fileContentUrl(entry.full),
+    src: `${localApiClient.fileContentUrl(entry.full)}${cacheKey(entry)}`,
     caption: (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="tabular-nums">{formatCaptureTime(entry.stem)}</span>
@@ -631,10 +632,14 @@ function DerivativeKindGallery({ mode, label, kind }: { mode: GroupMode; label: 
               className="aspect-square overflow-hidden border border-line bg-void"
             >
               <img
-                src={localApiClient.fileContentUrl(entry.thumbnail ?? entry.full)}
+                // The day's keogram is one file rewritten as the night goes
+                // on: key the URL on its size so the browser shows the
+                // current version, not a cached earlier one.
+                src={`${localApiClient.fileContentUrl(entry.thumbnail ?? entry.full)}${cacheKey(entry)}`}
                 alt={entry.stem}
                 loading="lazy"
-                className="h-full w-full object-cover"
+                // A keogram is a long thin strip — shown whole, not cropped.
+                className={`h-full w-full ${kind.startsWith('keogram') ? 'object-contain' : 'object-cover'}`}
               />
             </button>
           ))}
@@ -670,4 +675,9 @@ function DerivativeKindGallery({ mode, label, kind }: { mode: GroupMode; label: 
       ) : null}
     </div>
   )
+}
+
+/** Appended to a `fileContentUrl` (which already has a query string). */
+function cacheKey(entry: DerivativeEntry): string {
+  return `&v=${entry.size}`
 }

@@ -203,25 +203,29 @@ on the y-axis.
 
 `KeogramWorker` (id `keogram`) does exactly that.
 
-- **`on_frame`** extracts the single centre column of the frame and resizes it
-  to a 2 px wide, 240 px tall strip, then appends it to an in-memory buffer. It
-  also compares the frame's date against the buffer's date; when they differ it
-  sets a rollover flag and returns *without* appending, so the new day's column
-  is not mixed into yesterday's image.
-- **`create_derivative`** handles two cases. On rollover it concatenates the
-  whole buffer along the x-axis and returns a `Derivative` of kind `keogram`
-  with `{"date": ..., "frame_count": ...}`, then reseeds the buffer with the
-  current frame's column and resets the date. Otherwise, if at least five
-  minutes have passed since the last flush, it emits a `keogram_live` — the
-  same concatenation of whatever has accumulated so far.
+- **`on_frame`** works out which *observation day* the frame belongs to —
+  from one `observation_day.start` (sunrise, or a fixed local time) to the
+  next, named after the local date it started on — extracts the frame's
+  centre column, resizes it to a 2 px wide, 240 px tall strip and appends it
+  to the day's buffer. When a frame belongs to a new day, the old day's
+  buffer becomes the finished keogram, and the new day starts from whatever
+  is already on disk for it.
+- **`create_derivative`** returns the finished keogram of a day that just
+  ended, if there is one; otherwise, once `live_flush_interval_s` (five
+  minutes by default) has passed, the current day's keogram so far. Both are
+  kind `keogram`, stamped with the day's *start*, so they are the same file:
+  `derivatives/YYYY/MM/DD/keogram/<day-start>_keogram_keogram.png`, rewritten
+  in place (atomically) each time.
 
-The live flush is what makes the keogram useful *during* the night rather than
-at dawn: every five minutes there is a fresh partial image on disk, and the web
-UI has something to show. Both kinds are written as PNG.
+One file per night that grows as the night goes on is what makes the keogram
+useful *during* the night, and that file is also the worker's memory: after a
+restart, a web update or a settings change, the first frame of the day loads
+it back and keeps appending.
 
-State — the column buffer, the current date, the last flush time — lives in the
-worker instance in this process, which is exactly why derivative workers are
-dispatched to threads rather than processes.
+Settings: `column_width`, `strip_height`, `live_flush_interval_s`, and
+`day_start` — `"sunrise"` or `"HH:MM"` to give the keogram its own day
+boundary; unset, it follows the global `observation_day.start` that
+Recordings are grouped by too.
 
 ## Worked example: the meteor detector
 

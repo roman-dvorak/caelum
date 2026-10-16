@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
+import os
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import replace
@@ -47,7 +48,7 @@ def _derivative_dir(data_dir: Path, derivative: Derivative) -> Path:
     return paths.date_dir(data_dir, "derivatives", derivative.created_at) / derivative.kind
 
 
-def _derivative_path(data_dir: Path, derivative: Derivative, worker_id: str) -> Path:
+def derivative_path(data_dir: Path, derivative: Derivative, worker_id: str) -> Path:
     ext = "png" if derivative.kind.startswith("keogram") else "jpg"
     stem = paths.timestamp_stem(derivative.created_at)
     return _derivative_dir(data_dir, derivative) / f"{stem}_{worker_id}_{derivative.kind}.{ext}"
@@ -61,16 +62,27 @@ def thumbnail_path_for(full_path: Path) -> Path:
     return full_path.with_name(f"{full_path.stem}_thumb.jpg")
 
 
+def _write_atomic(path: Path, data: bytes) -> None:
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
 def write_derivative(data_dir: Path, derivative: Derivative, worker_id: str) -> Path | None:
     if derivative.image is None:
         return derivative.path
-    path = _derivative_path(data_dir, derivative, worker_id)
+    path = derivative_path(data_dir, derivative, worker_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     bgr = cv2.cvtColor(derivative.image, cv2.COLOR_RGB2BGR) if derivative.image.ndim == 3 else derivative.image
-    cv2.imwrite(str(path), bgr)
+    # Atomic: a derivative may be rewritten in place (the day's keogram)
+    # while the UI or the uploader is reading the previous version.
+    ok, encoded = cv2.imencode(path.suffix, bgr)
+    if not ok:
+        raise RuntimeError(f"Could not encode {path.name}")
+    _write_atomic(path, encoded.tobytes())
 
     thumb_bytes = thumbnail_module.encode(derivative.image, max_dim=_THUMBNAIL_MAX_DIM)
-    thumbnail_path_for(path).write_bytes(thumb_bytes)
+    _write_atomic(thumbnail_path_for(path), thumb_bytes)
 
     return path
 

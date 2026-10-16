@@ -25,6 +25,9 @@
     "elevation_m": 200.0,
     "timezone": "Europe/Prague"
   },
+  "observation_day": {
+    "start": "sunrise"
+  },
   "exposure_policy": {
     "presets": {
       "day": {
@@ -32,52 +35,66 @@
         "exposure_us_max": 10000,
         "gain_min": 1.0,
         "gain_max": 2.0,
-        "target_mean_adu": 128.0,
-        "saturation_threshold": 250.0,
-        "deadband_pct": 0.05,
-        "max_step_pct": 0.15
+        "target_ev": -1.0,
+        "deadband_ev": 0.07,
+        "saturation_ev": -0.03,
+        "kp": 0.3,
+        "ki": 0.5,
+        "kd": 0.0
       },
       "civil_twilight": {
         "exposure_us_min": 200,
         "exposure_us_max": 100000,
         "gain_min": 1.0,
         "gain_max": 4.0,
-        "target_mean_adu": 120.0,
-        "saturation_threshold": 250.0,
-        "deadband_pct": 0.05,
-        "max_step_pct": 0.15
+        "target_ev": -1.09,
+        "deadband_ev": 0.07,
+        "saturation_ev": -0.03,
+        "kp": 0.3,
+        "ki": 0.5,
+        "kd": 0.0
       },
       "nautical_twilight": {
         "exposure_us_min": 1000,
         "exposure_us_max": 2000000,
         "gain_min": 1.0,
         "gain_max": 8.0,
-        "target_mean_adu": 110.0,
-        "saturation_threshold": 250.0,
-        "deadband_pct": 0.05,
-        "max_step_pct": 0.15
+        "target_ev": -1.21,
+        "deadband_ev": 0.07,
+        "saturation_ev": -0.03,
+        "kp": 0.3,
+        "ki": 0.5,
+        "kd": 0.0
       },
       "astronomical_twilight": {
         "exposure_us_min": 10000,
         "exposure_us_max": 8000000,
         "gain_min": 1.0,
         "gain_max": 12.0,
-        "target_mean_adu": 100.0,
-        "saturation_threshold": 250.0,
-        "deadband_pct": 0.05,
-        "max_step_pct": 0.15
+        "target_ev": -1.35,
+        "deadband_ev": 0.07,
+        "saturation_ev": -0.03,
+        "kp": 0.3,
+        "ki": 0.5,
+        "kd": 0.0
       },
       "night": {
         "exposure_us_min": 100000,
         "exposure_us_max": 15000000,
         "gain_min": 1.0,
         "gain_max": 16.0,
-        "target_mean_adu": 100.0,
-        "saturation_threshold": 250.0,
-        "deadband_pct": 0.05,
-        "max_step_pct": 0.15
+        "target_ev": -1.35,
+        "deadband_ev": 0.07,
+        "saturation_ev": -0.03,
+        "kp": 0.3,
+        "ki": 0.5,
+        "kd": 0.0
       }
-    }
+    },
+    "brightness_roi_diameter_frac": 0.8,
+    "response_gamma": 0.7,
+    "saturated_step_ev": 2.0,
+    "max_correction_ev": 6.0
   },
   "storage_policy": {
     "raw_periods": [
@@ -86,9 +103,23 @@
     ],
     "thumbnail_max_dim": 1024,
     "jpeg_quality": 85,
+    "webp_quality": 80,
+    "dng_compress": true,
     "night_capture_interval_s": 30.0,
     "day_capture_interval_s": 60.0,
     "realtime_stream_fps": 2.0
+  },
+  "processing": {
+    "mode": "process",
+    "slots": 3,
+    "job_timeout_s": 120.0
+  },
+  "capture": {
+    "active_program": "default.py",
+    "active_sha256": null,
+    "editing_enabled": true,
+    "params": {},
+    "max_consecutive_failures": 3
   },
   "retention": {
     "max_age_days": 14,
@@ -97,10 +128,18 @@
   },
   "upload": {
     "enabled": false,
+    "transport": "rsync",
     "remote_host": "",
     "remote_user": "",
     "remote_base_path": "/var/www/allsky-data",
     "ssh_key_path": "/etc/caelum/upload_key",
+    "ssh_port": 22,
+    "bandwidth_limit_kbps": 0,
+    "s3_endpoint_url": "",
+    "s3_bucket": "",
+    "s3_prefix": "",
+    "s3_profile": "",
+    "s3_acl": "",
     "camera_slug": "cam0",
     "camera_name": "Caelum Camera",
     "thumbnail_interval_s": 60.0,
