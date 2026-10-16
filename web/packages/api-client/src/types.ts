@@ -250,10 +250,6 @@ export interface AuthConfig {
   terminal_enabled: boolean
 }
 
-export interface DocsConfig {
-  base_url: string
-}
-
 /** Where the web UI looks for new releases — see `caelum/update/manifest.py`. */
 export interface UpdateConfig {
   manifest_url: string
@@ -269,7 +265,6 @@ export interface AppConfig {
   upload: UploadConfig
   redis: RedisConfig
   auth: AuthConfig
-  docs: DocsConfig
   update: UpdateConfig
   plugins: Record<string, PluginConfig>
 }
@@ -413,7 +408,6 @@ export interface AuthContext {
   auth_enabled: boolean
   preview_access: PreviewAccess
   terminal_enabled: boolean
-  docs_url: string
   authenticated: boolean
   username: string | null
   role: string | null

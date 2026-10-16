@@ -340,16 +340,6 @@ class AuthConfig(StrictModel):
     terminal_enabled: bool = True
 
 
-class DocsConfig(StrictModel):
-    """Where the public documentation site is published.
-
-    The web UI deep-links into it (`DocsLink`), so it has to be configurable
-    per deployment rather than hardcoded in the frontend bundle.
-    """
-
-    base_url: str = "https://caelum.astrometers.eu"
-
-
 class UpdateConfig(StrictModel):
     """Where the web UI looks for new caelum releases (see caelum/update/).
 
@@ -417,6 +407,15 @@ class AppConfig(StrictModel):
     upload: UploadConfig = Field(default_factory=UploadConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
-    docs: DocsConfig = Field(default_factory=DocsConfig)
     update: UpdateConfig = Field(default_factory=UpdateConfig)
     plugins: dict[str, PluginConfig] = Field(default_factory=_default_plugins)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_retired_sections(cls, data: Any) -> Any:
+        """`docs.base_url` used to be configurable; the documentation URL is
+        now fixed in the UI. Drop it from older config files (and Redis)
+        instead of rejecting the whole document."""
+        if isinstance(data, dict) and "docs" in data:
+            data = {k: v for k, v in data.items() if k != "docs"}
+        return data

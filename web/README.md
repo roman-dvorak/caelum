@@ -107,8 +107,8 @@ in sync with `../src/caelum/api/schemas.py`,
 ## Documentation links from the UI
 
 The local UI links into the documentation site at paths it expects to exist.
-The base is per-deployment (`docs.base_url` in the backend config, and
-`VITE_DOCS_URL` for remote-web), but these page paths are fixed:
+The base is fixed — `DOCS_URL` in `packages/ui/src/brand.ts`, shared by both
+apps — and so are these page paths:
 
 | Link from | Target |
 | --- | --- |
@@ -117,4 +117,4 @@ The base is per-deployment (`docs.base_url` in the backend config, and
 | Settings page, "What do these mean?" | `/guide/concepts.html` |
 
 Renaming or moving those pages breaks the links silently — the docs build
-cannot see them. Grep for `docs_url` and `docs.base_url` before doing so.
+cannot see them. Grep for `DOCS_URL` before doing so.

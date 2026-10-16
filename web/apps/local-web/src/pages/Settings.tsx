@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { JsonEditor } from 'json-edit-react'
 import type { AppConfig } from '@caelum/api-client'
-import { Loading, Message, PageHeader } from '@caelum/ui'
+import { DOCS_URL, Loading, Message, PageHeader } from '@caelum/ui'
 import { CameraPicker } from '../components/CameraPicker.tsx'
 import { localApiClient } from '../services/client.ts'
 
@@ -60,16 +60,14 @@ export function Settings() {
         title="Settings"
         description="The live configuration document. Changes save as you make them; greyed-out sections are read-only."
         actions={
-          config.docs.base_url ? (
-            <a
-              href={`${config.docs.base_url}/guide/concepts.html`}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="border border-line px-3 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
-            >
-              What do these mean?
-            </a>
-          ) : null
+          <a
+            href={`${DOCS_URL}/guide/concepts.html`}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="border border-line px-3 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
+          >
+            What do these mean?
+          </a>
         }
       />
 

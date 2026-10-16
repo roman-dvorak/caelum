@@ -201,7 +201,6 @@ class AuthContextResponse(BaseModel):
     auth_enabled: bool
     preview_access: str
     terminal_enabled: bool
-    docs_url: str
     authenticated: bool
     username: str | None
     role: str | None

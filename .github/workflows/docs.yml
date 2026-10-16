@@ -1,6 +1,6 @@
 # Builds the VitePress site (pages in docs/, tooling in web/apps/docs) and
-# publishes it to GitHub Pages at https://caelum.astrometers.eu — the default
-# `docs.base_url` the web UI deep-links into. The domain comes from
+# publishes it to GitHub Pages at https://caelum.astrometers.eu — the
+# `DOCS_URL` (web/packages/ui/src/brand.ts) the web UI deep-links into. The domain comes from
 # docs/public/CNAME, so the site is served at the root and DOCS_BASE stays "/".
 #
 # One-time repo setup: Settings → Pages → Source: "GitHub Actions".

@@ -157,9 +157,6 @@
     "session_ttl_hours": 720,
     "terminal_enabled": true
   },
-  "docs": {
-    "base_url": "https://caelum.astrometers.eu"
-  },
   "update": {
     "manifest_url": "https://github.com/roman-dvorak/caelum/releases/latest/download/manifest.json"
   },

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { AstroMetersLogo } from './AstroMetersLogo.js'
+import { BUILD_INFO, DEVELOPER_NAME, DEVELOPER_URL, DOCS_URL } from './brand.js'
 import { BookIcon, CloseIcon, MenuIcon } from './icons.js'
 import { ThemeToggle } from './theme.js'
 import { navItemClass } from './navigation.js'
@@ -13,8 +15,6 @@ export interface AppShellProps {
   renderNavItem: (item: NavItem, className: (isActive: boolean) => string) => ReactNode
   /** Small caption under the wordmark, e.g. the camera name. */
   subtitle?: string
-  /** Public documentation site, linked from the sidebar footer. */
-  docsUrl?: string
   /** Account block above the footer — identity, sign out. */
   footer?: ReactNode
   children: ReactNode
@@ -32,7 +32,6 @@ export function AppShell({
   sections,
   renderNavItem,
   subtitle,
-  docsUrl,
   footer,
   children,
 }: AppShellProps) {
@@ -117,21 +116,45 @@ export function AppShell({
         <div className="flex flex-col gap-2 border-t border-line-soft p-3">
           {footer}
           <ThemeToggle />
-          {docsUrl ? (
-            <a
-              href={docsUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="flex items-center gap-2 border border-line px-2.5 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
-            >
-              <BookIcon size={16} />
-              Documentation
-            </a>
-          ) : null}
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="flex items-center gap-2 border border-line px-2.5 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
+          >
+            <BookIcon size={16} />
+            Documentation
+          </a>
+          <About />
         </div>
       </aside>
 
       <main className="min-w-0 px-4 py-5 sm:px-6 sm:py-6">{children}</main>
+    </div>
+  )
+}
+
+/** What this is, which version and build, and who makes it. */
+function About() {
+  return (
+    <div className="flex items-start gap-2.5 px-1 pt-1">
+      <a href={DEVELOPER_URL} target="_blank" rel="noreferrer noopener" className="mt-0.5 shrink-0" title={DEVELOPER_NAME}>
+        <AstroMetersLogo size={34} />
+      </a>
+      <div className="min-w-0 text-[0.65rem] leading-snug text-ink-faint">
+        <p>
+          <span className="font-semibold tracking-[0.15em] text-ink-dim uppercase">caelum</span>{' '}
+          <span className="font-mono text-ink-dim">{BUILD_INFO.version}</span>
+        </p>
+        <p>Allsky camera software</p>
+        <p className="font-mono break-all">build {BUILD_INFO.build}</p>
+        <p>
+          by{' '}
+          <a href={DEVELOPER_URL} target="_blank" rel="noreferrer noopener" className="text-ink-dim hover:text-ink">
+            {DEVELOPER_NAME}
+          </a>
+        </p>
+      </div>
     </div>
   )
 }

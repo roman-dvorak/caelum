@@ -5,11 +5,6 @@ import { useCameras } from './hooks/useCameras.ts'
 import { CameraList } from './pages/CameraList.tsx'
 import { CameraDetail } from './pages/CameraDetail.tsx'
 
-// Where the public documentation is published. Unlike local-web, which
-// reads this from the backend config, this app has no backend at all — it
-// is static files on an Apache host — so it comes from the build env.
-const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'https://caelum.astrometers.eu'
-
 // This app is deployed as static files on an Apache host with zero backend
 // logic — there is no server-side rewrite to fall back arbitrary paths to
 // index.html, so client-side routes must stay under the single "/"
@@ -49,7 +44,6 @@ function Shell() {
     <AppShell
       sections={sections}
       subtitle="allsky network"
-      docsUrl={DOCS_URL}
       renderNavItem={renderNavItem}
     >
       <Routes>

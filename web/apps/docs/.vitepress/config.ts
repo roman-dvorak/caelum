@@ -17,9 +17,9 @@ const vueDir = dirname(vitepressRequire.resolve('vue/package.json'))
  * Published to GitHub Pages by .github/workflows/docs.yml, and can also be
  * rsynced as plain static files next to the remote gallery on an Apache host
  * (scripts/deploy-static.sh). Deep-linked from the local web UI — which is why the
- * route names below are a contract, not cosmetics: `config.docs.base_url`
- * in the backend plus paths like `/guide/security` and `/guide/concepts`
- * are referenced from Login.tsx and Settings.tsx.
+ * route names below are a contract, not cosmetics: `DOCS_URL` in
+ * packages/ui/src/brand.ts plus paths like `/guide/security` and
+ * `/guide/concepts` are referenced from Login.tsx and Settings.tsx.
  *
  * `DOCS_BASE` covers hosting under a subdirectory (e.g. "/caelum/docs/");
  * it must have a leading and trailing slash.

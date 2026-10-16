@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Field, Message, inputClass } from '@caelum/ui'
+import { Button, DOCS_URL, Field, Message, inputClass } from '@caelum/ui'
 import { useAuth } from '../authContext.ts'
 
 export function Login() {
@@ -67,16 +67,14 @@ export function Login() {
             </p>
           ) : null}
 
-          {context?.docs_url ? (
-            <a
-              href={`${context.docs_url}/guide/security.html`}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-center text-xs text-ink-faint underline decoration-line underline-offset-4 hover:text-ink"
-            >
-              Forgot the password?
-            </a>
-          ) : null}
+          <a
+            href={`${DOCS_URL}/guide/security.html`}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-center text-xs text-ink-faint underline decoration-line underline-offset-4 hover:text-ink"
+          >
+            Forgot the password?
+          </a>
         </div>
       </form>
     </div>

@@ -266,8 +266,9 @@ builds them is `web/apps/docs`. They build to static HTML like everything else.
 
 The public copy at <https://caelum.astrometers.eu> is published to GitHub Pages
 by `.github/workflows/docs.yml` on every push to `master` that touches the
-docs. To self-host a copy instead — e.g. a LAN-only mirror, then pointed to by
-`docs.base_url` — build and rsync it:
+docs. The web UI always links to that public copy (`DOCS_URL` in
+`web/packages/ui/src/brand.ts`). To host another copy anyway — e.g. a
+LAN-only mirror — build and rsync it:
 
 ```bash
 cd caelum/web

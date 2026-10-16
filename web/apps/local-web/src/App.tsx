@@ -111,7 +111,6 @@ export default function App() {
     <HashRouter>
       <AppShell
         sections={sections}
-        docsUrl={context?.docs_url}
         subtitle={isAdmin ? undefined : 'view only'}
         renderNavItem={renderNavItem}
         footer={
