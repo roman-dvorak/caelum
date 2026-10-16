@@ -39,23 +39,43 @@ export interface FrameStats {
   p99: number
   saturated_fraction: number
   focus_score: number
+  /** Median of the regulator's central brightness circle — what it regulates on. */
+  median?: number
 }
 
 /** `GET /api/status` response. */
-/** What the exposure controller measured last cycle and would do next —
- * read-only reporting, entirely separate from the capture loop's own use
- * of the same numbers. `measured_mean`/`error_adu`/`correction_factor` are
- * null only before the very first frame has been measured. */
+/** The exposure regulator's last cycle — mirrors `ExposureDiagnosticsResponse`
+ * in `caelum/src/caelum/api/schemas.py`. Everything is in EV: image
+ * brightness relative to full scale (0 EV = 255 ADU), exposure*gain as
+ * log2(seconds) + log2(gain). Measurements are null before the first frame. */
 export interface ExposureDiagnostics {
   sky_period: string
-  target_mean_adu: number
-  measured_mean: number | null
-  error_adu: number | null
-  raw_correction_factor: number | null
-  correction_factor: number | null
+  target_ev: number
+  deadband_ev: number
+  ev_min: number
+  ev_max: number
+  kp: number
+  ki: number
+  kd: number
+  measured_ev?: number | null
+  p99_ev?: number | null
+  error_ev?: number | null
+  correction_ev?: number | null
+  applied_ev?: number | null
+  required_ev?: number | null
+  remaining_ev?: number | null
+  p_term_ev?: number | null
+  i_term_ev?: number | null
+  d_term_ev?: number | null
+  output_ev?: number | null
+  change_ev?: number | null
+  ev_exposure?: number | null
+  ev_gain?: number | null
+  limited: 'none' | 'upper' | 'lower'
+  integrating: boolean
   within_deadband: boolean
-  deadband_pct: number
-  max_step_pct: number
+  saturated: boolean
+  manual: boolean
 }
 
 export interface StatusResponse {
@@ -69,6 +89,12 @@ export interface StatusResponse {
   last_stats: FrameStats | null
   last_save_raw: boolean | null
   exposure_diagnostics: ExposureDiagnostics | null
+  /** Frame-processing worker counters (pid, in-flight/dropped/failed frames, latency). */
+  processing?: Record<string, unknown> | null
+  /** Current spacing between captures, seconds. */
+  frame_period_s?: number | null
+  /** The running capture program (name, sha256, origin, failures…). */
+  capture_program?: Record<string, unknown> | null
   /** IANA name from `location.timezone` (e.g. "Europe/Prague"). Every
    * timestamp elsewhere in the API is UTC; this is what to convert to and
    * label when showing a time to a human — see `formatLocalTime`. */
@@ -156,8 +182,13 @@ export interface ExposurePreset {
   exposure_us_max: number
   gain_min: number
   gain_max: number
-  target_mean_adu: number
-  saturation_threshold: number
+  /** Brightness setpoint, EV below full scale. */
+  target_ev: number
+  deadband_ev: number
+  saturation_ev: number
+  kp: number
+  ki: number
+  kd: number
 }
 
 export type ExposurePolicyPresets = Record<SkyPeriod, ExposurePreset>

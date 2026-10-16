@@ -21,6 +21,7 @@ import {
 } from '@caelum/ui'
 import type { NavItem, NavSection } from '@caelum/ui'
 import { useAuth } from './authContext.ts'
+import { PageErrorBoundary } from './components/PageErrorBoundary.tsx'
 import { Dashboard } from './pages/Dashboard.tsx'
 import { Files } from './pages/Files.tsx'
 import { Frames } from './pages/Frames.tsx'
@@ -133,35 +134,37 @@ export default function App() {
           </div>
         }
       >
-        <Suspense fallback={<Loading />}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/live" element={<LiveStream />} />
-            <Route path="/frames" element={<Frames />} />
-            <Route path="/files" element={<Files />} />
-            {/* Admin routes are not merely hidden from the sidebar — a viewer
-                who types the URL lands back on the dashboard, and the backend
-                would refuse the requests regardless. */}
-            <Route path="/settings" element={isAdmin ? <Settings /> : <Navigate to="/" replace />} />
-            <Route path="/plugins" element={isAdmin ? <Plugins /> : <Navigate to="/" replace />} />
-            <Route
-              path="/overlay"
-              element={isAdmin ? <OverlayEditor /> : <Navigate to="/" replace />}
-            />
-            <Route
-              path="/white-balance"
-              element={isAdmin ? <WhiteBalance /> : <Navigate to="/" replace />}
-            />
-            <Route
-              path="/terminal"
-              element={isAdmin ? <TerminalPage /> : <Navigate to="/" replace />}
-            />
-            <Route path="/logs" element={isAdmin ? <Logs /> : <Navigate to="/" replace />} />
-            <Route path="/system" element={isAdmin ? <System /> : <Navigate to="/" replace />} />
-            <Route path="/users" element={isAdmin ? <Users /> : <Navigate to="/" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+        <PageErrorBoundary>
+          <Suspense fallback={<Loading />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/live" element={<LiveStream />} />
+              <Route path="/frames" element={<Frames />} />
+              <Route path="/files" element={<Files />} />
+              {/* Admin routes are not merely hidden from the sidebar — a viewer
+                  who types the URL lands back on the dashboard, and the backend
+                  would refuse the requests regardless. */}
+              <Route path="/settings" element={isAdmin ? <Settings /> : <Navigate to="/" replace />} />
+              <Route path="/plugins" element={isAdmin ? <Plugins /> : <Navigate to="/" replace />} />
+              <Route
+                path="/overlay"
+                element={isAdmin ? <OverlayEditor /> : <Navigate to="/" replace />}
+              />
+              <Route
+                path="/white-balance"
+                element={isAdmin ? <WhiteBalance /> : <Navigate to="/" replace />}
+              />
+              <Route
+                path="/terminal"
+                element={isAdmin ? <TerminalPage /> : <Navigate to="/" replace />}
+              />
+              <Route path="/logs" element={isAdmin ? <Logs /> : <Navigate to="/" replace />} />
+              <Route path="/system" element={isAdmin ? <System /> : <Navigate to="/" replace />} />
+              <Route path="/users" element={isAdmin ? <Users /> : <Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </PageErrorBoundary>
       </AppShell>
     </HashRouter>
   )

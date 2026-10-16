@@ -71,17 +71,24 @@ export function Dashboard() {
               value={status?.last_stats ? status.last_stats.mean.toFixed(1) : '—'}
               unit="ADU"
             />
-            <StatusTile label="Setpoint" value={diag ? diag.target_mean_adu.toFixed(1) : '—'} unit="ADU" />
+            <StatusTile label="Setpoint" value={fixed(diag?.target_ev, 2)} unit="EV" />
+            <StatusTile label="Measured" value={fixed(diag?.measured_ev, 2)} unit="EV" />
             <StatusTile
               label="Error vs. setpoint"
-              value={diag?.error_adu != null ? formatSigned(diag.error_adu) : '—'}
-              unit="ADU"
+              value={diag?.error_ev != null ? formatSigned(diag.error_ev) : '—'}
+              unit="EV"
             />
             <StatusTile
               label="Next correction"
-              value={diag?.correction_factor != null ? formatSigned((diag.correction_factor - 1) * 100) : '—'}
-              unit="%"
-              hint={diag?.within_deadband ? 'within deadband — holding steady' : undefined}
+              value={diag?.correction_ev != null ? formatSigned(diag.correction_ev) : '—'}
+              unit="EV"
+              hint={
+                diag?.within_deadband
+                  ? 'within deadband — holding steady'
+                  : diag && diag.limited !== 'none'
+                    ? `at the ${diag.limited} exposure limit`
+                    : undefined
+              }
             />
             <StatusTile
               label="p99"
@@ -93,8 +100,11 @@ export function Dashboard() {
               value={status?.last_stats ? (status.last_stats.saturated_fraction * 100).toFixed(1) : '—'}
               unit="%"
             />
-            <StatusTile label="Deadband" value={diag ? (diag.deadband_pct * 100).toFixed(0) : '—'} unit="%" />
-            <StatusTile label="Max step" value={diag ? (diag.max_step_pct * 100).toFixed(0) : '—'} unit="%" />
+            <StatusTile label="Deadband" value={fixed(diag?.deadband_ev, 2)} unit="EV" />
+            <StatusTile
+              label="PID (Kp / Ki / Kd)"
+              value={diag ? `${diag.kp} / ${diag.ki} / ${diag.kd}` : '—'}
+            />
           </div>
         </section>
       ) : null}
@@ -147,6 +157,11 @@ function formatExposure(exposureUs: number): string {
 }
 
 function formatSigned(value: number): string {
-  const rounded = value.toFixed(1)
+  const rounded = value.toFixed(2)
   return value > 0 ? `+${rounded}` : rounded
+}
+
+/** `—` for a value the backend didn't send (older/newer API, first frame). */
+function fixed(value: number | null | undefined, digits: number): string {
+  return typeof value === 'number' ? value.toFixed(digits) : '—'
 }
