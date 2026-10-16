@@ -132,3 +132,14 @@ def test_capture_settings_reach_sidecar_and_xmp():
     from caelum.processing.jobs import FrameInfo
 
     assert "capture_settings" in FrameInfo.__dataclass_fields__
+
+
+def test_picamera2_never_enables_awb(monkeypatch):
+    # With AwbEnable on, the first frame after start() never arrives on a
+    # real IMX477 — wb_auto must fall back to the fixed gains instead.
+    backend = _picamera2_backend(monkeypatch)
+    backend.set_white_balance(2.1, 1.7, auto=True)
+    backend.set_request_colour_gains((3.0, 1.2))
+    backend.set_request_colour_gains(None)
+    assert all(c.get("AwbEnable") is not True for c in backend._picam2.controls)
+    assert backend._picam2.controls[-1] == {"AwbEnable": False, "ColourGains": (2.1, 1.7)}

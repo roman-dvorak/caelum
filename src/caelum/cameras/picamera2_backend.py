@@ -307,12 +307,18 @@ class Picamera2Backend(CameraBackend):
         self._wb_red_gain = red_gain
         self._wb_blue_gain = blue_gain
         if auto:
-            # Auto white balance needs a run of frames to converge, which
-            # one-frame captures never give it — it'll stay where it starts.
-            logger.warning("Auto white balance doesn't converge with on-demand captures; set fixed gains instead")
-            self._picam2.set_controls({"AwbEnable": True})
-        else:
-            self._picam2.set_controls({"AwbEnable": False, "ColourGains": (red_gain, blue_gain)})
+            # Never enable libcamera's AWB here. It needs a run of frames to
+            # converge, which one-frame captures never give it — and worse,
+            # with AwbEnable on, the first frame after start() never arrives
+            # at all (IMX477 on a Pi 4: every capture stalls). Fixed gains
+            # it is, whatever the config says.
+            logger.warning(
+                "Auto white balance is not possible with on-demand captures — using the fixed gains "
+                "(%.2f, %.2f); set them in the camera settings",
+                red_gain,
+                blue_gain,
+            )
+        self._picam2.set_controls({"AwbEnable": False, "ColourGains": (red_gain, blue_gain)})
 
     def set_request_colour_gains(self, gains: tuple[float, float] | None) -> None:
         assert self._picam2 is not None, "set_request_colour_gains() called before open()"
@@ -322,10 +328,7 @@ class Picamera2Backend(CameraBackend):
         elif self._request_gains:
             # Back to the configured white balance (without touching it).
             self._request_gains = False
-            if self._wb_auto:
-                self._picam2.set_controls({"AwbEnable": True})
-            else:
-                self._picam2.set_controls({"AwbEnable": False, "ColourGains": (self._wb_red_gain, self._wb_blue_gain)})
+            self._picam2.set_controls({"AwbEnable": False, "ColourGains": (self._wb_red_gain, self._wb_blue_gain)})
 
     def _matches_request(self, meta: dict[str, Any]) -> bool:
         if self._requested is None:
