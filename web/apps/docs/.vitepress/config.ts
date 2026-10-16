@@ -53,9 +53,14 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
-      { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
-      { text: 'Getting started', link: '/guide/getting-started' },
-      { text: 'Reference', link: '/capture-programs' },
+      {
+        text: 'Documentation',
+        link: '/guide/',
+        activeMatch: '^/(guide/|capture-programs|dng-capture-sets)',
+      },
+      { text: 'Hardware', link: '/hardware/', activeMatch: '^/hardware/' },
+      // The maintainer, as a top-level link rather than buried in the footer.
+      { text: 'AstroMeters', link: 'https://astrometers.eu' },
     ],
 
     socialLinks: [{ icon: 'github', link: 'https://github.com/roman-dvorak/caelum' }],
@@ -64,7 +69,18 @@ export default defineConfig({
       pattern: 'https://github.com/roman-dvorak/caelum/edit/master/docs/:path',
     },
 
-    sidebar: [
+    sidebar: {
+      '/hardware/': [
+        {
+          text: 'Hardware',
+          items: [
+            { text: 'Supported hardware', link: '/hardware/' },
+            { text: 'AMASC01', link: '/hardware/amasc01' },
+            { text: 'DIY cameras', link: '/hardware/diy' },
+          ],
+        },
+      ],
+      '/': [
       {
         text: 'Start here',
         items: [
@@ -99,7 +115,8 @@ export default defineConfig({
           { text: 'Capture sets in DNG', link: '/dng-capture-sets' },
         ],
       },
-    ],
+      ],
+    },
 
     // Bundled at build time — no external service, so the docs stay fully
     // self-hosted and work on a LAN-only mirror.
@@ -108,8 +125,9 @@ export default defineConfig({
     outline: { level: [2, 3] },
 
     footer: {
-      message: 'caelum — part of the astrometers instrumentation stack',
-      copyright: 'astrometers.eu',
+      message:
+        'caelum is developed and maintained by <a href="https://astrometers.eu">AstroMeters</a>',
+      copyright: '© AstroMeters',
     },
   },
 })

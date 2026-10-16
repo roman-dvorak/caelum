@@ -71,3 +71,30 @@
 .vp-doc div[class*='language-'] pre {
   overflow-x: auto;
 }
+
+/* "Maintained by AstroMeters" block under the home page features. */
+.maintainer {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  max-width: 1152px;
+  margin: 48px auto 0;
+  padding: 24px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+}
+.maintainer img { flex: none; }
+.maintainer p { margin: 0; line-height: 1.6; color: var(--vp-c-text-2); }
+.maintainer .maintainer-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--vp-c-text-3);
+}
+.maintainer .maintainer-name { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.maintainer a { color: var(--vp-c-brand-1); text-decoration: none; }
+.maintainer a:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .maintainer { flex-direction: column; margin: 32px 16px 0; }
+}

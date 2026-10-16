@@ -10,8 +10,11 @@ hero:
       text: Get started
       link: /guide/getting-started
     - theme: alt
-      text: Core concepts
-      link: /guide/concepts
+      text: Documentation
+      link: /guide/
+    - theme: alt
+      text: Supported hardware
+      link: /hardware/
 
 features:
   - title: Exposure follows the sky, not a clock
@@ -27,3 +30,16 @@ features:
   - title: Plugins without forking
     details: A plugin is a class with four optional hooks and a config block carrying enabled, order and an opaque settings dict. Built-in derivative workers use exactly the same interface, so the extension point is proven by the code that ships with it.
 ---
+
+<div class="maintainer">
+  <a href="https://astrometers.eu"><img src="/astrometers.svg" alt="AstroMeters" width="72" height="72"></a>
+  <div>
+    <p class="maintainer-label">Maintained by</p>
+    <p class="maintainer-name"><a href="https://astrometers.eu">AstroMeters</a></p>
+    <p>caelum is developed by AstroMeters, who also build the
+    <a href="/hardware/amasc01.html">AMASC01</a> allsky camera it is tested on.
+    For hardware, custom development or support, see
+    <a href="https://astrometers.eu">astrometers.eu</a> or write to
+    <a href="mailto:info@astrometers.eu">info@astrometers.eu</a>.</p>
+  </div>
+</div>
