@@ -77,6 +77,7 @@ Options (pass after `bash -s --`):
 | `--wheel FILE\|URL` | install this wheel instead of the newest release |
 | `--manifest URL` | read releases from another manifest (self-hosted channel) |
 | `--user NAME` | service account name (default `caelum`) |
+| `--proxy` | serve the web UI on ports 80 and 443 through nginx (self-signed certificate for the host's name, not its address, which may change); caelum then listens on `127.0.0.1:8000` only. Replace `/etc/caelum/tls/caelum.{crt,key}` with a real certificate to drop the browser warning |
 | `--no-start` | install, but do not enable/start the service |
 
 Then open `http://<camera-ip>:8000/`, log in as `admin` with the password from

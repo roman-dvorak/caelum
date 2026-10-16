@@ -14,6 +14,9 @@
 #                       mock elsewhere); picamera2 also selects the apt
 #                       camera stack and the numpy pins that go with it
 #   --user NAME         service account (default: caelum)
+#   --proxy             serve the web UI on ports 80 and 443 through nginx, with a
+#                       self-signed certificate for this host's name; caelum
+#                       itself then listens on 127.0.0.1:8000 only
 #   --no-start          install everything but don't enable/start the service
 #
 # Re-running it with a newer wheel upgrades; config, accounts and data are
@@ -39,6 +42,7 @@ SVC_USER=caelum
 CAMERA=""
 WHEEL=""
 START=1
+PROXY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --camera) CAMERA="$2"; shift 2 ;;
     --user) SVC_USER="$2"; shift 2 ;;
     --no-start) START=0; shift ;;
+    --proxy) PROXY=1; shift ;;
     -h|--help) echo "see the comment at the top of install-system.sh"; exit 0 ;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 64 ;;
   esac
@@ -70,6 +75,15 @@ echo "==> System packages"
 PKGS=(python3 python3-venv redis-server curl unzip)
 # libcamera has no PyPI wheel — apt's picamera2 is the only way to get it.
 if [[ "$CAMERA" == picamera2 ]]; then PKGS+=(python3-picamera2); fi
+if [[ $PROXY -eq 1 ]]; then
+  # Checked before installing nginx, whose default site wants port 80 too.
+  if ss -ltnpH 'sport = :80 or sport = :443' | grep -qv nginx; then
+    echo "ports 80/443 are taken by something other than nginx — stop it first:" >&2
+    ss -ltnpH 'sport = :80 or sport = :443' >&2
+    exit 1
+  fi
+  PKGS+=(nginx openssl)
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq "${PKGS[@]}" >/dev/null
@@ -125,24 +139,27 @@ if [[ "$(readlink "$PREFIX/current" 2>/dev/null)" == "releases/$VERSION" && -x "
 else
   echo "==> Installing caelum $VERSION into $RELEASE"
   rm -rf "$RELEASE"
+  # Built as the service account, exactly like a web update does it: the
+  # release ends up owned by it, and pip fills the account's own cache
+  # (~/.cache/pip, its home being $DATA_DIR), so later web updates only
+  # download what changed.
+  install -d -o "$SVC_USER" -g "$SVC_USER" "$RELEASE"
+  install -m 0644 "$WHEEL" "$RELEASE/$(basename "$WHEEL")"
+  WHEEL="$RELEASE/$(basename "$WHEEL")"
   VENV_ARGS=()
   PIP_ARGS=()
   if [[ "$CAMERA" == picamera2 ]]; then
     # apt's picamera2 is built against the system numpy; the wheel carries
     # the matching pins (caelum/constraints-rpi.txt).
     VENV_ARGS+=(--system-site-packages)
-    install -d "$RELEASE"
     unzip -p "$WHEEL" caelum/constraints-rpi.txt > "$RELEASE/constraints.txt"
     PIP_ARGS+=(-c "$RELEASE/constraints.txt")
   fi
-  python3 -m venv "${VENV_ARGS[@]}" "$RELEASE/venv"
-  # The service account's own pip cache (its home is $DATA_DIR) — web
-  # updates run as that account and then only download what changed.
-  PIP_CACHE_DIR="$DATA_DIR/.cache/pip" "$RELEASE/venv/bin/pip" install -q --disable-pip-version-check \
-    "${PIP_ARGS[@]}" "$WHEEL"
-  chown -R "$SVC_USER:$SVC_USER" "$DATA_DIR/.cache"
-  "$RELEASE/venv/bin/python" -c "import caelum.main"
-  chown -R "$SVC_USER:$SVC_USER" "$RELEASE"
+  as_svc() { runuser -u "$SVC_USER" -- env HOME="$DATA_DIR" "$@"; }
+  as_svc python3 -m venv "${VENV_ARGS[@]}" "$RELEASE/venv"
+  as_svc "$RELEASE/venv/bin/pip" install -q --disable-pip-version-check "${PIP_ARGS[@]}" "$WHEEL"
+  as_svc "$RELEASE/venv/bin/python" -c "import caelum.main"
+  rm -f "$WHEEL"
 
   if [[ -L "$PREFIX/current" ]]; then
     ln -sfn "$(readlink "$PREFIX/current")" "$PREFIX/previous.tmp"
@@ -191,6 +208,61 @@ EOF
   chown "root:$SVC_USER" "$CONFIG_DIR/caelum.env"
 fi
 
+if [[ $PROXY -eq 1 ]]; then
+  echo "==> nginx on ports 80 and 443"
+  # Nothing but nginx should reach caelum once it is in front.
+  sed -i 's/^CAELUM_HTTP_HOST=.*/CAELUM_HTTP_HOST=127.0.0.1/' "$CONFIG_DIR/caelum.env"
+  PORT="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env")"
+  TLS_DIR="$CONFIG_DIR/tls"
+  if [[ ! -f "$TLS_DIR/caelum.crt" ]]; then
+    # A camera on a LAN has no public name a CA could vouch for: self-signed,
+    # for the host's name only — its address may change (DHCP), its name not.
+    # Replace the two files with a real certificate to lose the browser warning.
+    install -d -m 0750 "$TLS_DIR"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$(hostname)" \
+      -addext "subjectAltName=DNS:$(hostname),DNS:$(hostname).local,DNS:localhost" \
+      -keyout "$TLS_DIR/caelum.key" -out "$TLS_DIR/caelum.crt" 2>/dev/null
+    chmod 0600 "$TLS_DIR/caelum.key"
+  fi
+  rm -f /etc/nginx/sites-enabled/default
+  sed -e "s|@TLS_DIR@|$TLS_DIR|g" -e "s|@PORT@|${PORT:-8000}|g" > /etc/nginx/sites-available/caelum <<'NGINX'
+# Written by caelum's install-system.sh --proxy.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+
+    ssl_certificate     @TLS_DIR@/caelum.crt;
+    ssl_certificate_key @TLS_DIR@/caelum.key;
+
+    # Room for a software-update wheel uploaded from the browser.
+    client_max_body_size 128m;
+
+    location / {
+        proxy_pass http://127.0.0.1:@PORT@;
+        proxy_http_version 1.1;
+        # /ws/stream, /ws/logs, /ws/terminal, /ws/update
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+    }
+}
+NGINX
+  ln -sfn /etc/nginx/sites-available/caelum /etc/nginx/sites-enabled/caelum
+  nginx -t -q
+  if [[ $START -eq 1 ]]; then systemctl enable --now nginx && systemctl reload nginx; fi
+fi
+
 echo "==> systemd unit"
 sed -e "s|@PREFIX@|$PREFIX|g" -e "s|@USER@|$SVC_USER|g" \
     -e "s|@CONFIG_DIR@|$CONFIG_DIR|g" -e "s|@DATA_DIR@|$DATA_DIR|g" \
@@ -206,7 +278,11 @@ fi
 PORT="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env")"
 echo
 echo "caelum $VERSION installed (camera=$CAMERA)."
-echo "Open http://$(hostname -I 2>/dev/null | awk '{print $1}'):${PORT:-8000}/"
+if [[ $PROXY -eq 1 ]]; then
+  echo "Open http://$(hostname).local/ or https://$(hostname).local/ (self-signed certificate)"
+else
+  echo "Open http://$(hostname).local:${PORT:-8000}/"
+fi
 echo "First admin password (created on first start): $CONFIG_DIR/initial-admin-password.txt"
 echo "Logs: journalctl -u caelum -f"
 }
