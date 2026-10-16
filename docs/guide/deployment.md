@@ -261,8 +261,13 @@ capacity plan of its own.
 
 ## These docs
 
-The docs are a VitePress site in `web/apps/docs`, and they build to
-static HTML like everything else.
+The pages are Markdown in the repository's `docs/`; the VitePress tooling that
+builds them is `web/apps/docs`. They build to static HTML like everything else.
+
+The public copy at <https://caelum.astrometers.eu> is published to GitHub Pages
+by `.github/workflows/docs.yml` on every push to `master` that touches the
+docs. To self-host a copy instead — e.g. a LAN-only mirror, then pointed to by
+`docs.base_url` — build and rsync it:
 
 ```bash
 cd caelum/web
@@ -296,9 +301,9 @@ VitePress emits fully resolved static HTML per route, so no rewrite rule is
 needed — every documented URL is a real file on disk. It does generate its own
 `404.html`, which is what the `ErrorDocument` line points at.
 
-To serve the docs from a subpath rather than their own hostname, set `base` in
-the VitePress config to match (`'/docs/'`) and rebuild; the generated asset
-URLs are absolute and will 404 otherwise.
+To serve the docs from a subpath rather than their own hostname, build with
+`DOCS_BASE=/docs/` (leading and trailing slash); the generated asset URLs are
+absolute and will 404 otherwise.
 
 ## Operational checks
 
