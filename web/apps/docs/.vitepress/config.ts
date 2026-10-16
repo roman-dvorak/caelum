@@ -126,7 +126,11 @@ export default defineConfig({
 
     footer: {
       message:
-        'caelum is developed and maintained by <a href="https://astrometers.eu">AstroMeters</a>',
+        'caelum is developed and maintained by <a href="https://astrometers.eu">AstroMeters</a>' +
+        // Reopens the consent banner (theme/ConsentBanner.vue); hidden by CSS
+        // where analytics is off, i.e. anywhere but the public site. A button,
+        // not a link: VitePress' router would turn a hash link into navigation.
+        '<span class="cookie-settings"> · <button type="button">Cookie settings</button></span>',
       copyright: '© AstroMeters',
     },
   },

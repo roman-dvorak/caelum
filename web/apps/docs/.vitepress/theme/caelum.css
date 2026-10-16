@@ -98,3 +98,14 @@
 @media (max-width: 640px) {
   .maintainer { flex-direction: column; margin: 32px 16px 0; }
 }
+
+/* Footer "Cookie settings" link: only where there is analytics to consent to
+ * (set by theme/ConsentBanner.vue). */
+.cookie-settings { display: none; }
+.has-analytics .cookie-settings { display: inline; }
+.cookie-settings button {
+  font: inherit;
+  color: var(--vp-c-brand-1);
+  cursor: pointer;
+}
+.cookie-settings button:hover { text-decoration: underline; }

@@ -1,5 +1,7 @@
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
+import { h } from 'vue'
+import ConsentBanner from './ConsentBanner.vue'
 import './caelum.css'
 
 /**
@@ -8,6 +10,10 @@ import './caelum.css'
  * Deliberately not a custom theme: the docs need search, a sidebar, prev/next
  * links and a working mobile layout far more than they need bespoke layout
  * code, and the default theme is entirely driven by CSS variables — so
- * matching the app is a stylesheet, not a fork.
+ * matching the app is a stylesheet, not a fork. The one addition is the
+ * analytics consent banner (analytics.ts), in a layout slot.
  */
-export default DefaultTheme satisfies Theme
+export default {
+  extends: DefaultTheme,
+  Layout: () => h(DefaultTheme.Layout, null, { 'layout-bottom': () => h(ConsentBanner) }),
+} satisfies Theme
