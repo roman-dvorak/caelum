@@ -1,5 +1,8 @@
 ---
 layout: home
+title: caelum
+titleTemplate: ':title — open-source software for allsky cameras'
+description: 'caelum is open-source software for allsky cameras: closed-loop exposure driven by real sun and moon geometry, keograms, meteor detection, a web UI and a remote archive viewer. Maintained by AstroMeters.'
 
 hero:
   name: caelum

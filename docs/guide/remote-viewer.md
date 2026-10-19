@@ -1,3 +1,7 @@
+---
+description: 'The caelum remote viewer: a static, read-only website showing every camera in an archive, with keograms and frame galleries.'
+---
+
 # Remote viewer
 
 The remote viewer is the public face of a caelum camera network: a read-only

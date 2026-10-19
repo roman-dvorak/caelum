@@ -1,3 +1,7 @@
+---
+description: 'Uploading caelum frames to a permanent remote archive with rsync, SCP or S3, and the JSON manifests the remote viewer reads.'
+---
+
 # Upload and the remote archive
 
 The camera's local disk rotates. The remote host is the permanent archive, and

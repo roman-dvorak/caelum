@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
-import { defineConfig } from 'vitepress'
+import { defineConfig, type HeadConfig } from 'vitepress'
+import { DEVELOPER_NAME, DEVELOPER_URL, DOCS_URL } from '../../../packages/ui/src/brand.ts'
 
 // The pages are compiled to Vue components that import `vue`, but they sit in
 // the repository's docs/, outside the pnpm workspace, where Node's resolution
@@ -26,6 +27,20 @@ const vueDir = dirname(vitepressRequire.resolve('vue/package.json'))
  */
 const base = process.env.DOCS_BASE || '/'
 
+/** The public site — what search engines index. Sitemap, canonical and Open
+ * Graph URLs point here even from a mirror built with another DOCS_BASE, so a
+ * copy never competes with the original. */
+const siteUrl = DOCS_URL.replace(/\/$/, '')
+
+const ogImage = `${siteUrl}/og-image.jpg`
+
+/** `guide/index.md` → `/guide/`, `guide/web-ui.md` → `/guide/web-ui.html`
+ * (cleanUrls is off, see below). */
+function pageUrl(relativePath: string): string {
+  const path = relativePath.replace(/(^|\/)index\.md$/, '$1').replace(/\.md$/, '.html')
+  return `${siteUrl}/${path}`
+}
+
 export default defineConfig({
   title: 'caelum',
   description: 'Software stack for allsky and astronomical cameras',
@@ -49,7 +64,54 @@ export default defineConfig({
   head: [
     ['meta', { name: 'theme-color', content: '#e8a13a' }],
     ['link', { rel: 'icon', href: `${base}favicon.svg` }],
+    ['meta', { property: 'og:site_name', content: 'caelum' }],
+    ['meta', { property: 'og:image', content: ogImage }],
+    ['meta', { property: 'og:image:width', content: '1200' }],
+    ['meta', { property: 'og:image:height', content: '630' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:image', content: ogImage }],
+    ['meta', { name: 'author', content: DEVELOPER_NAME }],
   ],
+
+  // Written to dist/sitemap.xml with each page's git date as <lastmod>;
+  // docs/public/robots.txt points crawlers at it.
+  sitemap: { hostname: `${siteUrl}/` },
+
+  // Per page: canonical URL plus Open Graph / Twitter title, description and
+  // URL. Descriptions come from each page's `description` frontmatter.
+  transformHead({ pageData, title, description }) {
+    if (pageData.isNotFound) return [['meta', { name: 'robots', content: 'noindex' }]]
+    const url = pageUrl(pageData.relativePath)
+    const head: HeadConfig[] = [
+      ['link', { rel: 'canonical', href: url }],
+      ['meta', { property: 'og:type', content: pageData.frontmatter.layout === 'home' ? 'website' : 'article' }],
+      ['meta', { property: 'og:url', content: url }],
+      ['meta', { property: 'og:title', content: title }],
+      ['meta', { property: 'og:description', content: description }],
+      ['meta', { name: 'twitter:title', content: title }],
+      ['meta', { name: 'twitter:description', content: description }],
+    ]
+    if (pageData.relativePath === 'index.md') {
+      head.push([
+        'script',
+        { type: 'application/ld+json' },
+        JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'caelum',
+          description,
+          url: `${siteUrl}/`,
+          applicationCategory: 'ScientificApplication',
+          operatingSystem: 'Linux (Raspberry Pi OS)',
+          codeRepository: 'https://github.com/roman-dvorak/caelum',
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+          author: { '@type': 'Organization', name: DEVELOPER_NAME, url: DEVELOPER_URL },
+          maintainer: { '@type': 'Organization', name: DEVELOPER_NAME, url: DEVELOPER_URL },
+        }),
+      ])
+    }
+    return head
+  },
 
   themeConfig: {
     nav: [

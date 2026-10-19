@@ -1,3 +1,7 @@
+---
+description: 'Build your own allsky camera for caelum: recommended Raspberry Pi, camera module, lens, dome and dew heater, and the pitfalls to avoid.'
+---
+
 # DIY cameras
 
 caelum does not need AMASC01. Any Linux machine with a camera that one of the

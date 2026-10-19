@@ -1,3 +1,7 @@
+---
+description: 'AMASC01, the AstroMeters allsky camera: Sony IMX477, 180° fisheye, heated dome, PoE+. Components, example images and running caelum on it.'
+---
+
 # AMASC01
 
 **AMASC01** is the AstroMeters allsky camera — a weatherproof, single-cable

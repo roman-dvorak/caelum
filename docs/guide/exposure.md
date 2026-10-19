@@ -1,3 +1,7 @@
+---
+description: 'caelum exposure control: a closed feedback loop on exposure time and gain inside per-period envelopes, with the camera auto-exposure disabled.'
+---
+
 # Exposure control
 
 caelum drives exposure time and analogue gain itself, in a closed loop, once

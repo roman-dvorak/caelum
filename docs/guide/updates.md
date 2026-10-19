@@ -1,3 +1,7 @@
+---
+description: 'Updating caelum from the web UI: release manifests, offline wheel upload and automatic rollback after a bad release.'
+---
+
 # Updates
 
 An install made by the [installer](/guide/deployment#install) updates itself

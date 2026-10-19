@@ -1,3 +1,7 @@
+---
+description: 'caelum web UI authentication and access control: accounts, roles, sessions, preview access and the web terminal.'
+---
+
 # Authentication and access control
 
 caelum's local web UI can control the camera, rewrite the entire runtime

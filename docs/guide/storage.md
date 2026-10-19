@@ -1,3 +1,7 @@
+---
+description: 'caelum local storage and retention: what is kept at full resolution, thumbnails, overlays, and how old files are rotated out.'
+---
+
 # Local storage and retention
 
 Local disk is a rotating cache. The remote archive (see [Upload](/guide/upload))

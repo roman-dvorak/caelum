@@ -1,3 +1,7 @@
+---
+description: 'Cameras supported by caelum: the AstroMeters AMASC01 allsky camera, DIY builds, and the picamera2, OpenCV and mock backends.'
+---
+
 # Supported cameras
 
 caelum runs on a Linux computer with a camera attached. What it needs from the

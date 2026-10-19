@@ -1,3 +1,7 @@
+---
+description: 'Extending caelum with plugins and derivative workers: hooks, configuration, keograms, meteor detection and overlay elements.'
+---
+
 # Plugins and derivative workers
 
 caelum's extension point is one small class with four optional hooks. The

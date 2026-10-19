@@ -1,3 +1,7 @@
+---
+description: 'Introduction to caelum, an open-source capture stack for allsky cameras: what problem it solves and how its architecture fits together.'
+---
+
 # Introduction
 
 caelum is a from-scratch software stack for allsky and astronomical cameras. It

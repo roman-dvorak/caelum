@@ -1,4 +1,5 @@
 ---
+description: 'Install caelum on a Raspberry Pi with one command, log in, set the observing site and check the first frames — or run it from source with no hardware.'
 sidebar: false
 ---
 

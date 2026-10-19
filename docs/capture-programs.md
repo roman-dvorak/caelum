@@ -1,3 +1,7 @@
+---
+description: 'Capture programs: the small Python coroutine that decides what caelum captures in each slot, from single frames to HDR sets.'
+---
+
 # Capture programs
 
 What the camera captures each slot is decided by a **capture program**: a

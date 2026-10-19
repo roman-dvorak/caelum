@@ -1,3 +1,7 @@
+---
+description: 'caelum camera backends: picamera2 for Raspberry Pi camera modules, OpenCV/V4L2 for USB webcams and a mock backend for development.'
+---
+
 # Camera backends
 
 A camera backend is a small class with five methods — `open`, `close`,

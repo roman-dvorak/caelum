@@ -1,3 +1,7 @@
+---
+description: 'How caelum stores a capture set of several raw frames in one multi-frame DNG file.'
+---
+
 # Capture sets in DNG
 
 A capture program can return several frames that belong together — an HDR

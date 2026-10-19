@@ -1,3 +1,7 @@
+---
+description: 'Core caelum concepts: sky state from real sun and moon geometry, sky periods, and how exposure and storage policies key off them.'
+---
+
 # Concepts
 
 Almost every decision caelum makes is keyed off one small object: the sky

@@ -1,3 +1,7 @@
+---
+description: 'Deploying caelum: the one-line Raspberry Pi installer, systemd service, and the static archive and remote viewer on Apache.'
+---
+
 # Deployment
 
 A production caelum installation is three pieces on (usually) two machines:

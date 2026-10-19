@@ -1,3 +1,7 @@
+---
+description: 'The caelum web interface: dashboard, live stream, settings, plugins, recordings, files and terminal.'
+---
+
 # The web UI
 
 caelum ships two frontends, built from one pnpm workspace and sharing one
