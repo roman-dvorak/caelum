@@ -329,7 +329,8 @@ curl -s https://allsky.example.org/cameras.json | head
 
 Two failure modes are worth watching for specifically. Repeated `rsync failed`
 warnings with no successful `Running full upload reconciliation pass` mean
-nothing is being archived *and* nothing is being rotated, because retention
-refuses to delete files it cannot confirm were uploaded. And a
+nothing is being archived, and retention only frees space by deleting
+unarchived frames once the free-space floor is hit (`Free space below … never
+confirmed uploaded` in the log). And a
 `local-web=not built` line means the installed package carries no UI — a
 wheel built without `scripts/build-release.sh`.

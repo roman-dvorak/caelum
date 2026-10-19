@@ -122,7 +122,7 @@
     "max_consecutive_failures": 3
   },
   "retention": {
-    "max_age_days": 14,
+    "max_age_days": 2,
     "min_free_space_mb": 1024,
     "sweep_interval_s": 3600.0
   },

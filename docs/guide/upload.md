@@ -60,8 +60,9 @@ confirmed-upload watermark to now.
 
 Only the reconciliation pass moves that watermark. The incremental pass proves
 that today is covered; it says nothing about the week you were offline. Since
-[retention](/guide/storage) refuses to delete anything newer than the
-watermark, an incremental-only history would never free a byte.
+[retention](/guide/storage) only deletes files newer than the watermark when
+the free-space floor forces it, an incremental-only history would never free a
+byte by age.
 
 ## Why this is self-healing
 

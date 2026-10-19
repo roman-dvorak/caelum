@@ -177,7 +177,7 @@ every iteration, so changes apply without a restart.
 ```json
 {
   "retention": {
-    "max_age_days": 14,
+    "max_age_days": 2,
     "min_free_space_mb": 1024,
     "sweep_interval_s": 3600.0
   }
@@ -197,7 +197,8 @@ Each sweep:
 5. **Delete by space pressure.** While free space on the data directory's
    filesystem is below `min_free_space_mb`, pop the oldest remaining candidate
    and delete it. Free space is re-checked after each deletion, so the sweep
-   stops as soon as it has made enough room.
+   stops as soon as it has made enough room. If the uploaded candidates run out
+   first, the oldest not-yet-uploaded files follow (see below).
 
 The sweep logs a summary when it deletes anything:
 
@@ -224,18 +225,23 @@ directories are covered. Until a reconciliation has completed successfully at
 least once since startup, `uploaded_before` is `None` and the filter removes
 **every** candidate: nothing is deleted at all.
 
-The consequence is deliberate and worth stating plainly: a disk that is
-genuinely full while upload is lagging far behind will not free space until
-upload catches up. caelum will let the disk fill rather than delete the only
-copy of a frame. If that is not the trade you want, set `upload.enabled` to
-false — retention then runs on age and space alone, because the local copy is
-by definition the only copy that will ever exist, and that is your own
-configuration choice.
+That exemption applies to the age limit only. The free-space floor wins over
+it: if deleting every uploaded file still leaves less than
+`min_free_space_mb` free — upload lagging far behind, or a remote that is
+unreachable or refuses writes — the sweep goes on to delete the oldest
+not-yet-uploaded files until the floor is met, and logs
+
+```
+Free space below 4096 MB with upload not caught up: deleted 38 file(s) that were never confirmed uploaded
+```
+
+Losing the oldest frames that never reached the archive is a loss you can
+live with; a full root filesystem that stops capture, logging and SSH on a
+remote camera is not.
 
 ::: warning
 Running with `upload.enabled: true` against a remote that is permanently
-unreachable is the worst of both worlds — nothing gets archived and nothing
-gets rotated. Check the log for repeated `rsync failed` warnings, and watch
-whether `Running full upload reconciliation pass` is ever followed by a
-successful sweep.
+unreachable means nothing gets archived, and the camera keeps only as much
+history as fits above the free-space floor. Check the log for repeated
+`rsync failed` warnings and for the warning above.
 :::

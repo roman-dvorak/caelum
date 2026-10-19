@@ -4,10 +4,14 @@ Local disk is a rotating *cache*, not the archive — the remote storage
 server (see upload/) is the permanent copy. A file is only deleted once
 it's confirmed uploaded, *unless* upload is disabled entirely, in which case
 the local copy is the only copy that will ever exist and retention runs on
-age/space alone — the user's own configuration choice. This means a local
-disk that's genuinely full with upload lagging far behind will not free
-space until upload catches up; that tradeoff (data safety over guaranteed
-free space) is deliberate, not an oversight.
+age/space alone — the user's own configuration choice.
+
+The free-space floor is the one exception: if deleting every uploaded file
+still leaves the disk below `min_free_space_mb` (upload lagging far behind,
+or a remote that is unreachable or refuses writes), the oldest not-yet-
+uploaded files go too, with a warning. Losing the oldest unarchived frames
+is recoverable; a full root filesystem that stops capture, logging and SSH
+is not.
 """
 
 from __future__ import annotations
@@ -33,6 +37,9 @@ logger = logging.getLogger(__name__)
 class RetentionResult:
     deleted_files: int
     freed_bytes: int
+    #: Of `deleted_files`, how many were deleted before being confirmed
+    #: uploaded — only ever non-zero when the free-space floor forced it.
+    deleted_not_uploaded: int = 0
 
 
 def _candidates(data_dir: Path) -> list[tuple[datetime, Path, int]]:
@@ -74,9 +81,13 @@ def sweep(
     data_dir.mkdir(parents=True, exist_ok=True)
 
     candidates = _candidates(data_dir)
+    not_uploaded: list[tuple[datetime, Path, int]] = []
     if upload_cfg.enabled:
-        candidates = [c for c in candidates if uploaded_before is not None and c[0] < uploaded_before]
+        uploaded = [c for c in candidates if uploaded_before is not None and c[0] < uploaded_before]
+        not_uploaded = [c for c in candidates if not (uploaded_before is not None and c[0] < uploaded_before)]
+        candidates = uploaded
     candidates.sort(key=lambda c: c[0])  # oldest first
+    not_uploaded.sort(key=lambda c: c[0])
 
     deleted = 0
     freed = 0
@@ -96,7 +107,14 @@ def sweep(
         freed += _delete(path)
         deleted += 1
 
-    return RetentionResult(deleted_files=deleted, freed_bytes=freed)
+    deleted_not_uploaded = 0
+    while not_uploaded and _free_space_mb(data_dir) < retention_cfg.min_free_space_mb:
+        _when, path, _size = not_uploaded.pop(0)
+        freed += _delete(path)
+        deleted += 1
+        deleted_not_uploaded += 1
+
+    return RetentionResult(deleted_files=deleted, freed_bytes=freed, deleted_not_uploaded=deleted_not_uploaded)
 
 
 def sweep_timelapses(data_dir: Path, retention_days: int, now: datetime | None = None) -> RetentionResult:
@@ -151,6 +169,13 @@ class RetentionSweeper:
                 "Retention sweep deleted %d file(s), freed %.1f MB",
                 result.deleted_files,
                 result.freed_bytes / (1024 * 1024),
+            )
+        if result.deleted_not_uploaded:
+            logger.warning(
+                "Free space below %d MB with upload not caught up: deleted %d file(s) "
+                "that were never confirmed uploaded",
+                cfg.retention.min_free_space_mb,
+                result.deleted_not_uploaded,
             )
 
         timelapse_cfg = cfg.plugins.get("timelapse")

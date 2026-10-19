@@ -108,6 +108,61 @@ def test_free_space_floor_deletes_oldest_first_until_satisfied(tmp_path):
     assert result.deleted_files == 2
 
 
+def test_free_space_floor_deletes_not_yet_uploaded_files_after_uploaded_ones(tmp_path):
+    # Upload stuck (remote unreachable / refusing writes): once every uploaded
+    # file is gone the floor still wins, oldest unarchived first, so the disk
+    # never fills up.
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    uploaded = tmp_path / "raw" / "2026" / "01" / "01" / "20260101-120000.dng"
+    pending_old = tmp_path / "raw" / "2026" / "01" / "06" / "20260106-120000.dng"
+    pending_new = tmp_path / "raw" / "2026" / "01" / "09" / "20260109-120000.dng"
+    for p in (uploaded, pending_old, pending_new):
+        _touch(p)
+
+    cfg = RetentionConfig(max_age_days=3650, min_free_space_mb=100)
+
+    class _FakeUsage:
+        def __init__(self, free_mb: float) -> None:
+            self.free = free_mb * 1024 * 1024
+
+    free_space_mb_sequence = iter([0, 0, 200])  # satisfied after the 3rd check
+
+    def fake_disk_usage(_path):
+        return _FakeUsage(next(free_space_mb_sequence, 200))
+
+    with patch("caelum.storage.retention.shutil.disk_usage", side_effect=fake_disk_usage):
+        result = retention.sweep(
+            tmp_path,
+            cfg,
+            UploadConfig(enabled=True),
+            uploaded_before=datetime(2026, 1, 5, tzinfo=UTC),
+            now=now,
+        )
+
+    assert not uploaded.exists()
+    assert not pending_old.exists()
+    assert pending_new.exists()
+    assert result.deleted_files == 2
+    assert result.deleted_not_uploaded == 1
+
+
+def test_free_space_floor_applies_before_first_reconciliation(tmp_path):
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    pending = tmp_path / "raw" / "2026" / "01" / "09" / "20260109-120000.dng"
+    _touch(pending)
+
+    cfg = RetentionConfig(max_age_days=3650, min_free_space_mb=100)
+
+    class _FakeUsage:
+        free = 0
+
+    with patch("caelum.storage.retention.shutil.disk_usage", return_value=_FakeUsage()):
+        result = retention.sweep(tmp_path, cfg, UploadConfig(enabled=True), uploaded_before=None, now=now)
+
+    assert not pending.exists()
+    assert result.deleted_not_uploaded == 1
+
+
 def test_sweep_timelapses_deletes_only_files_older_than_cutoff(tmp_path):
     now = datetime(2026, 1, 10, tzinfo=UTC)
     old = tmp_path / "timelapses" / "2026" / "01" / "01" / "20260101-060000_day_clean.mp4"

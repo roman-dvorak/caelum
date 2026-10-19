@@ -274,7 +274,7 @@ class CaptureProgramConfig(StrictModel):
 class RetentionConfig(StrictModel):
     """Local-disk rotation only — the remote upload target is never rotated."""
 
-    max_age_days: int = 14
+    max_age_days: int = 2
     min_free_space_mb: int = 1024
     sweep_interval_s: float = 3600.0
 
