@@ -54,7 +54,7 @@ so until it is right the camera exposes for someone else's sky. See
 
 The dashboard shows the live frame, the current sky period and the exposure
 the control loop has chosen; [Web interface](/guide/web-ui) walks through the
-rest. To publish images to a web host and the [remote viewer](/guide/remote-viewer),
+rest. To publish images to a web host and the [web viewer](/viewer),
 set up [Upload & archive](/guide/upload).
 
 Later releases install from the web UI with automatic rollback — see

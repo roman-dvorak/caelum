@@ -1,17 +1,20 @@
 ---
-description: 'The caelum remote viewer: a static, read-only website showing every camera in an archive, with keograms and frame galleries.'
+sidebar: false
+description: 'The caelum web viewer: a static, read-only website showing every camera in an archive, with keograms and frame galleries.'
 ---
 
-# Remote viewer
+# Web viewer
 
-The remote viewer is the public face of a caelum camera network: a read-only
+The web viewer (`remote-web`) is the public face of a caelum camera network: a read-only
 website that shows every camera publishing to one archive — the latest image
 from each, and for every camera a browsable history of nights with keograms
 and frame galleries.
 
+::: tip Live
 AstroMeters runs one at **[viewer.caelum.astrometers.eu](https://viewer.caelum.astrometers.eu/)**.
+:::
 
-![The remote viewer's camera list](/images/screenshots/viewer-cameras.webp)
+![The web viewer's camera list](/images/screenshots/viewer-cameras.webp)
 
 ## What it shows
 
@@ -24,7 +27,7 @@ AstroMeters runs one at **[viewer.caelum.astrometers.eu](https://viewer.caelum.a
 - **Overlays** — the overlay each camera rendered is stacked over its frames,
   exactly as in the camera's own web UI, and can be toggled off.
 
-![A camera in the remote viewer: dates, keogram and gallery](/images/screenshots/viewer-camera.webp)
+![A camera in the web viewer: dates, keogram and gallery](/images/screenshots/viewer-camera.webp)
 
 *Screenshots show the `mock` backend's synthetic frames, captured in daylight — hence no keogram yet.*
 

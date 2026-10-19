@@ -123,6 +123,7 @@ export default defineConfig({
         activeMatch: '^/(guide/|capture-programs|dng-capture-sets)',
       },
       { text: 'Cameras', link: '/cameras/', activeMatch: '^/cameras/' },
+      { text: 'Web viewer', link: '/viewer' },
       // The maintainer, as a top-level link rather than buried in the footer.
       { text: 'AstroMeters', link: 'https://astrometers.eu' },
     ],
@@ -167,7 +168,6 @@ export default defineConfig({
           text: 'Operating',
           items: [
             { text: 'Web interface', link: '/guide/web-ui' },
-            { text: 'Remote viewer', link: '/guide/remote-viewer' },
             { text: 'Access & security', link: '/guide/security' },
             { text: 'Deployment', link: '/guide/deployment' },
             { text: 'Updates', link: '/guide/updates' },

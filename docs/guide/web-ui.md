@@ -151,5 +151,5 @@ Apache document root next to the data tree the uploader rsyncs there.
 
 It has no write path, no API client and no session. Everything it can show is
 everything the archive already serves publicly. See
-[Remote viewer](/guide/remote-viewer) for what it shows and how cameras get
+[Web viewer](/viewer) for what it shows and how cameras get
 into it, and [Deployment](/guide/deployment) for putting it on a host.

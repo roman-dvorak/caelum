@@ -150,3 +150,16 @@
   border: 1px solid var(--vp-c-divider);
   border-radius: 2px;
 }
+
+/* Six top-bar entries plus search don't fit between the 768px breakpoint
+ * (where VitePress shows the menu) and a laptop width: tighten them there. */
+@media (min-width: 768px) and (max-width: 1099px) {
+  .VPNavBarMenuLink { padding: 0 7px; font-size: 13px; }
+  .VPNavBar .VPNavBarSearch { padding-left: 12px; }
+  .VPNavBar .DocSearch-Button-Placeholder,
+  .VPNavBar .DocSearch-Button-Keys { display: none; }
+}
+/* Narrowest of those: drop "Home" — the "caelum" title links home too. */
+@media (min-width: 768px) and (max-width: 899px) {
+  .VPNavBarMenu > .VPNavBarMenuLink:first-of-type { display: none; }
+}
