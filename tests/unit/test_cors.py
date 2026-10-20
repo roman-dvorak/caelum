@@ -19,3 +19,10 @@ def test_unknown_origin_is_not_allowed():
         headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"},
     )
     assert "access-control-allow-origin" not in res.headers
+
+
+def test_default_origins_include_the_viewer_domain(monkeypatch):
+    from caelum.settings import load_settings
+
+    monkeypatch.delenv("CAELUM_CORS_ORIGINS", raising=False)
+    assert "https://viewer.caelum.astrometers.eu" in load_settings().cors_origins

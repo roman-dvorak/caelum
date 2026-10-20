@@ -24,6 +24,11 @@ _PACKAGED_WEB_DIR = Path(__file__).resolve().parent / "webui"
 _DEV_WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "apps" / "local-web" / "dist"
 
 
+#: Where caelum-viewer is served from. GitHub Pages redirects the github.io
+#: address to the custom domain, so that is the origin browsers actually send.
+DEFAULT_CORS_ORIGINS = "https://viewer.caelum.astrometers.eu,https://roman-dvorak.github.io"
+
+
 def _default_web_dir() -> Path:
     if (_PACKAGED_WEB_DIR / "index.html").is_file():
         return _PACKAGED_WEB_DIR
@@ -47,8 +52,9 @@ class Settings:
     # directory that doesn't exist, means API-only.
     web_dir: Path | None = None
     #: Extra browser origins allowed to call the API cross-site — e.g. the
-    #: static caelum-viewer on GitHub Pages reading frames straight off the
-    #: camera. Comma-separated in CAELUM_CORS_ORIGINS.
+    #: static caelum-viewer reading frames straight off the camera. Comma-
+    #: separated in CAELUM_CORS_ORIGINS; the default is the viewer's own
+    #: domain plus its GitHub Pages address.
     cors_origins: tuple[str, ...] = ()
     #: User capture programs (CAELUM_CAPTURE_PROGRAMS_DIR); None means
     #: `<data_dir>/capture-programs`.
@@ -85,7 +91,7 @@ def load_settings() -> Settings:
         ),
         cors_origins=tuple(
             o.strip().rstrip("/")
-            for o in os.environ.get("CAELUM_CORS_ORIGINS", "https://roman-dvorak.github.io").split(",")
+            for o in os.environ.get("CAELUM_CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
             if o.strip()
         ),
     )

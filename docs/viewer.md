@@ -5,12 +5,15 @@ description: 'Caelum Viewer: a static web app for browsing allsky camera data �
 
 # Web viewer
 
-**Caelum Viewer** is the remote web viewer for caelum: it shows the data
-cameras have uploaded to a storage server. Pick a camera and a day,
-scrub through the night on a timeline, play it as a
-time-lapse, inspect any frame's metadata and download its RAW file. It has no
-backend of its own — it runs as static files and reads the data straight from
-where the cameras put it.
+**Caelum Viewer** is the web viewer for caelum cameras. Pick a camera and a
+day, scrub through the night on a timeline, play it as a time-lapse, inspect
+any frame's metadata and download its RAW file. It has no backend of its own —
+it runs as static files and reads the data from one of two places:
+
+- **a storage server** — the archive the cameras [upload](/guide/upload) to
+  (S3 or a web server), for public, long-term access to many cameras;
+- **the camera itself** — straight from its API on your network, with no
+  archive at all. See [Straight from a camera](#straight-from-a-camera).
 
 ::: tip Open it
 **[viewer.caelum.astrometers.eu](https://viewer.caelum.astrometers.eu/)** —
@@ -43,7 +46,7 @@ source code: [roman-dvorak/caelum-viewer](https://github.com/roman-dvorak/caelum
 Keyboard: `←`/`→` (with Shift, by 10), `Home`/`End`, `Space` plays,
 `F` fullscreen, `+`/`−`/`0` zoom, `L` live, `O` overlay.
 
-## Where it reads data from
+## From a storage server
 
 The viewer works with anything that can list a directory and serve files, and
 it expects caelum's on-disk layout (`thumbnails/YYYY/MM/DD/…webp` + `.json`,
@@ -54,7 +57,7 @@ it expects caelum's on-disk layout (`thumbnails/YYYY/MM/DD/…webp` + `.json`,
 | S3 bucket | `s3` | publicly readable bucket; caelum's [S3 upload](/guide/upload) writes exactly this |
 | Web server directory listing | `http-index` | nginx (`autoindex_format json`), Caddy, or Apache's HTML listing |
 | Archive without listings | `caelum-manifest` | reads the `manifest.json` / `index.json` caelum's uploader writes; no RAW |
-| A camera on your LAN | `caelum` | straight from the camera's API — see below |
+| A camera on your network | `caelum` | straight from the camera's API — [see below](#straight-from-a-camera) |
 
 A single source goes in the URL:
 
@@ -82,14 +85,30 @@ readable — no keys ever go into the URL or the catalogue. Examples for S3,
 nginx and Apache are in the README.
 :::
 
-### Straight from a camera
+## Straight from a camera
 
-`?type=caelum&source=192.168.1.50` reads frames from a camera's own API on your
-LAN, with no archive at all. The camera has to allow the viewer's origin
-(`CAELUM_CORS_ORIGINS` in its environment) and have
-`auth.preview_access: "public"`, because a page from another domain never gets
-the camera's login cookie. Chrome and Edge allow an https page to reach a LAN
-address after a one-time prompt; Firefox and Safari block it as mixed content.
+Give the viewer the camera's address — an IP, `host:port` or a hostname:
+
+```
+https://viewer.caelum.astrometers.eu/?type=caelum&source=192.168.1.50
+```
+
+It then reads the frames, metadata and RAW files from the camera's own API
+(port 8000 by default), including everything not uploaded anywhere. Two things
+must hold on the camera:
+
+- **`auth.preview_access: "public"`** in its config — a page from another
+  domain never gets the camera's login cookie, so the frames must be readable
+  without logging in. See [`preview_access`](/guide/security#preview-access).
+- **The viewer's origin is allowed.** caelum allows
+  `https://viewer.caelum.astrometers.eu` by default; to allow another, set
+  `CAELUM_CORS_ORIGINS` (comma-separated) in the camera's environment.
+
+The viewer is served over https and the camera over plain http. Chrome and
+Edge allow that for LAN addresses (10.x, 192.168.x, 172.16–31.x, `*.local`)
+after a one-time "access devices on your local network" prompt; Firefox and
+Safari block it as mixed content — there the camera needs https, e.g. behind a
+reverse proxy.
 
 ## Publishing a camera
 
