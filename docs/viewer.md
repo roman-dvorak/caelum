@@ -5,8 +5,9 @@ description: 'Caelum Viewer: a static web app for browsing allsky camera data �
 
 # Web viewer
 
-**Caelum Viewer** is a web app for browsing what caelum cameras have captured:
-pick a camera and a day, scrub through the night on a timeline, play it as a
+**Caelum Viewer** is the remote web viewer for caelum: it shows the data
+cameras have uploaded to a storage server. Pick a camera and a day,
+scrub through the night on a timeline, play it as a
 time-lapse, inspect any frame's metadata and download its RAW file. It has no
 backend of its own — it runs as static files and reads the data straight from
 where the cameras put it.
@@ -102,19 +103,3 @@ Each camera's `location` ends up in its public metadata. If the site is
 somebody's garden, set `location` to a rounded coordinate — the sky-state
 calculation does not need metre precision.
 :::
-
-## The bundled gallery: `remote-web`
-
-caelum itself also ships a much simpler read-only gallery, `web/apps/remote-web`:
-a camera list, observation dates, the day's keogram and thumbnails. It needs no
-CORS and no directory listings — it is dropped into the same directory the
-uploader rsyncs to and reads the uploader's `cameras.json` and manifests.
-
-```bash
-cd web
-pnpm --filter remote-web build
-rsync -az apps/remote-web/dist/ archive.example.org:/var/www/allsky-data/
-```
-
-No `--delete`: the cameras' data lives in the same tree. The Apache vhost and
-the upload user are in [Deployment](/guide/deployment#the-archive-and-remote-viewer).
