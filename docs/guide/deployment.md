@@ -36,7 +36,14 @@ creates a `caelum` system user, and lays the install out as:
 The release wheel carries the backend *and* the built local web UI, so there is
 nothing else to deploy. Options: `--camera picamera2|opencv|mock` (seeds a new
 `config.json`; default `picamera2` on a Pi), `--wheel FILE|URL`,
-`--manifest URL`, `--no-start`.
+`--manifest URL`, `--proxy`, `--no-start`.
+
+`--proxy` puts nginx in front on ports 80 and 443, with a self-signed
+certificate for the host's name (`/etc/caelum/tls/caelum.crt` and `.key` —
+replace them with a real certificate to lose the browser warning), and binds
+caelum itself to `127.0.0.1:8000` only. The UI is then at `https://<host>/`.
+This is what the [web viewer](/viewer#straight-from-a-camera) needs to read a
+camera directly from every browser.
 
 On a Pi the release venv is created with `--system-site-packages`, so it sees
 apt's picamera2/libcamera (which have no PyPI wheels), and pip installs with

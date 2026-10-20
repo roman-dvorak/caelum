@@ -25,8 +25,14 @@ curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/insta
 It installs Redis and libcamera's `picamera2` from apt, creates a `caelum`
 system user, installs the release (backend plus the built web UI) under
 `/opt/caelum` and starts it as a systemd service. The camera backend defaults
-to `picamera2` on a Pi; pass `--camera opencv` for a USB webcam. Details and
-options: [Deployment](/guide/deployment).
+to `picamera2` on a Pi; pass `--camera opencv` for a USB webcam. To serve the
+UI over https on port 443 through nginx, add `--proxy`:
+
+```bash
+curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/install.sh | sudo bash -s -- --proxy
+```
+
+Details and options: [Deployment](/guide/deployment#install).
 
 ### 2. Log in
 
@@ -36,7 +42,8 @@ On first start caelum creates an `admin` account with a random password:
 sudo cat /etc/caelum/initial-admin-password.txt
 ```
 
-Open `http://<pi-address>:8000/`, log in as `admin`, change the password and
+Open `http://<pi-address>:8000/` — or `https://<pi-address>/` with
+`--proxy` — log in as `admin`, change the password and
 delete the file. Roles and the `auth` settings: [Access & security](/guide/security).
 
 ![The caelum dashboard](/images/screenshots/dashboard.webp)

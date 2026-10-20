@@ -87,15 +87,16 @@ nginx and Apache are in the README.
 
 ## Straight from a camera
 
-Give the viewer the camera's address — an IP, `host:port` or a hostname:
+Give the viewer the camera's address. A camera installed with
+[`--proxy`](/guide/deployment#install) serves caelum over https on port 443,
+so pass its full URL:
 
 ```
-https://viewer.caelum.astrometers.eu/?type=caelum&source=192.168.1.50
+https://viewer.caelum.astrometers.eu/?type=caelum&source=https://allsky.local
 ```
 
-It then reads the frames, metadata and RAW files from the camera's own API
-(port 8000 by default), including everything not uploaded anywhere. Two things
-must hold on the camera:
+The viewer then reads the frames, metadata and RAW files from the camera's own
+API, including everything that was never uploaded anywhere. On the camera:
 
 - **`auth.preview_access: "public"`** in its config — a page from another
   domain never gets the camera's login cookie, so the frames must be readable
@@ -104,11 +105,18 @@ must hold on the camera:
   `https://viewer.caelum.astrometers.eu` by default; to allow another, set
   `CAELUM_CORS_ORIGINS` (comma-separated) in the camera's environment.
 
-The viewer is served over https and the camera over plain http. Chrome and
-Edge allow that for LAN addresses (10.x, 192.168.x, 172.16–31.x, `*.local`)
-after a one-time "access devices on your local network" prompt; Firefox and
-Safari block it as mixed content — there the camera needs https, e.g. behind a
-reverse proxy.
+::: warning Self-signed certificate
+The installer gives the camera a self-signed certificate, which the browser
+silently refuses for the viewer's background requests. Open the camera's own
+address (`https://allsky.local/`) in the same browser once and accept the
+certificate; from then on the viewer can reach it. A real certificate in
+`/etc/caelum/tls/` removes the step.
+:::
+
+A camera without `--proxy` answers plain http on port 8000
+(`source=192.168.1.50` means `http://192.168.1.50:8000`). Chrome and Edge allow
+that from the https viewer for LAN addresses after a one-time "access devices
+on your local network" prompt; Firefox and Safari block it as mixed content.
 
 ## Publishing a camera
 
