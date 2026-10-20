@@ -151,5 +151,5 @@ Apache document root next to the data tree the uploader rsyncs there.
 
 It has no write path, no API client and no session. Everything it can show is
 everything the archive already serves publicly. See
-[Web viewer](/viewer) for what it shows and how cameras get
-into it, and [Deployment](/guide/deployment) for putting it on a host.
+[Web viewer](/viewer) for it and for Caelum Viewer, the full-featured
+viewer, and [Deployment](/guide/deployment) for putting it on a host.
