@@ -163,3 +163,31 @@
 @media (min-width: 768px) and (max-width: 899px) {
   .VPNavBarMenu > .VPNavBarMenuLink:first-of-type { display: none; }
 }
+
+/* "Open Caelum Viewer" call to action on the Web viewer page. */
+.vp-doc .open-viewer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin: 24px 0;
+}
+.vp-doc .open-viewer-btn {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: 2px;
+  background: var(--vp-button-brand-bg);
+  color: var(--vp-button-brand-text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.25s;
+}
+.vp-doc .open-viewer-btn:hover {
+  background: var(--vp-button-brand-hover-bg);
+  color: var(--vp-button-brand-hover-text);
+}
+.vp-doc .open-viewer span {
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
+  color: var(--vp-c-text-3);
+}

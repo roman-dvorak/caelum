@@ -15,10 +15,10 @@ it runs as static files and reads the data from one of two places:
 - **the camera itself** — straight from its API on your network, with no
   archive at all. See [Straight from a camera](#straight-from-a-camera).
 
-::: tip Open it
-**[viewer.caelum.astrometers.eu](https://viewer.caelum.astrometers.eu/)** —
-source code: [roman-dvorak/caelum-viewer](https://github.com/roman-dvorak/caelum-viewer)
-:::
+<p class="open-viewer">
+  <a class="open-viewer-btn" href="https://viewer.caelum.astrometers.eu/" target="_blank" rel="noopener">Open Caelum Viewer →</a>
+  <span>viewer.caelum.astrometers.eu</span>
+</p>
 
 ![Caelum Viewer showing a night frame, the day's timeline and the frame's metadata](/images/screenshots/caelum-viewer.webp)
 
@@ -75,15 +75,38 @@ https://viewer.caelum.astrometers.eu/?catalog=https://example.org/cameras.json
 ```
 
 Further parameters: `camera=`, `date=YYYY-MM-DD`, `time=HH:MM[:SS]` (UTC),
-`live=1`. The full reference, including custom file layouts, is in the
-viewer's [README](https://github.com/roman-dvorak/caelum-viewer#readme).
+`live=1`.
 
 ::: warning CORS and public data
 The data is on a different domain than the viewer, so the server has to send
 CORS headers allowing the viewer's origin, and the data has to be publicly
-readable — no keys ever go into the URL or the catalogue. Examples for S3,
-nginx and Apache are in the README.
+readable — no keys ever go into the URL or the catalogue.
 :::
+
+S3 — the bucket must also allow anonymous `s3:ListBucket` and `s3:GetObject`:
+
+```json
+{ "CORSRules": [{ "AllowedOrigins": ["https://viewer.caelum.astrometers.eu"], "AllowedMethods": ["GET", "HEAD"], "AllowedHeaders": ["*"], "MaxAgeSeconds": 3600 }] }
+```
+
+nginx:
+
+```nginx
+location /allsky/ {
+    autoindex on;
+    autoindex_format json;
+    add_header Access-Control-Allow-Origin "https://viewer.caelum.astrometers.eu" always;
+}
+```
+
+Apache:
+
+```apache
+<Directory /var/www/allsky>
+    Options +Indexes
+    Header set Access-Control-Allow-Origin "https://viewer.caelum.astrometers.eu"
+</Directory>
+```
 
 ## Straight from a camera
 
