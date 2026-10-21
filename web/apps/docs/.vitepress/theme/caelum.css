@@ -1,12 +1,15 @@
-/* Maps VitePress' theme variables onto the caelum palette, so the docs and
- * the two web apps read as one product. The values are copied from
- * packages/ui/src/theme.css — that file is the source of truth; VitePress
- * cannot import it, because Tailwind's `@theme` block is not plain CSS.
+/* Maps VitePress' theme variables onto the caelum palette. The light values
+ * are copied from packages/ui/src/theme.css — that file is the source of
+ * truth; VitePress cannot import it, because Tailwind's `@theme` block is not
+ * plain CSS.
  *
- * VitePress toggles dark mode with a `.dark` class on <html>, whereas the
- * apps use `data-theme` — different mechanism, same two palettes. */
+ * Dark mode deliberately keeps VitePress' own neutral surfaces and text (the
+ * apps' near-black palette is too harsh for long reading) and only swaps in
+ * the caelum amber. The light block is scoped to `html:not(.dark)` for that
+ * reason: on plain `:root` it would beat VitePress' `.dark` rules, which have
+ * the same specificity but load earlier. */
 
-:root {
+html:not(.dark) {
   --vp-c-brand-1: #a9690f;
   --vp-c-brand-2: #855009;
   --vp-c-brand-3: #a9690f;
@@ -36,20 +39,6 @@
   --vp-c-brand-2: #ffc266;
   --vp-c-brand-3: #e8a13a;
   --vp-c-brand-soft: rgba(232, 161, 58, 0.16);
-
-  --vp-c-bg: #0b0a08;
-  --vp-c-bg-alt: #110f0c;
-  --vp-c-bg-soft: #16130f;
-  --vp-c-bg-elv: #16130f;
-
-  --vp-c-text-1: #f3ede1;
-  --vp-c-text-2: #ab9d89;
-  --vp-c-text-3: #6e6353;
-
-  --vp-c-divider: #2f2a20;
-  --vp-c-border: #2f2a20;
-  --vp-c-gutter: #211d17;
-
   --vp-home-hero-name-background: linear-gradient(120deg, #e8a13a, #6bb3c4);
 }
 
