@@ -82,6 +82,33 @@ def wheel_version(wheel: Path) -> str:
     return match["version"]
 
 
+#: On top of a copy of the running release: pip's build and unpack temp files.
+_INSTALL_MARGIN_MB = 200
+
+
+def _tree_size(path: Path) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.lstat(os.path.join(root, name)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def required_space_mb(layout: ReleaseLayout) -> int:
+    """Rough disk space a new release needs: its venv holds about what the
+    running one does (pip installs every dependency afresh — OpenCV,
+    astropy, ... — only apt's packages are shared), plus pip's temp files."""
+    current = layout.current.resolve()
+    return int(_tree_size(current) / (1024 * 1024)) + _INSTALL_MARGIN_MB
+
+
+def free_space_mb(path: Path) -> float:
+    return shutil.disk_usage(path).free / (1024 * 1024)
+
+
 def _read_pyvenv_cfg(venv: Path) -> dict[str, str]:
     cfg = {}
     for line in (venv / "pyvenv.cfg").read_text().splitlines():
@@ -130,7 +157,9 @@ def install_release(layout: ReleaseLayout, wheel: Path, log: Callable[[str], Non
         _run([*venv_cmd, str(target / "venv")], log)
 
         pip_cmd = [str(target / "venv" / "bin" / "pip"), "install", "--disable-pip-version-check", "--no-input"]
-        pip_cmd += ["--progress-bar", "off"]
+        # No cache: it would only keep a second copy of every wheel on a disk
+        # the release itself has to fit on.
+        pip_cmd += ["--progress-bar", "off", "--no-cache-dir"]
         if system_site:
             constraints = target / "constraints.txt"
             with zipfile.ZipFile(wheel) as zf:

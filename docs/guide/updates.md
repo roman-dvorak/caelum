@@ -26,6 +26,18 @@ from the web UI: **System → Software update**. Admin only.
 If anything before the switch fails — download, checksum, pip, smoke test —
 the running release is never touched; the page shows the error.
 
+## Disk space
+
+A new release needs about as much disk as the running one (every Python
+dependency is installed afresh) plus a couple hundred MB for pip — typically
+a few hundred MB. Before downloading anything the update checks for that much
+free space. If it is short, retention deletes frames that are **already
+uploaded** ahead of their age limit, keeping the usual
+`retention.min_free_space_mb` free on top; frames not yet uploaded are never
+deleted for an update. If that is still not enough, the update stops with
+"Not enough disk space" and nothing is changed — free some space (files
+outside caelum's data directory are not caelum's to delete) and try again.
+
 ## Automatic rollback
 
 If the new release does not stay up, systemd keeps restarting it, and the boot

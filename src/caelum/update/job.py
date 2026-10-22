@@ -37,9 +37,17 @@ class UpdateBusyError(Exception):
 
 
 class Updater:
-    def __init__(self, layout: ReleaseLayout, request_restart: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        layout: ReleaseLayout,
+        request_restart: Callable[[], None],
+        make_room: Callable[[Path, float], None] | None = None,
+    ) -> None:
+        """`make_room(path, mb)`: try to get `mb` MB free on `path`'s
+        filesystem (retention deleting already-uploaded frames early)."""
         self.layout = layout
         self._request_restart = request_restart
+        self._make_room = make_room
         self._lock = threading.Lock()
         self.state: JobState = "idle"
         self.target: str | None = None
@@ -105,8 +113,24 @@ class Updater:
         logger.info("Downloaded %s (%.1f MB)", wheel.name, size / 1e6)
         return wheel
 
+    def _ensure_space(self) -> None:
+        """Fail before touching anything rather than with pip's ENOSPC
+        halfway through the install."""
+        needed = releases.required_space_mb(self.layout)
+        free = releases.free_space_mb(self.layout.root)
+        if free < needed and self._make_room is not None:
+            logger.info("%.0f MB free, the install needs about %d MB — making room", free, needed)
+            self._make_room(self.layout.root, needed)
+            free = releases.free_space_mb(self.layout.root)
+        if free < needed:
+            raise UpdateError(
+                f"Not enough disk space: {free:.0f} MB free, the install needs about {needed} MB. "
+                "Free some space and try again."
+            )
+
     def _run(self, release: manifest.Release | None, wheel: Path | None) -> None:
         try:
+            self._ensure_space()
             if release is not None:
                 wheel = self._download(release)
             assert wheel is not None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -241,3 +242,39 @@ def test_retention_sweeper_run_sweep_skips_timelapse_sweep_when_plugin_unconfigu
     sweeper._run_sweep()  # must not raise even with no "timelapse" plugin entry
 
     assert not old_thumb.exists()
+
+
+def test_stale_temp_files_of_unfinished_writes_are_removed(tmp_path):
+    day = tmp_path / "raw" / "2026" / "01" / "09"
+    stale = day / ".20260109-120000.dng.tmp"
+    fresh = day / ".20260109-130000.dng.tmp"
+    _touch(stale)
+    _touch(fresh)
+    old = datetime(2026, 1, 1, tzinfo=UTC).timestamp()
+    os.utime(stale, (old, old))
+
+    cfg = RetentionConfig(max_age_days=30, min_free_space_mb=0)
+    result = retention.sweep(tmp_path, cfg, UploadConfig(enabled=False), uploaded_before=None)
+
+    assert not stale.exists()
+    assert fresh.exists()  # may still be being written
+    assert result.deleted_files == 1
+
+
+def test_a_raised_floor_without_unarchived_frames_spares_them(tmp_path):
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    uploaded = tmp_path / "raw" / "2026" / "01" / "08" / "20260108-120000.dng"
+    pending = tmp_path / "raw" / "2026" / "01" / "09" / "20260109-120000.dng"
+    _touch(uploaded)
+    _touch(pending)
+
+    cfg = RetentionConfig(max_age_days=30, min_free_space_mb=0)
+    with patch.object(retention, "_free_space_mb", return_value=0.0):
+        result = retention.sweep(
+            tmp_path, cfg, UploadConfig(enabled=True), uploaded_before=datetime(2026, 1, 9, tzinfo=UTC),
+            now=now, min_free_space_mb=500, allow_not_uploaded=False,
+        )
+
+    assert not uploaded.exists()
+    assert pending.exists()
+    assert result.deleted_not_uploaded == 0

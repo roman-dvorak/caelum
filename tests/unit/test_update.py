@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from caelum.update import releases
+from caelum.update.job import Updater
 from caelum.update.manifest import latest_newer, parse_manifest
 
 _LAUNCH = Path(releases.__file__).resolve().parents[1] / "deploy" / "caelum-launch"
@@ -64,3 +65,23 @@ def test_confirm_healthy_keeps_only_current_and_previous(tmp_path):
     assert sorted(p.name for p in layout.releases.iterdir()) == ["0.2.0", "0.3.0"]
     result = releases.read_result(layout)
     assert (result["state"], result["from"], result["to"]) == ("success", "0.2.0", "0.3.0")
+
+
+def test_update_stops_before_installing_when_the_disk_is_too_full(tmp_path, monkeypatch):
+    _fake_release(tmp_path, "0.1.0", 0)
+    os.symlink("releases/0.1.0", tmp_path / "current")
+    layout = releases.ReleaseLayout(tmp_path)
+    wheel = tmp_path / "caelum-0.2.0-py3-none-any.whl"
+    wheel.write_bytes(b"")
+    asked: list[float] = []
+    installed: list[Path] = []
+    monkeypatch.setattr(releases, "free_space_mb", lambda _path: 50.0)
+    monkeypatch.setattr(releases, "install_release", lambda _layout, w, _log: installed.append(w))
+
+    updater = Updater(layout, request_restart=lambda: None, make_room=lambda _path, mb: asked.append(mb))
+    updater._run(None, wheel)
+
+    assert asked == [releases.required_space_mb(layout)]
+    assert installed == []
+    assert updater.state == "failed"
+    assert "Not enough disk space" in (updater.error or "")

@@ -17,7 +17,10 @@ is not.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -58,6 +61,21 @@ def _candidates(data_dir: Path) -> list[tuple[datetime, Path, int]]:
     return found
 
 
+#: An atomic write's temp file (`.<name>.tmp`) older than this was left by
+#: a write that never finished — a crash, or a full disk.
+_STALE_TMP_S = 3600.0
+
+
+def _stale_temp_files(data_dir: Path) -> list[Path]:
+    cutoff = time.time() - _STALE_TMP_S
+    found = []
+    for subdir in paths.MANAGED_SUBDIRS:
+        base = data_dir / subdir
+        if base.exists():
+            found += [p for p in base.rglob(".*.tmp") if p.is_file() and p.stat().st_mtime < cutoff]
+    return found
+
+
 def _free_space_mb(data_dir: Path) -> float:
     usage = shutil.disk_usage(data_dir)
     return usage.free / (1024 * 1024)
@@ -76,9 +94,15 @@ def sweep(
     upload_cfg: UploadConfig,
     uploaded_before: datetime | None,
     now: datetime | None = None,
+    min_free_space_mb: float | None = None,
+    allow_not_uploaded: bool = True,
 ) -> RetentionResult:
+    """`min_free_space_mb` overrides the configured floor (an update making
+    room); `allow_not_uploaded=False` never touches unarchived frames, even
+    to reach it."""
     now = now or datetime.now(UTC)
     data_dir.mkdir(parents=True, exist_ok=True)
+    floor = retention_cfg.min_free_space_mb if min_free_space_mb is None else min_free_space_mb
 
     candidates = _candidates(data_dir)
     not_uploaded: list[tuple[datetime, Path, int]] = []
@@ -92,6 +116,10 @@ def sweep(
     deleted = 0
     freed = 0
 
+    for path in _stale_temp_files(data_dir):
+        freed += _delete(path)
+        deleted += 1
+
     max_age_cutoff = now - timedelta(days=retention_cfg.max_age_days)
     remaining = []
     for when, path, size in candidates:
@@ -102,13 +130,13 @@ def sweep(
             remaining.append((when, path, size))
     candidates = remaining
 
-    while candidates and _free_space_mb(data_dir) < retention_cfg.min_free_space_mb:
+    while candidates and _free_space_mb(data_dir) < floor:
         _when, path, _size = candidates.pop(0)
         freed += _delete(path)
         deleted += 1
 
     deleted_not_uploaded = 0
-    while not_uploaded and _free_space_mb(data_dir) < retention_cfg.min_free_space_mb:
+    while allow_not_uploaded and not_uploaded and _free_space_mb(data_dir) < floor:
         _when, path, _size = not_uploaded.pop(0)
         freed += _delete(path)
         deleted += 1
@@ -159,11 +187,33 @@ class RetentionSweeper:
         self._config_manager = config_manager
         self._data_dir = data_dir
         self._get_uploaded_before = get_uploaded_before
+        # The scheduled sweep and an update's `make_room` run on different threads.
+        self._lock = threading.Lock()
+
+    def make_room(self, path: Path, needed_mb: float) -> None:
+        """Get `needed_mb` free on `path`'s filesystem on top of the usual
+        floor, by deleting already-uploaded frames ahead of their age limit.
+        Never unarchived ones: an update is not worth losing data for. A
+        no-op when the data lives on another filesystem."""
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        if os.stat(path).st_dev != os.stat(self._data_dir).st_dev:
+            return
+        cfg = self._config_manager.current
+        with self._lock:
+            result = sweep(
+                self._data_dir, cfg.retention, cfg.upload, self._get_uploaded_before(),
+                min_free_space_mb=cfg.retention.min_free_space_mb + needed_mb, allow_not_uploaded=False,
+            )
+        logger.info(
+            "Making room for an update: deleted %d already-uploaded file(s), freed %.1f MB",
+            result.deleted_files, result.freed_bytes / (1024 * 1024),
+        )
 
     @on_interval(seconds=3600)  # initial default only; overridden by the return value below
     def _run_sweep(self) -> float:
         cfg = self._config_manager.current
-        result = sweep(self._data_dir, cfg.retention, cfg.upload, self._get_uploaded_before())
+        with self._lock:
+            result = sweep(self._data_dir, cfg.retention, cfg.upload, self._get_uploaded_before())
         if result.deleted_files:
             logger.info(
                 "Retention sweep deleted %d file(s), freed %.1f MB",

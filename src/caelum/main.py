@@ -210,7 +210,7 @@ async def _async_main(settings: Settings) -> None:
             watchdog.daemon = True
             watchdog.start()
 
-        app.state.updater = Updater(layout, request_restart)
+        app.state.updater = Updater(layout, request_restart, make_room=retention_sweeper.make_room)
 
         async def confirm_update_when_healthy() -> None:
             await asyncio.sleep(_UPDATE_HEALTHY_AFTER_S)
