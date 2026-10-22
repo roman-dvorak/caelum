@@ -126,6 +126,13 @@ def test_capture_settings_reach_sidecar_and_xmp():
         "capture_clamped": "exposure_us",
         "capture_ignored": "colour_gains,raw,extra.binning",
     }
+    from caelum.capture.worker import stamp_slot
+
+    stamped = stamp_slot(frame, frame.captured_at.timestamp() - 0.25)
+    timing = _capture_settings_xmp(stamped.capture_settings)
+    assert timing["start_offset_s"] == 0.25
+    assert timing["exposure_started_at"] == frame.captured_at.isoformat()
+    assert timing["scheduled_at"] == stamped.captured_at.isoformat()
     from caelum.capture.metadata import FrameMetadata
 
     assert "capture_settings" in FrameMetadata.model_fields

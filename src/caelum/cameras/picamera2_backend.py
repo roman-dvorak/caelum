@@ -380,14 +380,15 @@ class Picamera2Backend(CameraBackend):
 
         exposure_us = int(meta.get("ExposureTime", 0))
         # SensorTimestamp is CLOCK_MONOTONIC at the end of the exposure.
-        # captured_at is the *middle* of the exposure, in wall-clock time.
+        # captured_at is the *start* of the exposure, in wall-clock time —
+        # what the capture grid schedules and what the frame is named after.
         sensor_ts = int(meta.get("SensorTimestamp", 0))
         captured_at = datetime.now(UTC)
         exposure_start_ns = None
         if sensor_ts:
             lag_ns = time.monotonic_ns() - sensor_ts
             if 0 <= lag_ns < 3_600_000_000_000:
-                captured_at -= timedelta(microseconds=lag_ns // 1000 + exposure_us // 2)
+                captured_at -= timedelta(microseconds=lag_ns // 1000 + exposure_us)
             exposure_start_ns = sensor_ts - exposure_us * 1000
 
         # picamera2's "main" stream for a still configuration is ISP-processed

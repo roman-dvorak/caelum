@@ -22,6 +22,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -63,6 +64,9 @@ _READOUT_MARGIN_S = 0.2
 # backend's own timeouts: after the exposure plus this, the process exits so
 # systemd starts it again with a fresh camera stack.
 _CAPTURE_WATCHDOG_GRACE_S = 60.0
+#: A frame whose exposure started within this of its grid slot is stamped
+#: (and named) with the slot itself; the exact start goes in its metadata.
+_SLOT_STAMP_TOLERANCE_S = 1.0
 # Stalls in a row (with the camera reopened in between) before giving up on
 # this process: right after boot, libcamera in the first process can stay
 # unable to deliver frames however often it is reopened, while a fresh
@@ -435,16 +439,16 @@ class CaptureWorker(threading.Thread):
         logging.shutdown()
         os._exit(_WATCHDOG_EXIT_CODE)
 
-    def _wait_for_slot(self, interval_s: float, exposure_s: float) -> float | None:
+    def _wait_for_slot(self, interval_s: float) -> float | None:
         """Wait for the moment to start the next capture, and return the
         grid slot (wall-clock seconds) it is aimed at.
 
         The grid is laid out on the wall clock — slots at whole multiples of
-        the interval (every minute on the minute, say) — and the *middle of
-        the exposure* is what lands on a slot, so captures are evenly spaced
-        however much the exposure changes. The start is brought forward by
-        half the exposure plus the measured start latency. A slot that can't
-        be made any more is skipped; the grid itself never moves.
+        the interval (every minute on the minute, say) — and the *start of
+        the exposure* is what lands on a slot: the scheduled time is when the
+        shutter opens, and it is what the frame is named after. The call is
+        brought forward by the measured start latency only. A slot that
+        can't be made any more is skipped; the grid itself never moves.
 
         Returns None instead if the wait was cut short because the cadence
         changed (stream mode toggled) — the caller recomputes the interval
@@ -453,7 +457,7 @@ class CaptureWorker(threading.Thread):
         if self._next_due is None or self._grid_interval_s != interval_s:
             self._grid_interval_s = interval_s
             self._next_due = math.ceil(now / interval_s) * interval_s
-        lead = exposure_s / 2 + self._start_latency_s
+        lead = self._start_latency_s
         if self._next_due - lead < now:
             self._next_due += math.ceil((now - (self._next_due - lead)) / interval_s) * interval_s
         if self._wake.wait(max(0.0, self._next_due - lead - now)) and not self._stop_event.is_set():
@@ -477,7 +481,7 @@ class CaptureWorker(threading.Thread):
         due = None
         if align_to_slot:
             while True:
-                due = self._wait_for_slot(self._run_interval_s, exposure_s)
+                due = self._wait_for_slot(self._run_interval_s)
                 if self._stop_event.is_set():
                     raise ProgramStopped
                 if due is not None:
@@ -499,6 +503,7 @@ class CaptureWorker(threading.Thread):
             watchdog.cancel()
         if due is not None:
             self._next_due = due + self._run_interval_s
+            raw = stamp_slot(raw, due)
         if raw.exposure_start_monotonic_ns is not None:
             latency = (raw.exposure_start_monotonic_ns - called_ns) / 1e9
             if 0.0 <= latency < 2.0:
@@ -683,6 +688,26 @@ class CaptureWorker(threading.Thread):
             self._frame_sink.submit(submissions[0])
         else:
             self._frame_sink.submit_set(submissions)
+
+
+def stamp_slot(raw: RawFrame, slot: float) -> RawFrame:
+    """`raw` stamped with the grid slot it was scheduled for: `captured_at`
+    becomes the slot (so files are named on the schedule, 18:10:00 rather
+    than 18:09:59), and `capture_settings["timing"]` keeps the exact start
+    of the exposure and how far it was off. A start further than
+    `_SLOT_STAMP_TOLERANCE_S` from the slot keeps its own time — the stamp
+    never claims a time the exposure wasn't near."""
+    started = raw.captured_at
+    offset = started.timestamp() - slot
+    scheduled = datetime.fromtimestamp(slot, UTC)
+    timing = {
+        "scheduled_at": scheduled.isoformat(),
+        "exposure_started_at": started.isoformat(),
+        "start_offset_s": round(offset, 3),
+    }
+    settings = {**(raw.capture_settings or {}), "timing": timing}
+    captured_at = scheduled if abs(offset) <= _SLOT_STAMP_TOLERANCE_S else started
+    return dataclasses.replace(raw, captured_at=captured_at, capture_settings=settings)
 
 
 def build_submissions(

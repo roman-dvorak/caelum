@@ -152,7 +152,10 @@ def _capture_settings_xmp(settings: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     requested = settings.get("requested", {})
     gains = requested.get("colour_gains")
+    fields = {key: value for key, value in (settings.get("timing") or {}).items()
+              if key in ("scheduled_at", "exposure_started_at", "start_offset_s")}
     return {
+        **fields,
         "requested_exposure_us": requested.get("exposure_us"),
         "requested_analogue_gain": requested.get("analogue_gain"),
         "requested_colour_gains": ",".join(f"{g:.4f}" for g in gains) if gains else None,

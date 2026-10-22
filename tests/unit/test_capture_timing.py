@@ -1,9 +1,10 @@
 """Captures are evenly spaced on a wall-clock grid `capture_interval_s`
-apart, with the middle of each exposure on a grid slot — however long each
+apart, with the start of each exposure on a grid slot — however long each
 capture takes and however much the exposure changes."""
 
 from __future__ import annotations
 
+import dataclasses
 import threading
 import time
 from datetime import UTC, datetime
@@ -40,6 +41,7 @@ class _RecordingSink:
     def __init__(self) -> None:
         self.times: list[float] = []
         self.captured: list[datetime] = []
+        self.settings: list[dict | None] = []
         self.lock = threading.Lock()
 
     def start(self) -> None: ...
@@ -52,6 +54,7 @@ class _RecordingSink:
         with self.lock:
             self.times.append(time.monotonic())
             self.captured.append(submission.raw.captured_at)
+            self.settings.append(submission.raw.capture_settings)
         return True
 
 
@@ -136,11 +139,13 @@ def test_captures_land_on_a_wall_clock_grid_without_drift():
 
 
 class _LongExposureMock(MockCameraBackend):
-    """Pretends each capture takes as long as its exposure."""
+    """Pretends each capture takes as long as its exposure, and stamps the
+    frame with the exposure's start — as the real camera backend does."""
 
     def capture_frame(self):
+        started = datetime.now(UTC)
         time.sleep(self._exposure_us / 1e6)
-        return super().capture_frame()
+        return dataclasses.replace(super().capture_frame(), captured_at=started)
 
 
 def test_a_capture_that_cannot_make_the_next_slot_skips_it():
@@ -156,6 +161,16 @@ def test_a_capture_that_cannot_make_the_next_slot_skips_it():
     )
     sink = _RecordingSink()
     worker = _worker(camera, cfg, sink)
+    slots: list[float] = []
+    wait_for_slot = worker._wait_for_slot
+
+    def recording_wait(interval_s):
+        due = wait_for_slot(interval_s)
+        if due is not None:
+            slots.append(due)
+        return due
+
+    worker._wait_for_slot = recording_wait
     worker.start()
     try:
         deadline = time.monotonic() + 10
@@ -167,6 +182,30 @@ def test_a_capture_that_cannot_make_the_next_slot_skips_it():
     gaps = [b - a for a, b in zip(sink.times[1:5], sink.times[2:5], strict=False)]
     # Every other slot: 0.4 s apart, still on the 0.2 s grid.
     assert all(g == pytest.approx(0.4, abs=0.08) for g in gaps)
+    # The exposure *starts* on the slot it was aimed at (within the start
+    # latency) — not half an exposure earlier — though it outlasts the
+    # interval. The frame is stamped with the slot; the measured start is
+    # in its metadata.
+    for slot, captured, settings in zip(slots[1:5], sink.captured[1:5], sink.settings[1:5], strict=False):
+        assert captured.timestamp() == pytest.approx(slot)
+        timing = settings["timing"]
+        started = datetime.fromisoformat(timing["exposure_started_at"]).timestamp()
+        assert -0.12 <= started - slot <= 0.05
+        assert timing["start_offset_s"] == pytest.approx(started - slot, abs=1e-3)
+        assert datetime.fromisoformat(timing["scheduled_at"]).timestamp() == pytest.approx(slot)
+
+
+def test_a_start_far_from_its_slot_keeps_its_own_time():
+    from caelum.capture.worker import stamp_slot
+
+    raw = MockCameraBackend()
+    raw.open()
+    frame = raw.capture_frame()
+    late = stamp_slot(frame, frame.captured_at.timestamp() - 5.0)
+    assert late.captured_at == frame.captured_at
+    assert late.capture_settings["timing"]["start_offset_s"] == pytest.approx(5.0)
+    near = stamp_slot(frame, frame.captured_at.timestamp() - 0.3)
+    assert near.captured_at.timestamp() == pytest.approx(frame.captured_at.timestamp() - 0.3)
 
 
 def test_stream_mode_cuts_a_long_slot_wait_short():

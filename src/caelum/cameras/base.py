@@ -105,6 +105,10 @@ class RawFrame:
     exposure_us: int
     analogue_gain: float
     sensor_timestamp_ns: int
+    #: When the exposure started (wall clock, UTC), as the backend measured
+    #: it. For a frame scheduled on the capture grid the worker then puts
+    #: the slot itself here (files are named by it) and keeps the measured
+    #: start in `capture_settings["timing"]` — see `worker.stamp_slot`.
     captured_at: datetime
     raw_bayer: np.ndarray | None = None
     raw_stream_config: dict[str, Any] | None = None

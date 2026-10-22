@@ -21,9 +21,12 @@ async def capture(ctx):
 ## How it runs
 
 - `capture(ctx)` is called **once per capture slot** of the wall-clock grid.
-  The **first** `ctx.capture()` of a run is timed so the middle of its
-  exposure lands on the slot; later captures in the same run follow straight
-  away.
+  The **first** `ctx.capture()` of a run is timed so its exposure *starts*
+  on the slot, and the frame is named after the slot; the measured start
+  (typically within a few tenths of a second) is kept in its metadata,
+  `capture_settings.timing`. Later captures in the same run follow straight
+  away and carry their own measured start. An exposure longer than the interval makes
+  the run skip slots (every other one, say), never leaves the grid.
 - Return what should be kept: a frame, a list of frames, `ctx.capture_set(...)`,
   or `None`. Frames not returned are discarded.
 - A set of several frames is stored with one representative (shown live,

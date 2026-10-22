@@ -96,7 +96,8 @@ set order** (position 0 first, regardless of which IFD holds it):
 | `index` | position in the set |
 | `ifd` | where its raw data is: `IFD0` or `SubIFD<n>` (n = 0-based entry of tag 330) |
 | `role` | `representative` or `member` |
-| `captured_at` | middle of the exposure, UTC ISO 8601 |
+| `captured_at` | start of the exposure, UTC ISO 8601 — the grid slot it was scheduled for, when it started within 1 s of it |
+| `scheduled_at`, `exposure_started_at`, `start_offset_s` | the slot, the exposure's measured start, and the difference in seconds (frames taken on the grid) |
 | `exposure_us`, `analogue_gain`, `digital_gain`, `colour_gains` | as the camera applied them |
 | `sensor_timestamp_ns`, `sensor_temperature_c` | from the camera |
 | `brightness_median`, `focus_score` | caelum's measurements |

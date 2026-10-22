@@ -122,7 +122,7 @@ class CaptureContext:
         **extra: Any,
     ) -> CapturedFrame:
         """Take one frame. The first capture of a run is aligned to the
-        capture grid (the middle of its exposure on the slot); later ones
+        capture grid (the start of its exposure on the slot); later ones
         are taken straight away.
 
         The camera does as much of the request as it can: values beyond its
