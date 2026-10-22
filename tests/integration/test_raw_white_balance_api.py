@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import numpy as np
 import pytest
 
-from tests.factories import make_raw_bayer, make_raw_config
+from tests.factories import make_raw_bayer, make_raw_config, make_raw_frame
 
 from .test_api_endpoints import VIEWER_PASSWORD, _build_harness, login
 
@@ -63,6 +64,28 @@ async def test_latest_raw_frame_is_loaded_and_retagged(tmp_path, redis_url):
             patched = latest.read_bytes()
             before, after = dng_reader.parse(original), dng_reader.parse(patched)
             np.testing.assert_array_equal(dng_reader.bayer(patched, after), dng_reader.bayer(original, before))
+    finally:
+        await harness.config_manager.stop()
+
+
+async def test_live_frame_comes_from_ram(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "rawwb4")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            assert (await client.get("/api/raw/white-balance/live")).status_code == 409  # nothing captured yet
+
+            harness.worker.latest_raw = make_raw_frame()
+            response = await client.get("/api/raw/white-balance/live", params={"max_dim": 64})
+            assert response.status_code == 200
+            info = json.loads(response.headers["x-info"])
+            assert (info["red_gain"], info["blue_gain"]) == pytest.approx((1.8, 1.6))
+            size = (int(response.headers["x-width"]), int(response.headers["x-height"]))
+            assert (info["width"], info["height"]) == size
+            assert max(info["width"], info["height"]) <= 64
+            assert len(response.content) == info["width"] * info["height"] * 3 * 2
+            assert len(info["render_matrix"]) == 3
+            assert not any(harness.data_dir.rglob("*.dng"))  # nothing written
     finally:
         await harness.config_manager.stop()
 

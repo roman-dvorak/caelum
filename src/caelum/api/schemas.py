@@ -126,15 +126,6 @@ class WhiteBalanceResponse(BaseModel):
     auto: bool
 
 
-class WhiteBalanceAutoCalibrateRequest(BaseModel):
-    #: Fractional (0..1) patch over the latest frame — should cover a
-    #: neutral gray/white surface for the derived gains to be meaningful.
-    x: float = Field(ge=0.0, le=1.0)
-    y: float = Field(ge=0.0, le=1.0)
-    w: float = Field(gt=0.0, le=1.0)
-    h: float = Field(gt=0.0, le=1.0)
-
-
 class RawWhiteBalanceInfo(BaseModel):
     #: Relative to the data directory — pass it back to `/pixels` and `PUT`.
     path: str
@@ -151,6 +142,26 @@ class RawWhiteBalanceInfo(BaseModel):
     #: The camera's gains when the frame was taken (XMP), i.e. before any edit.
     captured_red_gain: float | None
     captured_blue_gain: float | None
+    #: White-balanced camera RGB -> linear sRGB, 3x3 row-major.
+    render_matrix: list[list[float]]
+    camera_wb_auto: bool
+    camera_red_gain: float
+    camera_blue_gain: float
+
+
+class LiveWhiteBalanceInfo(BaseModel):
+    """The `X-Info` header of `GET /api/raw/white-balance/live`."""
+
+    captured_at: str
+    exposure_us: int
+    analogue_gain: float
+    sensor_width: int
+    sensor_height: int
+    width: int
+    height: int
+    #: The gains the frame was taken with.
+    red_gain: float
+    blue_gain: float
     #: White-balanced camera RGB -> linear sRGB, 3x3 row-major.
     render_matrix: list[list[float]]
     camera_wb_auto: bool

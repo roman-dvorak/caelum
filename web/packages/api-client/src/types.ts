@@ -313,12 +313,29 @@ export interface WhiteBalanceResponse {
   auto: boolean
 }
 
-/** Fractional (0..1) patch over the latest frame to calibrate from. */
-export interface WhiteBalanceAutoCalibrateRequest {
-  x: number
-  y: number
-  w: number
-  h: number
+/** `X-Info` of `GET /api/raw/white-balance/live`. */
+export interface LiveWhiteBalanceInfo {
+  captured_at: string
+  exposure_us: number
+  analogue_gain: number
+  sensor_width: number
+  sensor_height: number
+  width: number
+  height: number
+  /** The gains the frame was taken with. */
+  red_gain: number
+  blue_gain: number
+  /** White-balanced camera RGB -> linear sRGB, 3x3 row-major. */
+  render_matrix: number[][]
+  camera_wb_auto: boolean
+  camera_red_gain: number
+  camera_blue_gain: number
+}
+
+export interface LiveWhiteBalanceFrame {
+  info: LiveWhiteBalanceInfo
+  /** Interleaved RGB, `width` x `height`, linear camera space, 0..65535 = black..white level. */
+  pixels: Uint16Array
 }
 
 // ---- /api/plugins/* -----------------------------------------------------

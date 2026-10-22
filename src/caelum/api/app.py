@@ -46,8 +46,9 @@ def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = (
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        # The raw white-balance pixel buffer says its size in these.
-        expose_headers=["X-Width", "X-Height"],
+        # The raw white-balance pixel buffers say their size (and the live
+        # one everything else about the frame) in these.
+        expose_headers=["X-Width", "X-Height", "X-Info"],
     )
 
     # Auth routes handle their own access levels (login must stay reachable

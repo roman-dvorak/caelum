@@ -9,6 +9,10 @@ Saving writes only the file's `AsShotNeutral` tag (see
 `storage/dng_reader.py`); the sensor data is never rewritten. Making the
 same gains the camera default for future frames is the existing
 `POST /api/camera/white-balance`.
+
+`/raw/white-balance/live` serves the same pixels from the newest frame's
+raw data still in RAM (`CaptureWorker.latest_raw`) — nothing has to be
+stored as a DNG, and nothing is written.
 """
 
 from __future__ import annotations
@@ -19,11 +23,12 @@ from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from caelum.api.deps import get_config_manager, get_settings
-from caelum.api.schemas import RawWhiteBalanceInfo, RawWhiteBalanceSaveRequest
+from caelum.api.deps import get_capture_worker, get_config_manager, get_settings
+from caelum.api.schemas import LiveWhiteBalanceInfo, RawWhiteBalanceInfo, RawWhiteBalanceSaveRequest
+from caelum.capture.worker import CaptureWorker
 from caelum.config.manager import ConfigManager
 from caelum.settings import Settings
-from caelum.storage import browse, dng_reader, paths
+from caelum.storage import browse, dng_reader, dng_writer, paths
 
 router = APIRouter()
 
@@ -120,13 +125,62 @@ def get_raw_white_balance_pixels(
     a night frame lives in the bottom few percent of the range."""
     target = _resolve_dng(settings, path)
     data, info = _read(target)
-    rgb = dng_reader.linear_rgb(data, info, max_dim)
-    payload = np.round(rgb * 65535.0).astype("<u2").tobytes()
+    return _pixels(dng_reader.linear_rgb(data, info, max_dim))
+
+
+def _pixels(rgb: np.ndarray, headers: dict[str, str] | None = None) -> Response:
     return Response(
-        content=payload,
+        content=np.round(rgb * 65535.0).astype("<u2").tobytes(),
         media_type="application/octet-stream",
-        headers={"X-Width": str(rgb.shape[1]), "X-Height": str(rgb.shape[0]), "Cache-Control": "no-store"},
+        headers={
+            "X-Width": str(rgb.shape[1]), "X-Height": str(rgb.shape[0]), "Cache-Control": "no-store", **(headers or {}),
+        },
     )
+
+
+@router.get("/raw/white-balance/live")
+def get_live_white_balance_pixels(
+    max_dim: int = Query(1024, ge=64, le=4096),
+    worker: CaptureWorker = Depends(get_capture_worker),
+    config_manager: ConfigManager = Depends(get_config_manager),
+) -> Response:
+    """The newest frame's raw data, in the `/pixels` format; what else the
+    client needs is `LiveWhiteBalanceInfo` JSON in `X-Info` — one request,
+    so the description can't belong to a different frame than the pixels.
+
+    Goes through an uncompressed in-memory DNG so unpacking, black levels,
+    CFA order and colour matrix are exactly what a stored DNG would give."""
+    frame = worker.latest_raw
+    if frame is None or frame.raw_bayer is None or frame.raw_stream_config is None:
+        raise HTTPException(status_code=409, detail="No frame with raw sensor data captured yet")
+    try:
+        data = dng_writer.build_dng(
+            frame.raw_bayer, frame.raw_stream_config, frame.camera_metadata,
+            captured_at=frame.captured_at, exposure_us=frame.exposure_us,
+            analogue_gain=frame.analogue_gain, camera_model=frame.camera_model, compress=False,
+        )
+        info = dng_reader.parse(data)
+    except (ValueError, dng_reader.DngFormatError) as exc:
+        raise HTTPException(status_code=422, detail=f"Raw data of the latest frame: {exc}") from exc
+    rgb = dng_reader.linear_rgb(data, info, max_dim)
+    gains = frame.camera_metadata.get("ColourGains") or info.gains or (1.0, 1.0)
+    camera = config_manager.current.camera
+    described = LiveWhiteBalanceInfo(
+        captured_at=frame.captured_at.isoformat(),
+        exposure_us=frame.exposure_us,
+        analogue_gain=frame.analogue_gain,
+        sensor_width=info.width,
+        sensor_height=info.height,
+        width=rgb.shape[1],
+        height=rgb.shape[0],
+        red_gain=float(gains[0]),
+        blue_gain=float(gains[1]),
+        render_matrix=dng_reader.render_matrix(info),
+        camera_wb_auto=camera.wb_auto,
+        camera_red_gain=camera.wb_red_gain,
+        camera_blue_gain=camera.wb_blue_gain,
+    )
+    return _pixels(rgb, {"X-Info": described.model_dump_json()})
 
 
 @router.put("/raw/white-balance", response_model=RawWhiteBalanceInfo)

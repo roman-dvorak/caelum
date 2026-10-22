@@ -23,6 +23,8 @@ import threading
 import time
 from collections.abc import Callable
 
+import numpy as np
+
 from caelum import __version__
 from caelum.cameras.base import CameraBackend, CameraStalled, CaptureRequest, RawFrame
 from caelum.capture_runtime import (
@@ -127,6 +129,9 @@ class ManualExposureOverride:
             return self._target
 
 
+_NO_IMAGE = np.zeros((0, 0, 3), dtype=np.uint8)
+
+
 class WhiteBalanceOverride:
     """Thread-safe one-shot white-balance request — like `ManualExposureOverride`,
     but applied once (white balance gains stick on the sensor until changed,
@@ -189,6 +194,11 @@ class CaptureWorker(threading.Thread):
         self.stream_mode.add_listener(self._wake.set)
         self.manual_exposure = manual_exposure or ManualExposureOverride()
         self.white_balance_override = white_balance_override or WhiteBalanceOverride()
+        #: The newest published frame's sensor data, kept in RAM for the
+        #: white balance tool (`GET /api/camera/white-balance/frame`). Only
+        #: the raw buffer: the ISP image is dropped so this costs one raw
+        #: frame (~18 MB for an IMX477), not another full RGB copy too.
+        self.latest_raw: RawFrame | None = None
 
         self._stop_event = threading.Event()
         self._sky_state: SkyState | None = None
@@ -666,6 +676,9 @@ class CaptureWorker(threading.Thread):
 
     def _submit(self, cfg: AppConfig, capture_set: CaptureSet, provenance: dict) -> None:
         submissions = build_submissions(cfg, capture_set, provenance, self._storage_policy)
+        primary = capture_set.primary.raw
+        if primary.raw_bayer is not None and primary.raw_stream_config is not None:
+            self.latest_raw = dataclasses.replace(primary, image=_NO_IMAGE)
         if len(submissions) == 1:
             self._frame_sink.submit(submissions[0])
         else:

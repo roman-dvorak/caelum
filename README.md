@@ -315,18 +315,23 @@ converter reads (the alternative, `AsShotWhiteXY`, is far less supported).
 The camera's `ColourGains` never change the Bayer data, so white balance
 on a DNG is metadata only, and editing it is non-destructive.
 
-The White balance page's **RAW frame** mode loads the newest DNG
-(`GET /api/raw/white-balance`, then `/pixels`: linear camera RGB, one pixel
-per 2×2 CFA cell, downscaled) and renders it in the browser — gains, the
-file's colour matrix, a display-only brightness, sRGB curve. From there:
+The White balance page works on the newest frame's raw data still in RAM
+(`GET /api/raw/white-balance/live`: linear camera RGB, one pixel per 2×2
+CFA cell, downscaled, with the frame's gains and colour matrix in
+`X-Info`) — no DNG needs to be stored, nothing is written. The browser
+applies the gains, colour matrix, a display-only brightness and the sRGB
+curve itself, so the sliders are instant and change nothing on the camera.
+A draggable ROI shows how far a should-be-neutral patch is from grey
+(R/G, B/G) and the gains that would make it neutral. **Save to
+configuration** is `POST /api/camera/white-balance`: manual gains, AWB off,
+applied from the next capture.
 
-- **Save to this DNG** (`PUT /api/raw/white-balance`) rewrites those 24
-  bytes in place, atomically; nothing else in the file changes. The gains
-  the frame was captured with stay in the XMP (`caelum:colour_gains`), so
-  "as captured" can always be restored. rsync re-sends the file on the
-  next upload pass.
-- **Use as camera default** is the existing `POST /api/camera/white-balance`:
-  manual gains, AWB off, applied to every frame from then on.
+A stored DNG can be re-balanced the same way through the API
+(`GET /api/raw/white-balance`, then `/pixels`): `PUT /api/raw/white-balance`
+rewrites its `AsShotNeutral` (24 bytes) in place, atomically; nothing else
+in the file changes. The gains the frame was captured with stay in the XMP
+(`caelum:colour_gains`), so "as captured" can always be restored. rsync
+re-sends the file on the next upload pass.
 
 The live stream (`/api/frame/latest.jpg`, `/ws/stream`) stays JPEG. Older
 captures in `.jpg`/`.fits` keep working everywhere alongside the new formats.

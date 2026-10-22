@@ -38,7 +38,8 @@ import type {
   UpdateStatusResponse,
   UsageResponse,
   UserSummary,
-  WhiteBalanceAutoCalibrateRequest,
+  LiveWhiteBalanceFrame,
+  LiveWhiteBalanceInfo,
   WhiteBalanceRequest,
   WhiteBalanceResponse,
 } from './types.js'
@@ -154,8 +155,44 @@ export class LocalApiClient {
     return this.postJson<WhiteBalanceResponse>('/camera/white-balance', body)
   }
 
-  autoCalibrateWhiteBalance(body: WhiteBalanceAutoCalibrateRequest): Promise<WhiteBalanceResponse> {
-    return this.postJson<WhiteBalanceResponse>('/camera/white-balance/auto-calibrate', body)
+  /** The newest frame's raw data from the camera's RAM: linear camera RGB,
+   * not white-balanced, for previewing gains client-side. Nothing is saved.
+   * `onProgress` follows the download (several MB) once the camera has
+   * prepared the frame. */
+  async getLiveWhiteBalanceFrame(
+    maxDim = 1024,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<LiveWhiteBalanceFrame> {
+    const path = `/raw/white-balance/live?max_dim=${maxDim}`
+    const res = await fetch(this.apiUrl(path), { credentials: 'include' })
+    if (!res.ok) {
+      const detail = await this.errorDetail(res)
+      throw new LocalApiClientError(
+        `caelum API request failed: GET ${path} -> ${res.status}${detail ? ` (${detail})` : ''}`,
+        res.status,
+        path,
+      )
+    }
+    const info = JSON.parse(res.headers.get('X-Info') ?? '{}') as LiveWhiteBalanceInfo
+    const total = info.width * info.height * 3 * 2
+    const bytes = new Uint8Array(total)
+    let loaded = 0
+    onProgress?.(0, total)
+    if (res.body) {
+      const reader = res.body.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        bytes.set(value.subarray(0, total - loaded), loaded)
+        loaded = Math.min(total, loaded + value.length)
+        onProgress?.(loaded, total)
+      }
+    } else {
+      bytes.set(new Uint8Array(await res.arrayBuffer()).subarray(0, total))
+      loaded = total
+    }
+    if (loaded !== total) throw new LocalApiClientError(`Incomplete frame: ${loaded} of ${total} bytes`, 200, path)
+    return { info, pixels: new Uint16Array(bytes.buffer) }
   }
 
   getPlugins(): Promise<PluginsResponse> {
