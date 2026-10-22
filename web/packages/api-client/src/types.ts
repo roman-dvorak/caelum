@@ -249,7 +249,19 @@ export interface AppConfig {
   redis: RedisConfig
   auth: AuthConfig
   update: UpdateConfig
+  capture: CaptureConfig
   plugins: Record<string, PluginConfig>
+}
+
+/** Which capture program runs; see `/api/capture-programs`. */
+export interface CaptureConfig {
+  active_program: string
+  /** The archived version of a user program; null for a built-in. */
+  active_sha256: string | null
+  editing_enabled: boolean
+  /** Parameters per program, by name without `.py` — the program's `ctx.params`. */
+  params: Record<string, Record<string, unknown>>
+  max_consecutive_failures: number
 }
 
 /** Recursive partial, used for `PUT /api/config` patch bodies. */
@@ -336,6 +348,126 @@ export interface LiveWhiteBalanceFrame {
   info: LiveWhiteBalanceInfo
   /** Interleaved RGB, `width` x `height`, linear camera space, 0..65535 = black..white level. */
   pixels: Uint16Array
+}
+
+// ---- /api/capture-programs/* --------------------------------------------
+
+export interface CaptureProgramInfo {
+  name: string
+  origin: 'builtin' | 'user'
+  sha256: string
+  size: number
+  modified: number | null
+  description: string | null
+  kind: string | null
+}
+
+export interface CaptureProgramStatus {
+  name: string | null
+  sha256: string | null
+  origin: string | null
+  runs: number
+  consecutive_failures: number
+  last_error: string | null
+  fallback_active: boolean
+  fallback_for: string[] | null
+  pending_test: string | null
+  running_test: string | null
+}
+
+export interface CaptureProgramsResponse {
+  programs: CaptureProgramInfo[]
+  active: { name: string; sha256: string | null }
+  status: CaptureProgramStatus
+  editing_enabled: boolean
+  directory: string
+}
+
+export interface CaptureProgramSource {
+  name: string
+  origin: 'builtin' | 'user'
+  source: string
+  sha256: string
+  meta: Record<string, unknown>
+}
+
+export interface CaptureProgramIssue {
+  level: 'error' | 'warning' | 'info'
+  line: number | null
+  message: string
+}
+
+export interface CaptureProgramError {
+  message: string
+  type: string
+  line: number | null
+  traceback: string
+}
+
+export interface CaptureProgramFrameSummary {
+  index: number
+  requested: Record<string, unknown> | null
+  applied: Record<string, unknown> | null
+  clamped: string[]
+  ignored: string[]
+  brightness_median: number
+  annotations: Record<string, unknown>
+}
+
+export interface CaptureProgramSimulatedRun {
+  slot: number
+  captures?: number
+  duration_s?: number
+  error?: CaptureProgramError
+  returned?: {
+    kind: string
+    count: number
+    representative: number
+    annotations: Record<string, unknown>
+    frames: CaptureProgramFrameSummary[]
+  } | null
+  next_commanded?: { exposure_us: number; analogue_gain: number }
+}
+
+export interface CaptureProgramCheckReport {
+  ok: boolean
+  issues: CaptureProgramIssue[]
+  simulation: { ok: boolean; period: string; runs: CaptureProgramSimulatedRun[]; log: string[] } | null
+  meta?: Record<string, unknown> | null
+}
+
+export interface CaptureProgramTestFrame {
+  /** Relative to the run — fetch with `captureProgramTestFileUrl`. */
+  file: string
+  index: number
+  captured_at: string
+  exposure_us: number
+  analogue_gain: number
+  brightness_median: number
+  capture_settings: { requested?: Record<string, unknown>; applied?: Record<string, unknown>; clamped?: string[]; ignored?: string[] } | null
+  annotations: Record<string, unknown>
+  representative: boolean
+}
+
+/** A test run's report.json — grows as the run goes queued → running → done. */
+export interface CaptureProgramTestRun {
+  run_id: string
+  status: 'queued' | 'running' | 'done' | 'error' | 'stopped'
+  program: { name: string; sha256: string; origin: string }
+  requested_by: string
+  queued_at: string
+  started_at?: string
+  finished_at?: string
+  duration_s?: number
+  captures?: number
+  log?: string[]
+  error?: CaptureProgramError
+  camera_error?: boolean
+  store_error?: string
+  returned?: { kind: string; count: number; representative: number; annotations: Record<string, unknown> }
+  frames?: CaptureProgramTestFrame[]
+  dng?: string | null
+  files?: string[]
 }
 
 // ---- /api/plugins/* -----------------------------------------------------

@@ -10,6 +10,10 @@ import type {
   AuthContext,
   CameraModeResponse,
   CameraOptions,
+  CaptureProgramCheckReport,
+  CaptureProgramSource,
+  CaptureProgramTestRun,
+  CaptureProgramsResponse,
   DeepPartial,
   DeleteFramesRequest,
   DerivativeKindSummary,
@@ -385,6 +389,63 @@ export class LocalApiClient {
     body.append('file', file)
     return this.request<UpdateStatusResponse>('/update/upload', { method: 'POST', body })
   }
+
+  // ---- capture programs -------------------------------------------------
+
+  listCapturePrograms(): Promise<CaptureProgramsResponse> {
+    return this.request<CaptureProgramsResponse>('/capture-programs')
+  }
+
+  getCaptureProgram(name: string): Promise<CaptureProgramSource> {
+    return this.request<CaptureProgramSource>(`/capture-programs/${encodeURIComponent(name)}`)
+  }
+
+  saveCaptureProgram(name: string, source: string): Promise<{ name: string; sha256: string }> {
+    return this.request(`/capture-programs/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source }),
+    })
+  }
+
+  uploadCaptureProgram(file: File): Promise<{ name: string; sha256: string }> {
+    const body = new FormData()
+    body.append('file', file)
+    return this.request('/capture-programs/upload', { method: 'POST', body })
+  }
+
+  deleteCaptureProgram(name: string): Promise<{ name: string; deleted: boolean }> {
+    return this.request(`/capture-programs/${encodeURIComponent(name)}`, { method: 'DELETE' })
+  }
+
+  /** Static check plus two simulated runs against the camera's limits, in a
+   * separate process — nothing touches the camera. */
+  checkCaptureProgram(name: string, source: string): Promise<CaptureProgramCheckReport> {
+    return this.postJson<CaptureProgramCheckReport>('/capture-programs/check', { name, source })
+  }
+
+  /** Queue one run of the saved program on the real camera, after the next
+   * slot; poll `getCaptureProgramTestRun` for its report. */
+  testCaptureProgram(name: string): Promise<{ run_id: string; sha256: string }> {
+    return this.postJson(`/capture-programs/${encodeURIComponent(name)}/test`, {})
+  }
+
+  activateCaptureProgram(name: string, sha256: string): Promise<{ active: { name: string; sha256: string | null } }> {
+    return this.postJson(`/capture-programs/${encodeURIComponent(name)}/activate`, { sha256 })
+  }
+
+  listCaptureProgramTestRuns(program?: string): Promise<{ runs: CaptureProgramTestRun[] }> {
+    const query = program ? `?program=${encodeURIComponent(program)}` : ''
+    return this.request(`/capture-programs/test-runs${query}`)
+  }
+
+  getCaptureProgramTestRun(runId: string): Promise<CaptureProgramTestRun> {
+    return this.request<CaptureProgramTestRun>(`/capture-programs/test-runs/${encodeURIComponent(runId)}`)
+  }
+
+  /** A thumbnail or DNG a test run stored (`frames[].file`, `dng`). */
+  captureProgramTestFileUrl = (runId: string, file: string): string =>
+    this.apiUrl(`/capture-programs/test-runs/${encodeURIComponent(runId)}/${file.split('/').map(encodeURIComponent).join('/')}`)
 
   // ---- overlay assets --------------------------------------------------
 

@@ -13,6 +13,7 @@ import {
   Loading,
   LogoutIcon,
   LogsIcon,
+  ProgramIcon,
   Message,
   PuzzleIcon,
   SlidersIcon,
@@ -43,6 +44,9 @@ const TerminalPage = lazy(() =>
 const OverlayEditor = lazy(() =>
   import('./pages/OverlayEditor.tsx').then((m) => ({ default: m.OverlayEditor })),
 )
+const CapturePrograms = lazy(() =>
+  import('./pages/CapturePrograms.tsx').then((m) => ({ default: m.CapturePrograms })),
+)
 const WhiteBalance = lazy(() =>
   import('./pages/WhiteBalance.tsx').then((m) => ({ default: m.WhiteBalance })),
 )
@@ -61,6 +65,7 @@ const ADMIN_SECTION: NavSection = {
   title: 'Manage',
   items: [
     { to: '/settings', label: 'Settings', icon: SlidersIcon },
+    { to: '/programs', label: 'Capture programs', icon: ProgramIcon },
     { to: '/plugins', label: 'Plugins', icon: PuzzleIcon },
     { to: '/overlay', label: 'Overlay', icon: LayersIcon },
     { to: '/white-balance', label: 'White balance', icon: DropletIcon },
@@ -144,6 +149,10 @@ export default function App() {
                   who types the URL lands back on the dashboard, and the backend
                   would refuse the requests regardless. */}
               <Route path="/settings" element={isAdmin ? <Settings /> : <Navigate to="/" replace />} />
+              <Route
+                path="/programs"
+                element={isAdmin ? <CapturePrograms /> : <Navigate to="/" replace />}
+              />
               <Route path="/plugins" element={isAdmin ? <Plugins /> : <Navigate to="/" replace />} />
               <Route
                 path="/overlay"

@@ -71,8 +71,18 @@ Importing a built-in from your own program works too, e.g.
 
 ## Managing programs
 
-Web UI: **Manage → Capture programs** (admins). API under `/api/capture-programs`:
-list, get, `PUT` save, upload, delete, `check`, `{name}/test`,
+Web UI: **Manage → Capture programs** (admins). It lists the built-in and
+user programs with the active one marked; for the selected program it has
+**Check**, **Test once**, **Activate**, **Duplicate** (an editable copy, also
+of a built-in) and, for user programs, **Delete**; its parameters
+(`capture.params.<name>`, documented by the program's docstring); its source
+(editable for user programs); and its test runs, newest first, each with the
+frames it took — thumbnail, exposure, gain, brightness, what the camera
+clamped or ignored — the raw DNG to download and the program's log. **New**
+and **Upload** add a user program.
+
+API under `/api/capture-programs`: list, get, `PUT` save, upload, delete,
+`check`, `{name}/test`, `test-runs` (the kept runs, `?program=` to filter),
 `test-runs/{id}`, `{name}/activate`, `status`.
 
 - **Save ≠ deploy.** Production runs the archived version recorded at

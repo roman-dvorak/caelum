@@ -77,6 +77,7 @@ async def test_save_check_activate_test_and_delete(tmp_path, redis_url):
             assert (await client.get("/api/capture-programs/pair.py")).json()["source"] == PAIR
 
             # Saving is not deploying.
+            assert await _until(lambda: harness.worker.program_status["name"] == "default.py")
             await asyncio.sleep(0.2)
             assert harness.worker.program_status["name"] == "default.py"
 
@@ -109,6 +110,13 @@ async def test_save_check_activate_test_and_delete(tmp_path, redis_url):
             # The mock camera has no raw stream: no DNG.
             assert body["dng"] is None
             assert (await client.get(f"{run_url}/../../../etc/passwd")).status_code in (400, 404)
+
+            # Listed among the kept test runs, newest first, filterable by program.
+            listed = (await client.get("/api/capture-programs/test-runs", params={"program": "pair.py"})).json()
+            assert [r["run_id"] for r in listed["runs"]] == [run["run_id"]]
+            assert listed["runs"][0]["status"] == "done" and "log" not in listed["runs"][0]
+            other = (await client.get("/api/capture-programs/test-runs", params={"program": "hdr.py"})).json()
+            assert other["runs"] == []
 
             # Activate the checked version; a stale sha is refused.
             assert (await client.post("/api/capture-programs/pair.py/activate",

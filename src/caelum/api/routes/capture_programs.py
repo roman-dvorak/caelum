@@ -127,6 +127,25 @@ async def upload_program(
     return {"name": name, "sha256": sha}
 
 
+@router.get("/capture-programs/test-runs")
+def list_test_runs(program: str | None = None, settings: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """The kept test runs (the last `testrun.KEEP_RUNS`), newest first,
+    optionally of one program — their reports without the log."""
+    base = testrun.tests_dir(settings.data_dir)
+    runs = []
+    if base.is_dir():
+        for run_dir in sorted((p for p in base.iterdir() if p.is_dir()), key=lambda p: p.name, reverse=True):
+            try:
+                report = testrun.read_report(run_dir)
+            except (OSError, ValueError):
+                continue
+            if program is not None and (report.get("program") or {}).get("name") != program:
+                continue
+            report.pop("log", None)
+            runs.append(report)
+    return {"runs": runs}
+
+
 @router.get("/capture-programs/test-runs/{run_id}")
 def get_test_run(run_id: str, settings: Settings = Depends(get_settings)) -> dict[str, Any]:
     run_dir = testrun.run_dir_for(settings.data_dir, run_id)

@@ -8,6 +8,7 @@
  */
 
 import {
+  Aperture,
   ArrowClockwise,
   BookOpen,
   Camera,
@@ -69,6 +70,7 @@ export const LayersIcon = icon(Stack)
 export const DropletIcon = icon(Drop)
 export const SettingsIcon = icon(Gear)
 export const CameraIcon = icon(Camera)
+export const ProgramIcon = icon(Aperture)
 export const BookIcon = icon(BookOpen)
 
 // Sky and data
