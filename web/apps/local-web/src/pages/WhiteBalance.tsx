@@ -144,9 +144,9 @@ function loadingLabel(progress: Progress | null): string {
 
 function LoadingIndicator({ progress }: { progress: Progress | null }) {
   return (
-    <div className="flex w-56 flex-col gap-1.5 text-xs text-ink-dim">
+    <div className="flex w-56 flex-col gap-1.5 text-xs text-ink-muted">
       <span>{loadingLabel(progress)}</span>
-      <div className="h-1 overflow-hidden bg-line">
+      <div className="h-1 overflow-hidden bg-border">
         {progress ? (
           <div className="h-full bg-amber transition-[width]" style={{ width: `${(100 * progress.loaded) / progress.total}%` }} />
         ) : (
@@ -160,8 +160,8 @@ function LoadingIndicator({ progress }: { progress: Progress | null }) {
 function verdict(deviation: number): { label: string; className: string } {
   if (deviation < 0.02) return { label: 'Neutral', className: 'text-success' }
   if (deviation < 0.05) return { label: 'Slight cast', className: 'text-success' }
-  if (deviation < 0.15) return { label: 'Visible cast', className: 'text-amber' }
-  return { label: 'Strong cast', className: 'text-danger' }
+  if (deviation < 0.15) return { label: 'Visible cast', className: 'text-amber-ink' }
+  return { label: 'Strong cast', className: 'text-error' }
 }
 
 /**
@@ -294,18 +294,18 @@ export function WhiteBalance() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-2">
-          <div ref={containerRef} className="relative overflow-hidden border border-line bg-void">
+          <div ref={containerRef} className="relative overflow-hidden border border-border bg-surface-0 rounded-md">
             {frame ? (
               <canvas ref={canvasRef} className="block h-auto w-full" />
             ) : (
-              <div className="flex aspect-video items-center justify-center text-sm text-ink-faint">
+              <div className="flex aspect-video items-center justify-center text-sm text-ink-muted">
                 {loading ? <LoadingIndicator progress={progress} /> : 'No frame loaded'}
               </div>
             )}
             {frame ? (
               <div
                 onPointerDown={(e) => startRoiDrag(e, 'move')}
-                className="absolute cursor-move border-2 border-amber"
+                className="absolute cursor-move border-2 border-amber rounded-md"
                 style={{
                   left: `${roi.x * 100}%`,
                   top: `${roi.y * 100}%`,
@@ -315,18 +315,18 @@ export function WhiteBalance() {
               >
                 <div
                   onPointerDown={(e) => startRoiDrag(e, 'resize')}
-                  className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize border border-void bg-amber"
+                  className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize border border-surface-0 bg-amber rounded-md"
                 />
               </div>
             ) : null}
             {frame && loading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-void/70">
+              <div className="absolute inset-0 flex items-center justify-center bg-surface-0/70">
                 <LoadingIndicator progress={progress} />
               </div>
             ) : null}
           </div>
           {frame ? (
-            <p className="text-xs text-ink-faint">
+            <p className="text-xs text-ink-muted">
               Frame {new Date(frame.info.captured_at).toLocaleString()} · {(frame.info.exposure_us / 1e6).toFixed(3)} s ·
               gain {frame.info.analogue_gain.toFixed(2)} · taken with R {frame.info.red_gain.toFixed(3)} / B{' '}
               {frame.info.blue_gain.toFixed(3)}. Colours match the camera; tones are a plain stretch, not the JPEG's curve.
@@ -400,9 +400,9 @@ export function WhiteBalance() {
                   Saved gains
                 </Button>
               </div>
-              <p className="text-xs text-ink-faint">
+              <p className="text-xs text-ink-muted">
                 Saved: {config ? `R ${config.red.toFixed(3)} / B ${config.blue.toFixed(3)}` : '—'}
-                {dirty ? <span className="text-amber"> · differs from the preview</span> : null}
+                {dirty ? <span className="text-amber-ink"> · differs from the preview</span> : null}
               </p>
               <Button variant="primary" onClick={() => void save()} disabled={!frame || !dirty || saving}>
                 {saving ? 'Saving…' : 'Save to configuration'}
@@ -412,7 +412,7 @@ export function WhiteBalance() {
 
           <Panel title="ROI neutrality">
             <div className="flex flex-col gap-2 text-sm">
-              <p className="text-xs text-ink-faint">
+              <p className="text-xs text-ink-muted">
                 Drag the amber box over something that should be gray or white — a card, a cloud, the dome. How far
                 its colour is from neutral with the current gains:
               </p>
@@ -420,27 +420,27 @@ export function WhiteBalance() {
                 <>
                   <div className="flex items-center gap-3">
                     <div
-                      className="h-10 w-10 shrink-0 border border-line"
+                      className="h-10 w-10 shrink-0 border border-border rounded-md"
                       style={{ background: swatch(stats, frame.info.render_matrix, redGain, blueGain) }}
                     />
                     <div>
                       <div className={`font-semibold ${status.className}`}>{status.label}</div>
-                      <div className="font-mono text-xs text-ink-dim">
+                      <div className="font-mono text-xs text-ink-muted">
                         R/G {signedPercent(redRatio - 1)} · B/G {signedPercent(blueRatio - 1)}
                       </div>
                     </div>
                   </div>
-                  <p className="font-mono text-xs text-ink-dim">
+                  <p className="font-mono text-xs text-ink-muted">
                     Neutral at R {neutralRed?.toFixed(3)} / B {neutralBlue?.toFixed(3)}
                   </p>
                   {stats.mean[1] < 0.002 ? (
-                    <p className="text-xs text-amber">
+                    <p className="text-xs text-amber-ink">
                       The ROI is very dark ({(stats.mean[1] * 100).toFixed(2)} % of full scale) — noise dominates
                       the measurement.
                     </p>
                   ) : null}
                   {stats.clipped > 0.05 ? (
-                    <p className="text-xs text-amber">
+                    <p className="text-xs text-amber-ink">
                       {(stats.clipped * 100).toFixed(0)} % of the ROI is clipped (left out).
                     </p>
                   ) : null}
@@ -455,7 +455,7 @@ export function WhiteBalance() {
                   </Button>
                 </>
               ) : (
-                <p className="text-xs text-ink-faint">
+                <p className="text-xs text-ink-muted">
                   {frame ? 'No usable signal in the ROI (black or clipped).' : 'Load a frame first.'}
                 </p>
               )}

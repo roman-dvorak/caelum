@@ -12,7 +12,7 @@ export function DateStrip({ dates, selectedDate, onSelect, className }: DateStri
   const sorted = [...dates].sort((a, b) => b.date.localeCompare(a.date))
 
   if (sorted.length === 0) {
-    return <p className="text-sm text-ink-faint">No captured dates yet.</p>
+    return <p className="text-sm text-ink-muted">No captured dates yet.</p>
   }
 
   return (
@@ -25,14 +25,14 @@ export function DateStrip({ dates, selectedDate, onSelect, className }: DateStri
             type="button"
             onClick={() => onSelect(entry.date)}
             className={[
-              'flex shrink-0 flex-col items-center gap-1 border px-3 py-2 text-sm transition',
+              'flex shrink-0 flex-col items-center gap-1 border px-3 py-2 text-sm transition rounded-md',
               isSelected
-                ? 'border-amber bg-amber/10 text-amber-bright'
-                : 'border-line bg-panel text-ink-dim hover:border-amber-dim',
+                ? 'border-sky bg-sky-surface text-ink'
+                : 'border-border bg-panel text-ink-muted hover:border-sky',
             ].join(' ')}
           >
             <span className="font-mono font-medium">{formatDate(entry.date)}</span>
-            <span className="text-[11px] text-ink-faint">
+            <span className="text-[11px] text-ink-muted">
               {entry.thumbnail_count} frame{entry.thumbnail_count === 1 ? '' : 's'}
               {entry.has_raw ? ` · ${entry.raw_count} raw` : ''}
             </span>

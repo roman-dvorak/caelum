@@ -44,19 +44,19 @@ export function Lightbox({ items, index, onIndexChange, onClose }: LightboxProps
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-void/95 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col bg-surface-0/95 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
-      <div className="flex items-center justify-between px-4 py-3 font-mono text-xs text-ink-faint">
+      <div className="flex items-center justify-between px-4 py-3 font-mono text-xs text-ink-muted">
         <span className="tabular-nums">
           {index + 1} / {items.length}
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="text-ink-dim hover:text-ink"
+          className="text-ink-muted hover:text-ink"
           aria-label="Close"
         >
           <CloseIcon size={22} />
@@ -71,7 +71,7 @@ export function Lightbox({ items, index, onIndexChange, onClose }: LightboxProps
               e.stopPropagation()
               onIndexChange((index - 1 + items.length) % items.length)
             }}
-            className="absolute left-2 text-ink-faint hover:text-ink sm:left-6"
+            className="absolute left-2 text-ink-muted hover:text-ink sm:left-6"
             aria-label="Previous"
           >
             <ChevronLeftIcon size={32} />
@@ -105,7 +105,7 @@ export function Lightbox({ items, index, onIndexChange, onClose }: LightboxProps
               e.stopPropagation()
               onIndexChange((index + 1) % items.length)
             }}
-            className="absolute right-2 text-ink-faint hover:text-ink sm:right-6"
+            className="absolute right-2 text-ink-muted hover:text-ink sm:right-6"
             aria-label="Next"
           >
             <ChevronRightIcon size={32} />
@@ -116,7 +116,7 @@ export function Lightbox({ items, index, onIndexChange, onClose }: LightboxProps
       {item.caption ? (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="border-t border-line-soft px-4 py-3 font-mono text-xs text-ink-dim"
+          className="border-t border-border-subtle px-4 py-3 font-mono text-xs text-ink-muted"
         >
           {item.caption}
         </div>

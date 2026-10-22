@@ -15,14 +15,14 @@ export interface GalleryItemProps {
  * it stacked on top — the same pixels the camera's own live view shows. */
 export function GalleryItem({ slug, time, thumbnailPath, overlayPath, showOverlay = true }: GalleryItemProps) {
   return (
-    <figure className="overflow-hidden border border-line bg-void">
+    <figure className="overflow-hidden border border-border bg-surface-0 rounded-md">
       <ImageViewer
         src={remoteApiClient.resolveCameraUrl(slug, thumbnailPath)}
         overlaySrc={overlayPath ? remoteApiClient.resolveCameraUrl(slug, overlayPath) : null}
         showOverlay={showOverlay}
         alt={`Frame at ${time}`}
       />
-      <figcaption className="border-t border-line-soft px-2 py-1 text-center font-mono text-xs text-ink-faint">
+      <figcaption className="border-t border-border-subtle px-2 py-1 text-center font-mono text-xs text-ink-muted">
         {formatCaptureTime(time)}
       </figcaption>
     </figure>

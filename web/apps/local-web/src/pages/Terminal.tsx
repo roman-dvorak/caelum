@@ -4,49 +4,59 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { connectTerminal } from '@caelum/api-client'
 import type { TerminalSessionHandle } from '@caelum/api-client'
-import { Button, Message, PageHeader, RefreshIcon, useTheme } from '@caelum/ui'
+import { Button, Message, PageHeader, RefreshIcon, StatusBadge, useTheme } from '@caelum/ui'
 import { useAuth } from '../authContext.ts'
 
 type ConnectionState = 'connecting' | 'open' | 'closed' | 'denied'
 
-/** xterm needs literal colors, not `var(--…)`, so the two palettes are
- * mirrored here from packages/ui/src/theme.css. */
+/** xterm needs literal colors, not `var(--…)`: the Caelum design system's
+ * tokens (packages/ui/src/theme.css), mirrored here. ANSI colours map to the
+ * nearest token — red `error`, green `success`, yellow `amber`, blue and
+ * cyan `sky`, magenta `nebula`'s lighter `sky-dim` pairing. */
 const XTERM_THEMES = {
   dark: {
-    background: '#0b0a08',
-    foreground: '#f3ede1',
-    cursor: '#e8a13a',
-    cursorAccent: '#0b0a08',
-    selectionBackground: 'rgba(232, 161, 58, 0.3)',
-    black: '#16130f',
-    red: '#de6a56',
-    green: '#7cad76',
-    yellow: '#e8a13a',
-    blue: '#6bb3c4',
-    magenta: '#c08ac4',
-    cyan: '#6bb3c4',
-    white: '#ab9d89',
-    brightBlack: '#6e6353',
-    brightYellow: '#ffc266',
-    brightWhite: '#f3ede1',
+    background: '#070a10', // surface-0
+    foreground: '#e2e8f5', // ink
+    cursor: '#e8a13a', // amber
+    cursorAccent: '#070a10',
+    selectionBackground: 'rgba(232, 161, 58, 0.28)',
+    black: '#141a24', // surface-200
+    red: '#e85a4a', // error
+    green: '#2ecc9a', // success
+    yellow: '#e8a13a', // amber
+    blue: '#5a8ee8', // sky
+    magenta: '#8a9db8', // ink-muted
+    cyan: '#5a8ee8', // sky
+    white: '#8a9db8', // ink-muted
+    brightBlack: '#4a5e78', // ink-dim
+    brightRed: '#e85a4a',
+    brightGreen: '#2ecc9a',
+    brightYellow: '#f5c96a', // amber-light
+    brightBlue: '#5a8ee8',
+    brightCyan: '#5a8ee8',
+    brightWhite: '#e2e8f5', // ink
   },
   light: {
-    background: '#ffffff',
-    foreground: '#1b1712',
-    cursor: '#a9690f',
+    background: '#ffffff', // surface-100
+    foreground: '#0d1117', // ink
+    cursor: '#a06820', // amber-dim
     cursorAccent: '#ffffff',
-    selectionBackground: 'rgba(169, 105, 15, 0.22)',
-    black: '#1b1712',
-    red: '#b23a26',
-    green: '#3c7336',
-    yellow: '#a9690f',
-    blue: '#276476',
-    magenta: '#8a4a90',
-    cyan: '#276476',
-    white: '#5d5346',
-    brightBlack: '#8d8271',
-    brightYellow: '#855009',
-    brightWhite: '#1b1712',
+    selectionBackground: 'rgba(196, 131, 42, 0.22)',
+    black: '#0d1117', // ink
+    red: '#c03020', // error
+    green: '#1aaa78', // success
+    yellow: '#a06820', // amber-dim
+    blue: '#2a5aaa', // sky-dim
+    magenta: '#4a5e78', // ink-muted
+    cyan: '#2a5aaa', // sky-dim
+    white: '#4a5e78', // ink-muted
+    brightBlack: '#8a9db8', // ink-dim
+    brightRed: '#c03020',
+    brightGreen: '#1aaa78',
+    brightYellow: '#a06820',
+    brightBlue: '#3a6ec8', // sky
+    brightCyan: '#3a6ec8',
+    brightWhite: '#0d1117',
   },
 } as const
 
@@ -64,8 +74,7 @@ export function TerminalPage() {
     if (!enabled || !hostRef.current) return
 
     const term = new XTerm({
-      fontFamily:
-        "ui-monospace, 'Cascadia Code', 'SF Mono', 'Roboto Mono', Consolas, monospace",
+      fontFamily: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",
       fontSize: 13,
       cursorBlink: true,
       scrollback: 5000,
@@ -152,7 +161,7 @@ export function TerminalPage() {
       ) : null}
 
       <div
-        className="border border-line bg-panel p-2"
+        className="border border-border bg-panel p-2 rounded-md"
         // xterm measures its own host, so it needs a concrete height rather
         // than one that depends on its content.
         style={{ height: 'min(70svh, 40rem)' }}
@@ -164,12 +173,7 @@ export function TerminalPage() {
 }
 
 function StatusPill({ state }: { state: ConnectionState }) {
-  const styles: Record<ConnectionState, string> = {
-    connecting: 'border-line text-ink-faint',
-    open: 'border-success/50 text-success',
-    closed: 'border-line text-ink-faint',
-    denied: 'border-danger/50 text-danger',
-  }
+  const tones = { connecting: 'neutral', open: 'success', closed: 'neutral', denied: 'error' } as const
   const labels: Record<ConnectionState, string> = {
     connecting: 'Connecting',
     open: 'Connected',
@@ -177,8 +181,6 @@ function StatusPill({ state }: { state: ConnectionState }) {
     denied: 'Refused',
   }
   return (
-    <span className={`border px-2 py-1 text-[0.65rem] tracking-[0.15em] uppercase ${styles[state]}`}>
-      {labels[state]}
-    </span>
+    <StatusBadge tone={tones[state]}>{labels[state]}</StatusBadge>
   )
 }

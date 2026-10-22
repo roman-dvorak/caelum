@@ -18,6 +18,7 @@ import {
   Panel,
   Readout,
   RefreshIcon,
+  SegmentedControl,
   TrashIcon,
   formatBytes,
   formatCaptureTime,
@@ -118,21 +119,14 @@ export function Frames() {
         description="Captured frames, with the raw files and derivatives that belong to each."
         actions={
           <>
-            <div className="flex border border-line text-xs">
-              {(['night', 'date'] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setMode(option)}
-                  className={[
-                    'px-3 py-1.5 tracking-wide uppercase transition',
-                    mode === option ? 'bg-amber text-void font-semibold' : 'text-ink-dim hover:text-ink',
-                  ].join(' ')}
-                >
-                  {option === 'night' ? 'Observation day' : 'Date (UTC)'}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              options={[
+                { value: 'night', label: 'Observation day' },
+                { value: 'date', label: 'Date (UTC)' },
+              ]}
+              value={mode}
+              onChange={setMode}
+            />
             <Button icon={<RefreshIcon size={14} />} onClick={() => void reload()}>
               Refresh
             </Button>
@@ -157,7 +151,7 @@ export function Frames() {
             (() => {
               const summary = summaries.find((s) => s.date === selectedLabel)
               return summary ? (
-                <p className="font-mono text-xs text-ink-faint tabular-nums">
+                <p className="font-mono text-xs text-ink-muted tabular-nums">
                   {summary.thumbnails} frames · {summary.raws} raw · {formatBytes(summary.total_bytes)}
                 </p>
               ) : null
@@ -200,21 +194,15 @@ function PeriodDetail({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2">
-        {(['captures', 'derivatives'] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setView(option)}
-            className={[
-              'border px-3 py-1.5 text-xs font-semibold tracking-wide uppercase transition',
-              view === option ? 'border-amber bg-amber/10 text-amber' : 'border-line text-ink-dim hover:border-amber-dim',
-            ].join(' ')}
-          >
-            {option === 'captures' ? 'Captures' : 'Derivatives'}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        className="self-start"
+        options={[
+          { value: 'captures', label: 'Captures' },
+          { value: 'derivatives', label: 'Derivatives' },
+        ]}
+        value={view}
+        onChange={setView}
+      />
 
       {view === 'captures' ? (
         <CapturesGallery
@@ -355,18 +343,18 @@ function CapturesGallery({
           isAdmin ? (
             <>
               <Button
-                variant="danger"
+                variant="error"
                 icon={<TrashIcon size={14} />}
                 disabled={busy || selection.size === 0}
                 onClick={() => void deleteSelection()}
               >
                 Delete {selection.size || ''} selected
               </Button>
-              <Button variant="danger" disabled={busy || totalRaws === 0} onClick={() => void deleteRawOnlyOnPage()}>
+              <Button variant="error" disabled={busy || totalRaws === 0} onClick={() => void deleteRawOnlyOnPage()}>
                 Delete raw on page
               </Button>
               <Button
-                variant="danger"
+                variant="error"
                 icon={<TrashIcon size={14} />}
                 disabled={busy}
                 onClick={() => onDeleteWholePeriod(listing.utc_dates)}
@@ -409,15 +397,15 @@ function CapturesGallery({
       )}
 
       {listing.total_frames > PAGE_SIZE ? (
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-3">
-          <span className="font-mono text-xs text-ink-faint tabular-nums">
+        <div className="flex items-center justify-between gap-3 border-t border-border-subtle pt-3">
+          <span className="font-mono text-xs text-ink-muted tabular-nums">
             {rangeStart}–{rangeEnd} of {listing.total_frames}
           </span>
           <div className="flex items-center gap-2">
             <Button disabled={currentPage === 0} onClick={() => setPage((p) => p - 1)}>
               Previous
             </Button>
-            <span className="font-mono text-xs text-ink-faint tabular-nums">
+            <span className="font-mono text-xs text-ink-muted tabular-nums">
               Page {currentPage + 1} / {pageCount}
             </span>
             <Button disabled={currentPage + 1 >= pageCount} onClick={() => setPage((p) => p + 1)}>
@@ -460,13 +448,13 @@ function frameImageUrl(frame: FrameEntry): string | null {
  * raw" is itself the information you came to the page for — a chip that
  * simply vanished would be indistinguishable from a layout quirk. */
 function AssetChip({ label, path, title }: { label: string; path: string | null; title: string }) {
-  const className = 'px-1 py-0.5 font-mono text-[0.6rem] tracking-wide border transition'
+  const className = 'px-1 py-0.5 font-mono text-[0.6rem] tracking-wide border transition rounded-md'
 
   if (!path) {
     return (
       <span
         title={`No ${title} for this capture`}
-        className={`${className} border-line-soft text-ink-faint line-through decoration-ink-faint/60`}
+        className={`${className} border-border-subtle text-ink-muted line-through decoration-ink-muted/60`}
       >
         {label}
       </span>
@@ -476,7 +464,7 @@ function AssetChip({ label, path, title }: { label: string; path: string | null;
     <a
       href={localApiClient.fileContentUrl(path, true)}
       title={`Download ${title}`}
-      className={`${className} border-cyan-dim text-cyan hover:border-cyan hover:bg-cyan/10`}
+      className={`${className} border-sky-dim text-sky hover:border-sky hover:bg-sky/10`}
     >
       {label}
     </a>
@@ -521,8 +509,8 @@ function FrameTile({
   const overlayUrl = showOverlay ? frameOverlayUrl(frame) : null
 
   return (
-    <div className={['relative overflow-hidden border transition', selected ? 'border-amber' : 'border-line'].join(' ')}>
-      <button type="button" onClick={onOpen} className="block aspect-4/3 w-full bg-void">
+    <div className={['relative overflow-hidden border transition rounded-md', selected ? 'border-amber' : 'border-border'].join(' ')}>
+      <button type="button" onClick={onOpen} className="block aspect-4/3 w-full bg-surface-0">
         {imageUrl ? (
           <span className="relative block h-full w-full">
             <img src={imageUrl} alt={frame.time} loading="lazy" className="h-full w-full object-cover" />
@@ -537,7 +525,7 @@ function FrameTile({
             ) : null}
           </span>
         ) : (
-          <span className="flex h-full items-center justify-center text-xs text-ink-faint">no image</span>
+          <span className="flex h-full items-center justify-center text-xs text-ink-muted">no image</span>
         )}
       </button>
       {selectable ? (
@@ -589,10 +577,10 @@ function DerivativesGallery({ mode, label }: { mode: GroupMode; label: string })
             type="button"
             onClick={() => setKind(k.kind)}
             className={[
-              'shrink-0 border px-3 py-1.5 font-mono text-xs transition',
+              'shrink-0 border px-3 py-1.5 font-mono text-xs transition rounded-md',
               k.kind === kind
-                ? 'border-amber bg-amber/8 text-amber'
-                : 'border-line text-ink-dim hover:border-amber-dim hover:text-ink',
+                ? 'border-sky bg-sky-surface text-ink'
+                : 'border-border text-ink-muted hover:border-sky hover:text-ink',
             ].join(' ')}
           >
             {k.kind} ({k.count})
@@ -659,7 +647,7 @@ function DerivativeKindGallery({ mode, label, kind }: { mode: GroupMode; label: 
               key={entry.stem}
               type="button"
               onClick={() => setLightboxIndex(index)}
-              className="aspect-square overflow-hidden border border-line bg-void"
+              className="aspect-square overflow-hidden border border-border bg-surface-0 rounded-md"
             >
               <img
                 // The day's keogram is one file rewritten as the night goes
@@ -677,15 +665,15 @@ function DerivativeKindGallery({ mode, label, kind }: { mode: GroupMode; label: 
       )}
 
       {listing.total > PAGE_SIZE ? (
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-3">
-          <span className="font-mono text-xs text-ink-faint tabular-nums">
+        <div className="flex items-center justify-between gap-3 border-t border-border-subtle pt-3">
+          <span className="font-mono text-xs text-ink-muted tabular-nums">
             {listing.offset + 1}–{Math.min(listing.offset + listing.entries.length, listing.total)} of {listing.total}
           </span>
           <div className="flex items-center gap-2">
             <Button disabled={currentPage === 0} onClick={() => setPage((p) => p - 1)}>
               Previous
             </Button>
-            <span className="font-mono text-xs text-ink-faint tabular-nums">
+            <span className="font-mono text-xs text-ink-muted tabular-nums">
               Page {currentPage + 1} / {pageCount}
             </span>
             <Button disabled={currentPage + 1 >= pageCount} onClick={() => setPage((p) => p + 1)}>

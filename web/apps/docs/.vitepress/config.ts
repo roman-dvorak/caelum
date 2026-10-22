@@ -62,7 +62,7 @@ export default defineConfig({
   },
 
   head: [
-    ['meta', { name: 'theme-color', content: '#e8a13a' }],
+    ['meta', { name: 'theme-color', content: '#1c305c' }],
     ['link', { rel: 'icon', href: `${base}favicon.svg` }],
     ['meta', { property: 'og:site_name', content: 'caelum' }],
     ['meta', { property: 'og:image', content: ogImage }],

@@ -1,27 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { connectLogs } from '@caelum/api-client'
 import type { LogEntry } from '@caelum/api-client'
-import {
-  Button,
-  Field,
-  Message,
-  PageHeader,
-  PauseIcon,
-  PlayIcon,
-  RefreshIcon,
-  TrashIcon,
-  inputClass,
-} from '@caelum/ui'
+import { Button, Field, Message, PageHeader, PauseIcon, PlayIcon, RefreshIcon, StatusBadge, TrashIcon, buttonClass, inputClass } from '@caelum/ui'
 
 type ConnectionState = 'connecting' | 'open' | 'closed'
 type LevelFilter = 'ALL' | 'INFO' | 'WARNING' | 'ERROR'
 
 const LEVEL_STYLES: Record<string, string> = {
-  DEBUG: 'text-ink-faint',
-  INFO: 'text-ink-dim',
-  WARNING: 'text-amber',
-  ERROR: 'text-danger',
-  CRITICAL: 'text-danger font-semibold',
+  DEBUG: 'text-ink-muted',
+  INFO: 'text-ink-muted',
+  WARNING: 'text-amber-ink',
+  ERROR: 'text-error',
+  CRITICAL: 'text-error font-semibold',
 }
 
 const LEVEL_RANK: Record<string, number> = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 }
@@ -196,10 +186,10 @@ function LogsView({ onReconnect }: { onReconnect: () => void }) {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="h-[65svh] overflow-y-auto border border-line bg-void p-3 font-mono text-xs leading-relaxed"
+        className="h-[65svh] overflow-y-auto border border-border bg-surface-0 p-3 font-mono text-xs leading-relaxed rounded-md"
       >
         {filtered.length === 0 ? (
-          <p className="text-ink-faint">
+          <p className="text-ink-muted">
             {entries.length === 0 ? 'Waiting for log output…' : 'No lines match the current filter.'}
           </p>
         ) : (
@@ -214,7 +204,7 @@ function LogsView({ onReconnect }: { onReconnect: () => void }) {
             setAutoScroll(true)
             if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
           }}
-          className="mt-2 w-full border border-amber-dim py-1.5 text-xs tracking-wide text-amber uppercase transition hover:bg-amber/10"
+          className={buttonClass('secondary', 'mt-2 w-full')}
         >
           Scrolled up — click to jump to the latest
         </button>
@@ -226,12 +216,12 @@ function LogsView({ onReconnect }: { onReconnect: () => void }) {
 function LogLine({ entry }: { entry: LogEntry }) {
   const time = entry.timestamp.slice(11, 23) || entry.timestamp
   return (
-    <div className="flex gap-2 whitespace-pre-wrap break-all border-b border-line-soft/40 py-0.5 last:border-b-0">
-      <span className="shrink-0 text-ink-faint tabular-nums">{time}</span>
-      <span className={`w-16 shrink-0 font-semibold ${LEVEL_STYLES[entry.level] ?? 'text-ink-dim'}`}>
+    <div className="flex gap-2 whitespace-pre-wrap break-all border-b border-border-subtle/40 py-0.5 last:border-b-0">
+      <span className="shrink-0 text-ink-muted tabular-nums">{time}</span>
+      <span className={`w-16 shrink-0 font-semibold ${LEVEL_STYLES[entry.level] ?? 'text-ink-muted'}`}>
         {entry.level}
       </span>
-      <span className="shrink-0 text-cyan">{entry.logger}</span>
+      <span className="shrink-0 text-sky">{entry.logger}</span>
       <span className="text-ink">{entry.message}</span>
     </div>
   )
@@ -248,24 +238,16 @@ function StatusPill({
 }) {
   if (paused) {
     return (
-      <span className="border border-amber-dim px-2 py-1 text-[0.65rem] tracking-[0.15em] text-amber uppercase">
-        Paused{heldCount ? ` · +${heldCount}` : ''}
-      </span>
+      <StatusBadge tone="warning">Paused{heldCount ? ` · +${heldCount}` : ''}</StatusBadge>
     )
   }
-  const styles: Record<ConnectionState, string> = {
-    connecting: 'border-line text-ink-faint',
-    open: 'border-success/50 text-success',
-    closed: 'border-danger/50 text-danger',
-  }
+  const tones = { connecting: 'neutral', open: 'success', closed: 'error' } as const
   const labels: Record<ConnectionState, string> = {
     connecting: 'Connecting',
     open: 'Live',
     closed: 'Disconnected',
   }
   return (
-    <span className={`border px-2 py-1 text-[0.65rem] tracking-[0.15em] uppercase ${styles[state]}`}>
-      {labels[state]}
-    </span>
+    <StatusBadge tone={tones[state]}>{labels[state]}</StatusBadge>
   )
 }

@@ -1,53 +1,106 @@
-/* Maps VitePress' theme variables onto the caelum palette. The light values
- * are copied from packages/ui/src/theme.css — that file is the source of
- * truth; VitePress cannot import it, because Tailwind's `@theme` block is not
- * plain CSS.
+/* Maps VitePress' theme variables onto the Caelum design system. The values
+ * are the design system's tokens, as in packages/ui/src/theme.css (the
+ * source of truth for the apps; VitePress cannot import it, because
+ * Tailwind's `@theme` block is not plain CSS).
  *
- * Dark mode deliberately keeps VitePress' own neutral surfaces and text (the
- * apps' near-black palette is too harsh for long reading) and only swaps in
- * the caelum amber. The light block is scoped to `html:not(.dark)` for that
- * reason: on plain `:root` it would beat VitePress' `.dark` rules, which have
- * the same specificity but load earlier. */
+ * Roles follow the design system: links, the active sidebar entry and other
+ * navigation are `sky`; `amber` is kept for the primary call to action.
+ * Dark reading surfaces are `surface-100` (not the page's space-black
+ * `surface-0`), which is easier on long text. The light block is scoped to
+ * `html:not(.dark)`: on plain `:root` it would beat VitePress' `.dark` rules,
+ * which have the same specificity but load earlier. */
+
+:root {
+  --vp-font-family-base: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --caelum-font-display: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
+}
 
 html:not(.dark) {
-  --vp-c-brand-1: #a9690f;
-  --vp-c-brand-2: #855009;
-  --vp-c-brand-3: #a9690f;
-  --vp-c-brand-soft: rgba(169, 105, 15, 0.14);
+  --vp-c-brand-1: #3a6ec8; /* sky */
+  --vp-c-brand-2: #2a5aaa; /* sky-dim */
+  --vp-c-brand-3: #3a6ec8;
+  --vp-c-brand-soft: #e8f0fc; /* sky-surface */
 
-  --vp-c-bg: #f7f4ee;
-  --vp-c-bg-alt: #f1ece2;
-  --vp-c-bg-soft: #fbf8f2;
+  --vp-c-bg: #ffffff; /* surface-100 */
+  --vp-c-bg-alt: #f4f6fa; /* surface-0 */
+  --vp-c-bg-soft: #eef1f7; /* surface-200 */
   --vp-c-bg-elv: #ffffff;
 
-  --vp-c-text-1: #1b1712;
-  --vp-c-text-2: #5d5346;
-  --vp-c-text-3: #8d8271;
+  --vp-c-text-1: #0d1117; /* ink */
+  --vp-c-text-2: #4a5e78; /* ink-muted */
+  --vp-c-text-3: #4a5e78; /* ink-muted: ink-dim is for disabled text only */
 
-  --vp-c-divider: #ddd5c5;
-  --vp-c-border: #ddd5c5;
-  --vp-c-gutter: #ece7dc;
+  --vp-c-divider: #dde4f0; /* border-subtle */
+  --vp-c-border: #c0cce0; /* border */
+  --vp-c-gutter: #dde4f0;
 
-  --vp-font-family-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Roboto Mono', Consolas, monospace;
+  --vp-button-brand-bg: #c4832a; /* amber */
+  --vp-button-brand-hover-bg: #e8a13a; /* amber-light */
+  --vp-button-brand-active-bg: #a06820; /* amber-dim */
+  --vp-button-brand-text: #070a10;
+  --vp-button-brand-hover-text: #070a10;
+  --vp-button-brand-active-text: #070a10;
 
   --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #a9690f, #276476);
+  --vp-home-hero-name-background: linear-gradient(140deg, #1c305c 20%, #3a6ec8 55%, #c4832a 100%);
 }
 
 .dark {
-  --vp-c-brand-1: #e8a13a;
-  --vp-c-brand-2: #ffc266;
-  --vp-c-brand-3: #e8a13a;
-  --vp-c-brand-soft: rgba(232, 161, 58, 0.16);
-  --vp-home-hero-name-background: linear-gradient(120deg, #e8a13a, #6bb3c4);
+  --vp-c-brand-1: #5a8ee8; /* sky */
+  --vp-c-brand-2: #3a6ec8; /* sky-dim */
+  --vp-c-brand-3: #5a8ee8;
+  --vp-c-brand-soft: #0e1a2e; /* sky-surface */
+
+  --vp-c-bg: #0d1117; /* surface-100 */
+  --vp-c-bg-alt: #070a10; /* surface-0 */
+  --vp-c-bg-soft: #141a24; /* surface-200 */
+  --vp-c-bg-elv: #1c2535; /* surface-300 */
+
+  --vp-c-text-1: #e2e8f5; /* ink */
+  --vp-c-text-2: #8a9db8; /* ink-muted */
+  --vp-c-text-3: #8a9db8;
+
+  --vp-c-divider: #1e2d42; /* border-subtle */
+  --vp-c-border: #2a3a52; /* border */
+  --vp-c-gutter: #070a10;
+
+  --vp-button-brand-bg: #e8a13a; /* amber */
+  --vp-button-brand-hover-bg: #f5c96a; /* amber-light */
+  --vp-button-brand-active-bg: #c4832a; /* amber-dim */
+  --vp-button-brand-text: #070a10;
+  --vp-button-brand-hover-text: #070a10;
+  --vp-button-brand-active-text: #070a10;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(140deg, #e2e8f5 20%, #b8ccee 55%, #e8a13a 100%);
 }
 
-/* The apps use sharp corners throughout; rounded doc cards next to them
- * look like a different product. */
-.VPFeature,
-.vp-doc div[class*='language-'],
+/* Headings and the wordmark in the display face. */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.VPHero .name,
+.VPHero .text,
+.VPNavBarTitle .title,
+.VPFeature .title {
+  font-family: var(--caelum-font-display);
+  letter-spacing: -0.01em;
+}
+.VPHero .name,
+.VPNavBarTitle .title {
+  letter-spacing: -0.03em;
+}
+
+/* Radii: cards `radius-lg`, callouts `radius-md`, code `radius-sm`. */
+.VPFeature {
+  border-radius: 12px;
+}
 .custom-block {
-  border-radius: 2px;
+  border-radius: 8px;
+}
+.vp-doc div[class*='language-'] {
+  border-radius: 4px;
 }
 
 .vp-doc table {
@@ -79,18 +132,19 @@ html:not(.dark) {
   margin: 48px auto 0;
   padding: 24px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 2px;
+  border-radius: 12px;
   background: var(--vp-c-bg-soft);
 }
 .maintainer img { flex: none; }
 .maintainer p { margin: 0; line-height: 1.6; color: var(--vp-c-text-2); }
 .maintainer .maintainer-label {
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--vp-c-text-3);
+  color: var(--vp-c-text-2);
 }
-.maintainer .maintainer-name { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.maintainer .maintainer-name { font-family: var(--caelum-font-display); font-size: 20px; font-weight: 600; margin-bottom: 8px; }
 .maintainer a { color: var(--vp-c-brand-1); text-decoration: none; }
 .maintainer a:hover { text-decoration: underline; }
 @media (max-width: 640px) {
@@ -115,14 +169,14 @@ html:not(.dark) {
   align-items: center;
   margin: 24px 0;
   padding: 20px;
-  border: 1px solid var(--vp-c-brand-1);
-  border-radius: 2px;
-  background: var(--vp-c-brand-soft);
+  border: 1px solid var(--vp-button-brand-bg);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
 }
-.vp-doc .support-box img { width: 160px; flex: none; border-radius: 2px; }
+.vp-doc .support-box img { width: 160px; flex: none; border-radius: 8px; }
 .vp-doc .support-box p { margin: 0 0 8px; }
 .vp-doc .support-box p:last-child { margin-bottom: 0; }
-.vp-doc .support-box .support-title { font-size: 18px; font-weight: 600; color: var(--vp-c-text-1); }
+.vp-doc .support-box .support-title { font-family: var(--caelum-font-display); font-size: 18px; font-weight: 600; color: var(--vp-c-text-1); }
 @media (max-width: 640px) {
   .vp-doc .support-box { flex-direction: column; align-items: stretch; }
   .vp-doc .support-box img { width: 100%; }
@@ -131,13 +185,13 @@ html:not(.dark) {
 /* Photos side by side, stacking on phones. */
 .vp-doc .photo-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 24px 0; }
 .vp-doc .photo-row figure, .vp-doc figure.photo { margin: 0; }
-.vp-doc .photo-row img { width: 100%; height: 260px; object-fit: cover; border-radius: 2px; }
+.vp-doc .photo-row img { width: 100%; height: 260px; object-fit: cover; border-radius: 8px; }
 .vp-doc figure.photo { margin: 24px 0; }
-.vp-doc figure.photo img { border-radius: 2px; }
+.vp-doc figure.photo img { border-radius: 8px; }
 .vp-doc figcaption { margin-top: 6px; font-size: 13px; color: var(--vp-c-text-3); }
 .vp-doc img.screenshot, .vp-doc p > img[src*="/screenshots/"] {
   border: 1px solid var(--vp-c-divider);
-  border-radius: 2px;
+  border-radius: 8px;
 }
 
 /* Six top-bar entries plus search don't fit between the 768px breakpoint
@@ -164,7 +218,7 @@ html:not(.dark) {
 .vp-doc .open-viewer-btn {
   display: inline-block;
   padding: 10px 22px;
-  border-radius: 2px;
+  border-radius: 8px;
   background: var(--vp-button-brand-bg);
   color: var(--vp-button-brand-text);
   font-weight: 600;

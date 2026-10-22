@@ -115,11 +115,11 @@ export default function App() {
         renderNavItem={renderNavItem}
         footer={
           <div className="flex flex-col gap-2">
-            <div className="px-0.5 text-xs text-ink-faint">
+            <div className="px-0.5 text-xs text-ink-muted">
               {isAuthenticated ? (
                 <>
-                  Signed in as <span className="text-ink-dim">{context?.username}</span>
-                  <span className="text-ink-faint"> · {context?.role}</span>
+                  Signed in as <span className="text-ink-muted">{context?.username}</span>
+                  <span className="text-ink-muted"> · {context?.role}</span>
                 </>
               ) : (
                 'Public preview'

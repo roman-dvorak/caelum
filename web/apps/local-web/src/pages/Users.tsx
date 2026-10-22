@@ -63,7 +63,7 @@ export function Users() {
           ) : (
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="text-left text-[0.65rem] tracking-[0.15em] text-ink-faint uppercase">
+                <tr className="text-left text-label-sm tracking-[0.08em] text-ink-muted uppercase">
                   <th className="px-4 py-2 font-medium">User</th>
                   <th className="px-2 py-2 font-medium">Role</th>
                   <th className="hidden px-2 py-2 font-medium sm:table-cell">Last login</th>
@@ -72,11 +72,11 @@ export function Users() {
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user.username} className="border-t border-line-soft">
+                  <tr key={user.username} className="border-t border-border-subtle">
                     <td className="px-4 py-2 font-mono text-ink">
                       {user.username}
                       {user.username === context?.username ? (
-                        <span className="ml-2 text-xs text-ink-faint">(you)</span>
+                        <span className="ml-2 text-xs text-ink-muted">(you)</span>
                       ) : null}
                     </td>
                     <td className="px-2 py-2">
@@ -88,13 +88,13 @@ export function Users() {
                             .then(load)
                             .catch(report)
                         }}
-                        className="border border-line bg-void px-2 py-1 text-xs text-ink"
+                        className="border border-border bg-surface-0 px-2 py-1 text-xs text-ink rounded-md"
                       >
                         <option value="admin">admin</option>
                         <option value="viewer">viewer</option>
                       </select>
                     </td>
-                    <td className="hidden px-2 py-2 font-mono text-xs text-ink-faint sm:table-cell">
+                    <td className="hidden px-2 py-2 font-mono text-xs text-ink-muted sm:table-cell">
                       {formatTimestamp(user.last_login_at)}
                     </td>
                     <td className="px-2 py-2 text-right">
@@ -106,7 +106,7 @@ export function Users() {
                             if (!window.confirm(`Delete account "${user.username}"?`)) return
                             localApiClient.deleteUser(user.username).then(load).catch(report)
                           }}
-                          className="p-1 text-ink-faint transition hover:text-danger"
+                          className="p-1 text-ink-muted transition hover:text-error"
                         >
                           <TrashIcon size={15} />
                         </button>

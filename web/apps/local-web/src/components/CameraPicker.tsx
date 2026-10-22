@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AppConfig, CameraOptions } from '@caelum/api-client'
-import { Field, Message, Panel, Readout, inputClass } from '@caelum/ui'
+import { Field, Message, Panel, Readout, StatusBadge, inputClass } from '@caelum/ui'
 import { localApiClient } from '../services/client.ts'
 
 /**
@@ -75,13 +75,9 @@ export function CameraPicker({ onConfigChange }: { onConfigChange: (config: AppC
       title="Camera"
       actions={
         options.applied ? (
-          <span className="border border-success/50 px-2 py-1 text-[0.65rem] tracking-[0.15em] text-success uppercase">
-            Active
-          </span>
+          <StatusBadge tone="success">Active</StatusBadge>
         ) : (
-          <span className="border border-amber-dim px-2 py-1 text-[0.65rem] tracking-[0.15em] text-amber uppercase">
-            Applying…
-          </span>
+          <StatusBadge tone="warning">Applying…</StatusBadge>
         )
       }
     >
@@ -156,7 +152,7 @@ export function CameraPicker({ onConfigChange }: { onConfigChange: (config: AppC
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 border-t border-line-soft pt-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 border-t border-border-subtle pt-3 sm:grid-cols-4">
           <Readout label="Open backend" value={options.active_backend_class} />
           <Readout label="Open device" value={options.active?.sensor_id ?? '—'} />
           <Readout
@@ -167,7 +163,7 @@ export function CameraPicker({ onConfigChange }: { onConfigChange: (config: AppC
         </div>
 
         {!options.applied ? (
-          <p className="text-xs text-ink-faint">
+          <p className="text-xs text-ink-muted">
             The capture thread reopens the camera between exposures, so a change takes up to one
             capture interval to appear. If it stays pending, the new device probably could not be
             opened — check the Terminal or the service log.

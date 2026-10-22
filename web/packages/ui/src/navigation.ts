@@ -17,14 +17,14 @@ export interface NavSection {
   items: NavItem[]
 }
 
-const NAV_BASE = 'flex items-center gap-2.5 border-l-2 px-3 py-2 text-sm transition select-none'
+const NAV_BASE = 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition select-none'
 
-/** Shared class function for nav links, so both apps highlight identically. */
+/** Shared class function for nav links, so both apps highlight identically.
+ * The current page is `sky` — the design system's navigation colour; amber
+ * stays reserved for what the camera is doing. */
 export function navItemClass(isActive: boolean): string {
   return [
     NAV_BASE,
-    isActive
-      ? 'border-amber bg-amber/8 text-amber'
-      : 'border-transparent text-ink-dim hover:border-line hover:bg-panel-raised hover:text-ink',
+    isActive ? 'bg-sky-surface text-ink [&>svg]:text-sky' : 'text-ink-muted hover:bg-surface-400/40 hover:text-ink',
   ].join(' ')
 }

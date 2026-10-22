@@ -19,18 +19,18 @@ export function KeogramStrip({ src, date, caption, className }: KeogramStripProp
   return (
     <figure className={['flex flex-col gap-2', className ?? ''].join(' ')}>
       {failed ? (
-        <div className="flex h-24 w-full items-center justify-center border border-line-soft bg-panel text-xs text-ink-faint">
+        <div className="flex h-24 w-full items-center justify-center border border-border-subtle bg-panel text-xs text-ink-muted rounded-md">
           No keogram available for {date}
         </div>
       ) : (
         <img
           src={src}
           alt={`Keogram for ${date}`}
-          className="w-full border border-line-soft bg-void"
+          className="w-full border border-border-subtle bg-surface-0 rounded-md"
           onError={() => setFailed(true)}
         />
       )}
-      <figcaption className="font-mono text-xs text-ink-faint">{caption ?? `Keogram · ${date}`}</figcaption>
+      <figcaption className="font-mono text-xs text-ink-muted">{caption ?? `Keogram · ${date}`}</figcaption>
     </figure>
   )
 }

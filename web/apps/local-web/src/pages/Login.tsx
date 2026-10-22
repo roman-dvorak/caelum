@@ -24,16 +24,17 @@ export function Login() {
 
   return (
     <div className="flex min-h-svh items-center justify-center p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm border border-line bg-panel p-6 shadow-[var(--shadow-panel)]"
-      >
-        <div className="mb-6 flex items-baseline gap-2">
-          <span className="h-1.5 w-1.5 translate-y-[-0.15em] rounded-full bg-amber shadow-[0_0_8px_var(--color-amber)]" />
-          <span className="text-sm font-semibold tracking-[0.2em] text-ink uppercase">caelum</span>
+      <form onSubmit={handleSubmit} className="w-full max-w-sm overflow-hidden rounded-xl border border-border bg-panel shadow-lg">
+        <div className="flex flex-col items-center gap-1.5 bg-navy px-6 py-6 text-on-navy">
+          <span className="text-label-sm tracking-[0.2em] uppercase opacity-75">AstroMeters</span>
+          <span className="flex items-center gap-2.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber shadow-glow-amber" />
+            <span className="font-display text-display-xl tracking-[-0.03em]">caelum</span>
+          </span>
+          <span className="text-xs opacity-75">Allsky camera software</span>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 p-6">
           <Field label="Username">
             <input
               className={inputClass}
@@ -62,7 +63,7 @@ export function Login() {
           </Button>
 
           {context?.preview_access === 'public' ? (
-            <p className="text-center text-xs text-ink-faint">
+            <p className="text-center text-xs text-ink-muted">
               The live preview on this camera is public — sign in only to control it.
             </p>
           ) : null}
@@ -71,7 +72,7 @@ export function Login() {
             href={`${DOCS_URL}/guide/security.html`}
             target="_blank"
             rel="noreferrer noopener"
-            className="text-center text-xs text-ink-faint underline decoration-line underline-offset-4 hover:text-ink"
+            className="text-center text-xs text-sky underline-offset-4 hover:underline"
           >
             Forgot the password?
           </a>

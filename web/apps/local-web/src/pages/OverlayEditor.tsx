@@ -389,7 +389,7 @@ export function OverlayEditor() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <div ref={containerRef} className="relative self-start overflow-hidden border border-line bg-void">
+        <div ref={containerRef} className="relative self-start overflow-hidden border border-border bg-surface-0 rounded-md">
           <img src={previewUrl} alt="Latest camera frame" className="block w-full" onClick={() => setSelectedId(null)} />
           {overlayPreviewUrl ? (
             <img
@@ -430,7 +430,7 @@ export function OverlayEditor() {
         {tab === 'elements' ? (
           <div className="flex flex-col gap-3">
             <Panel title="Overlay plugin">
-              <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase">
+              <label className="flex items-center gap-2 text-label-md text-ink-muted">
                 <input
                   type="checkbox"
                   checked={plugins?.overlay?.enabled ?? false}
@@ -440,7 +440,7 @@ export function OverlayEditor() {
                 Enabled
               </label>
               {!plugins?.overlay?.enabled ? (
-                <p className="mt-1 text-xs text-ink-faint">
+                <p className="mt-1 text-xs text-ink-muted">
                   Elements below only show on the live view once this is enabled and saved.
                 </p>
               ) : null}
@@ -458,7 +458,7 @@ export function OverlayEditor() {
                   <option value="burn">Burned into the WebP</option>
                   <option value="off">Off</option>
                 </select>
-                <p className="text-xs text-ink-faint">
+                <p className="text-xs text-ink-muted">
                   The camera renders the overlay once per frame — the live view, the Frames page and the remote
                   viewer all show that same image. A separate file keeps the clean thumbnail and can be hidden;
                   burned in, it is part of the picture. Applies to frames captured from now on.
@@ -486,7 +486,7 @@ export function OverlayEditor() {
                   </Button>
                   <Button onClick={duplicateTemplate}>Duplicate</Button>
                   <Button onClick={renameTemplate}>Rename</Button>
-                  <Button variant="danger" onClick={deleteTemplate}>
+                  <Button variant="error" onClick={deleteTemplate}>
                     Delete
                   </Button>
                 </div>
@@ -503,7 +503,7 @@ export function OverlayEditor() {
 
             <Panel title={`Elements (${elements.length})`} bodyClassName="p-2">
               {elements.length === 0 ? (
-                <p className="px-2 py-1 text-sm text-ink-faint">None yet — add one above.</p>
+                <p className="px-2 py-1 text-sm text-ink-muted">None yet — add one above.</p>
               ) : (
                 <ul className="flex flex-col gap-1">
                   {elements.map((element) => (
@@ -512,10 +512,10 @@ export function OverlayEditor() {
                         type="button"
                         onClick={() => setSelectedId(element.id)}
                         className={[
-                          'w-full border px-2 py-1 text-left font-mono text-xs',
+                          'w-full border px-2 py-1 text-left font-mono text-xs rounded-md',
                           element.id === selectedId
-                            ? 'border-amber-dim bg-amber/10 text-ink'
-                            : 'border-transparent text-ink-dim hover:border-line',
+                            ? 'border-sky bg-sky-surface text-ink'
+                            : 'border-transparent text-ink-muted hover:border-border',
                         ].join(' ')}
                       >
                         {element.kind} — {element.id.slice(0, 8)}
@@ -546,7 +546,7 @@ export function OverlayEditor() {
           <div className="flex flex-col gap-3">
             <Panel title="Telescope demo">
               <div className="flex flex-col gap-3">
-                <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase">
+                <label className="flex items-center gap-2 text-label-md text-ink-muted">
                   <input
                     type="checkbox"
                     checked={plugins?.telescope_position?.enabled ?? false}
@@ -555,7 +555,7 @@ export function OverlayEditor() {
                   />
                   Enabled
                 </label>
-                <p className="text-xs text-ink-faint">
+                <p className="text-xs text-ink-muted">
                   Source: simulated demo sweep — stands in for a future INDI mount connection. Drag the
                   center point and its radius handle on the preview to calibrate the projection.
                 </p>
@@ -574,7 +574,7 @@ export function OverlayEditor() {
                     onChange={(e) => setTelescope((c) => ({ ...c, azimuth_offset_deg: Number(e.target.value) }))}
                   />
                 </Field>
-                <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase">
+                <label className="flex items-center gap-2 text-label-md text-ink-muted">
                   <input
                     type="checkbox"
                     checked={telescope.mirror}
@@ -595,7 +595,7 @@ export function OverlayEditor() {
           <div className="flex flex-col gap-3">
             <Panel title="Lens calibration">
               <div className="flex flex-col gap-3">
-                <p className="text-xs text-ink-faint">
+                <p className="text-xs text-ink-muted">
                   Describes the camera's own fisheye projection, used to convert a pixel position into an
                   alt/az sky position. Drag the center point and its radius handle on the preview, or enter
                   values directly.
@@ -635,7 +635,7 @@ export function OverlayEditor() {
                     onChange={(e) => setLens((c) => ({ ...c, azimuth_offset_deg: Number(e.target.value) }))}
                   />
                 </Field>
-                <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase">
+                <label className="flex items-center gap-2 text-label-md text-ink-muted">
                   <input
                     type="checkbox"
                     checked={lens.mirror}
@@ -651,7 +651,7 @@ export function OverlayEditor() {
             </Button>
             <Panel title="Visual calibration">
               <div className="flex flex-col gap-2">
-                <p className="text-xs text-ink-faint">
+                <p className="text-xs text-ink-muted">
                   Click known stars in a live frame and their real alt/az to fit these parameters
                   automatically — not built yet, manual entry above is the only option for now.
                 </p>
@@ -680,8 +680,8 @@ export function OverlayEditor() {
         type="button"
         onClick={onClick}
         className={[
-          'border px-3 py-1.5 text-xs font-semibold tracking-wide uppercase transition',
-          active ? 'border-amber bg-amber/10 text-amber' : 'border-line text-ink-dim hover:border-amber-dim',
+          'rounded-md border px-3 py-1.5 text-sm font-medium transition',
+          active ? 'border-sky bg-sky-surface text-ink' : 'border-border text-ink-muted hover:border-sky',
         ].join(' ')}
       >
         {children}
@@ -734,7 +734,7 @@ function ElementBox({
     window.addEventListener('pointerup', onUp)
   }
 
-  const borderColor = selected ? 'border-amber' : 'border-cyan/70'
+  const borderColor = selected ? 'border-amber' : 'border-sky/70'
 
   // Handles only — the element itself is in the camera-rendered preview
   // underneath. A label's handle sits on its anchor the way the renderer
@@ -746,7 +746,7 @@ function ElementBox({
       <div
         onPointerDown={(e) => startDrag(e, 'move')}
         title={def.template ?? undefined}
-        className={['absolute h-5 min-w-5 cursor-move border border-dashed', alignClass, valignClass, borderColor].join(' ')}
+        className={['absolute h-5 min-w-5 cursor-move border border-dashed rounded-md', alignClass, valignClass, borderColor].join(' ')}
         style={{ left: `${def.x * 100}%`, top: `${def.y * 100}%` }}
       />
     )
@@ -765,7 +765,7 @@ function ElementBox({
     >
       <div
         onPointerDown={(e) => startDrag(e, 'resize')}
-        className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize border border-void bg-amber"
+        className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize border border-surface-0 bg-amber rounded-md"
       />
     </div>
   )
@@ -826,13 +826,13 @@ function TelescopeOverlay<T extends CenterRadiusCalibration>({
       />
       <div
         onPointerDown={(e) => startDrag(e, 'center')}
-        className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-move rounded-full border-2 border-void bg-amber"
+        className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-move rounded-full border-2 border-surface-0 bg-amber"
         style={{ left: `${settings.center_x * 100}%`, top: `${settings.center_y * 100}%` }}
         title="Zenith center — drag to move"
       />
       <div
         onPointerDown={(e) => startDrag(e, 'radius')}
-        className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-void bg-cyan"
+        className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-surface-0 bg-sky"
         style={{ left: `${(settings.center_x + settings.radius) * 100}%`, top: `${settings.center_y * 100}%` }}
         title="Horizon radius — drag to resize"
       />
@@ -885,7 +885,7 @@ function ElementProperties({
                   key={p}
                   type="button"
                   onClick={() => onChange({ template: `${element.template ?? ''}{${p}}` })}
-                  className="border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-faint hover:border-amber-dim hover:text-ink"
+                  className="border border-border px-1.5 py-0.5 font-mono text-[10px] text-ink-muted hover:border-sky hover:text-ink rounded-md"
                 >
                   {`{${p}}`}
                 </button>
@@ -922,7 +922,7 @@ function ElementProperties({
                 <option value="bottom">Bottom</option>
               </select>
             </Field>
-            <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase">
+            <label className="flex items-center gap-2 text-label-md text-ink-muted">
               <input
                 type="checkbox"
                 checked={Boolean(element.background)}
@@ -938,7 +938,7 @@ function ElementProperties({
                     type="color"
                     value={element.background}
                     onChange={(e) => onChange({ background: e.target.value })}
-                    className="h-8 w-16 border border-line bg-void"
+                    className="h-8 w-16 border border-border bg-surface-0 rounded-md"
                   />
                 </Field>
                 <Field label={`Box opacity (${(element.background_opacity ?? 0.55).toFixed(2)})`}>
@@ -992,7 +992,7 @@ function ElementProperties({
               type="color"
               value={element.color}
               onChange={(e) => onChange({ color: e.target.value })}
-              className="h-8 w-16 border border-line bg-void"
+              className="h-8 w-16 border border-border bg-surface-0 rounded-md"
             />
           </Field>
         ) : null}
@@ -1010,7 +1010,7 @@ function ElementProperties({
           </Field>
         ) : null}
 
-        <Button variant="danger" onClick={onDelete}>
+        <Button variant="error" onClick={onDelete}>
           Delete element
         </Button>
       </div>

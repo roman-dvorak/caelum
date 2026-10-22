@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { PluginsResponse } from '@caelum/api-client'
+import { Button, EmptyState, Loading, Message, PageHeader, StatusBadge, inputClass } from '@caelum/ui'
 import { usePlugins } from '../hooks/usePlugins.ts'
 
 export function Plugins() {
@@ -9,18 +10,16 @@ export function Plugins() {
 
   const orderedIds = useMemo(() => Object.keys(plugins ?? {}), [plugins])
 
-  if (loading) return <p className="text-sm text-ink-faint">Loading plugins…</p>
-  if (error) {
-    return <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
-  }
+  if (loading) return <Loading label="Loading plugins…" />
+  if (error) return <Message kind="error">{error}</Message>
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-sm font-semibold tracking-[0.2em] text-ink-dim uppercase">Plugins</h1>
-      {message ? <p className="text-sm text-ink-dim">{message}</p> : null}
+      <PageHeader title="Plugins" description="Built-in and user plugins, in the order they run on each frame." />
+      {message ? <Message kind="info">{message}</Message> : null}
 
       {!plugins || orderedIds.length === 0 ? (
-        <p className="border border-line bg-panel px-4 py-3 text-sm text-ink-faint">No plugins registered.</p>
+        <EmptyState>No plugins registered.</EmptyState>
       ) : (
         <div className="flex flex-col gap-4">
           {orderedIds.map((id, index) => (
@@ -129,32 +128,21 @@ function PluginCard({
   }
 
   return (
-    <section className="flex flex-col gap-3 border border-line bg-panel p-4">
+    <section className="flex flex-col gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-sm text-ink">{id}</span>
-          <span className="font-mono text-xs text-ink-faint">order {plugin.order}</span>
+          <span className="font-display text-display-sm text-ink">{id}</span>
+          <span className="font-mono text-code-sm text-ink-muted">order {plugin.order}</span>
+          <StatusBadge tone={plugin.enabled ? 'success' : 'neutral'}>{plugin.enabled ? 'Enabled' : 'Off'}</StatusBadge>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onMove(-1)}
-            disabled={busy || index === 0}
-            title="Move up"
-            className="border border-line px-2 py-1 text-xs text-ink-dim hover:border-amber-dim hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
-          >
+          <Button variant="ghost" onClick={() => onMove(-1)} disabled={busy || index === 0} title="Move up" aria-label="Move up" className="px-2">
             ↑
-          </button>
-          <button
-            type="button"
-            onClick={() => onMove(1)}
-            disabled={busy || index === total - 1}
-            title="Move down"
-            className="border border-line px-2 py-1 text-xs text-ink-dim hover:border-amber-dim hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => onMove(1)} disabled={busy || index === total - 1} title="Move down" aria-label="Move down" className="px-2">
             ↓
-          </button>
-          <label className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-ink-dim uppercase">
+          </Button>
+          <label className="flex items-center gap-1.5 text-label-md text-ink-muted">
             <input
               type="checkbox"
               checked={plugin.enabled}
@@ -167,27 +155,22 @@ function PluginCard({
         </div>
       </div>
 
-      <label className="flex flex-col gap-1 text-xs font-medium tracking-wide text-ink-dim uppercase">
+      <label className="flex flex-col gap-1.5 text-label-md text-ink-muted">
         Settings (JSON)
         <textarea
           value={settingsText}
           onChange={(e) => setSettingsText(e.target.value)}
           rows={6}
           spellCheck={false}
-          className="border border-line bg-void px-3 py-2 font-mono text-xs font-normal tracking-normal text-ink normal-case focus:border-amber focus:outline-none"
+          className={`${inputClass} text-code-sm font-normal`}
         />
       </label>
-      {settingsError ? <p className="text-xs text-danger">{settingsError}</p> : null}
+      {settingsError ? <p className="text-xs text-error">{settingsError}</p> : null}
 
       <div>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={busy}
-          className="bg-amber px-3 py-1.5 text-xs font-semibold tracking-wide text-void uppercase transition hover:bg-amber-bright disabled:cursor-not-allowed disabled:opacity-40"
-        >
+        <Button onClick={handleSave} disabled={busy}>
           Save settings
-        </button>
+        </Button>
       </div>
     </section>
   )

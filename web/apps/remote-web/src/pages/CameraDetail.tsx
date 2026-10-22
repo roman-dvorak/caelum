@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { DateIndex } from '@caelum/api-client'
-import { DateStrip, KeogramStrip, OverlayToggle } from '@caelum/ui'
+import { DateStrip, KeogramStrip, Message, OverlayToggle } from '@caelum/ui'
 import { GalleryItem } from '../components/GalleryItem.tsx'
 import { useCameraManifest } from '../hooks/useCameraManifest.ts'
 import { useDateIndex } from '../hooks/useDateIndex.ts'
@@ -30,21 +30,21 @@ function CameraDetailView({ slug }: { slug: string }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <Link to="/" className="text-xs font-medium tracking-wide text-ink-faint uppercase hover:text-amber">
+        <Link to="/" className="text-sm font-medium text-sky hover:underline">
           ← Cameras
         </Link>
       </div>
 
-      {manifestLoading && <p className="text-sm text-ink-faint">Loading camera…</p>}
+      {manifestLoading && <p className="text-sm text-ink-muted">Loading camera…</p>}
       {manifestError && (
-        <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{manifestError}</p>
+        <Message kind="error">{manifestError}</Message>
       )}
 
       {manifest && (
         <>
           <div>
             <h1 className="text-lg font-semibold text-ink">{manifest.name}</h1>
-            <p className="font-mono text-xs text-ink-faint">
+            <p className="font-mono text-xs text-ink-muted">
               {manifest.slug} · {manifest.location.lat.toFixed(4)}, {manifest.location.lon.toFixed(4)}
             </p>
           </div>
@@ -70,8 +70,8 @@ function DateGallery({ slug, date }: { slug: string; date: string }) {
     <div className="flex flex-col gap-4">
       <KeogramStrip src={remoteApiClient.keogramUrl(slug, date)} date={date} />
 
-      {loading && <p className="text-sm text-ink-faint">Loading frames…</p>}
-      {error && <p className="border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+      {loading && <p className="text-sm text-ink-muted">Loading frames…</p>}
+      {error && <Message kind="error">{error}</Message>}
 
       {dateIndex ? <Gallery slug={slug} dateIndex={dateIndex} /> : null}
     </div>

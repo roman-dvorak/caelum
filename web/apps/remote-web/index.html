@@ -15,7 +15,7 @@
           var resolved =
             stored === 'light' || stored === 'dark'
               ? stored
-              : window.matchMedia('(prefers-color-scheme: light)').matches
+              : stored === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches
                 ? 'light'
                 : 'dark'
           document.documentElement.dataset.theme = resolved

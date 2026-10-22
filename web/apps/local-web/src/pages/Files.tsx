@@ -1,20 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { DirectoryListing, FileEntry, UsageResponse } from '@caelum/api-client'
-import {
-  Button,
-  DownloadIcon,
-  EmptyState,
-  FolderIcon,
-  Loading,
-  Message,
-  PageHeader,
-  Panel,
-  Readout,
-  RefreshIcon,
-  TrashIcon,
-  formatBytes,
-  formatTimestamp,
-} from '@caelum/ui'
+import { Button, DownloadIcon, EmptyState, FolderIcon, Loading, Message, PageHeader, Panel, Readout, RefreshIcon, TrashIcon, buttonClass, formatBytes, formatTimestamp } from '@caelum/ui'
 import { useAuth } from '../authContext.ts'
 import { localApiClient } from '../services/client.ts'
 
@@ -104,7 +90,7 @@ export function Files() {
       />
 
       {usage ? (
-        <div className="mb-4 grid grid-cols-2 gap-3 border border-line bg-panel p-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-4 grid grid-cols-2 gap-3 border border-border bg-panel p-4 sm:grid-cols-3 lg:grid-cols-6 rounded-md">
           {Object.entries(usage.by_subdir).map(([name, bytes]) => (
             <Readout key={name} label={name} value={formatBytes(bytes)} />
           ))}
@@ -129,11 +115,11 @@ export function Files() {
               <tbody>
                 {listing.parent !== null ? (
                   <tr>
-                    <td colSpan={4} className="border-b border-line-soft">
+                    <td colSpan={4} className="border-b border-border-subtle">
                       <button
                         type="button"
                         onClick={() => setPath(listing.parent ?? '')}
-                        className="w-full px-4 py-2 text-left font-mono text-ink-dim hover:bg-panel-raised hover:text-ink"
+                        className="w-full px-4 py-2 text-left font-mono text-ink-muted hover:bg-panel-raised hover:text-ink"
                       >
                         ../
                       </button>
@@ -144,8 +130,8 @@ export function Files() {
                   <tr
                     key={entry.path}
                     className={[
-                      'border-b border-line-soft last:border-b-0',
-                      selected?.path === entry.path ? 'bg-amber/8' : 'hover:bg-panel-raised',
+                      'border-b border-border-subtle last:border-b-0',
+                      selected?.path === entry.path ? 'bg-amber/10' : 'hover:bg-panel-raised',
                     ].join(' ')}
                   >
                     <td className="w-full">
@@ -157,17 +143,17 @@ export function Files() {
                         className="flex w-full items-center gap-2 px-4 py-2 text-left font-mono text-ink"
                       >
                         {entry.kind === 'dir' ? (
-                          <FolderIcon size={15} className="shrink-0 text-amber" />
+                          <FolderIcon size={15} className="shrink-0 text-amber-ink" />
                         ) : (
                           <span className="w-[15px]" />
                         )}
                         <span className="truncate">{entry.name}</span>
                       </button>
                     </td>
-                    <td className="px-2 text-right font-mono text-xs whitespace-nowrap text-ink-faint tabular-nums">
+                    <td className="px-2 text-right font-mono text-xs whitespace-nowrap text-ink-muted tabular-nums">
                       {entry.kind === 'dir' ? '—' : formatBytes(entry.size)}
                     </td>
-                    <td className="hidden px-2 text-right font-mono text-xs whitespace-nowrap text-ink-faint sm:table-cell">
+                    <td className="hidden px-2 text-right font-mono text-xs whitespace-nowrap text-ink-muted sm:table-cell">
                       {formatTimestamp(entry.modified_at)}
                     </td>
                     <td className="px-2 text-right">
@@ -176,7 +162,7 @@ export function Files() {
                           type="button"
                           onClick={() => void handleDelete(entry)}
                           title={`Delete ${entry.name}`}
-                          className="p-1 text-ink-faint transition hover:text-danger"
+                          className="p-1 text-ink-muted transition hover:text-error"
                         >
                           <TrashIcon size={15} />
                         </button>
@@ -204,17 +190,17 @@ function Breadcrumbs({ path, onNavigate }: { path: string; onNavigate: (path: st
       <button
         type="button"
         onClick={() => onNavigate('')}
-        className="text-amber hover:text-amber-bright"
+        className="text-sky hover:text-sky-dim"
       >
         data
       </button>
       {parts.map((part, index) => (
         <span key={`${part}-${index}`} className="flex items-center gap-1">
-          <span className="text-ink-faint">/</span>
+          <span className="text-ink-muted">/</span>
           <button
             type="button"
             onClick={() => onNavigate(parts.slice(0, index + 1).join('/'))}
-            className={index === parts.length - 1 ? 'text-ink' : 'text-amber hover:text-amber-bright'}
+            className={index === parts.length - 1 ? 'text-ink' : 'text-sky hover:text-sky-dim'}
           >
             {part}
           </button>
@@ -247,7 +233,7 @@ function FileDetail({ entry }: { entry: FileEntry | null }) {
   if (!entry) {
     return (
       <Panel title="Details">
-        <p className="text-sm text-ink-faint">Select a file to preview it.</p>
+        <p className="text-sm text-ink-muted">Select a file to preview it.</p>
       </Panel>
     )
   }
@@ -260,7 +246,7 @@ function FileDetail({ entry }: { entry: FileEntry | null }) {
       actions={
         <a
           href={localApiClient.fileContentUrl(entry.path, true)}
-          className="inline-flex items-center gap-1.5 border border-line px-3 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
+          className={buttonClass('secondary')}
         >
           <DownloadIcon size={14} />
           Download
@@ -283,12 +269,12 @@ function FileDetail({ entry }: { entry: FileEntry | null }) {
             // pushing a 12-megapixel file at the browser.
             src={localApiClient.filePreviewUrl(entry.path, 800)}
             alt={entry.name}
-            className="w-full border border-line-soft bg-void"
+            className="w-full border border-border-subtle bg-surface-0 rounded-md"
           />
         ) : null}
 
         {text !== null ? (
-          <pre className="max-h-80 overflow-auto border border-line-soft bg-void p-3 font-mono text-xs text-ink-dim">
+          <pre className="max-h-80 overflow-auto border border-border-subtle bg-surface-0 p-3 font-mono text-xs text-ink-muted rounded-sm">
             {text}
           </pre>
         ) : null}

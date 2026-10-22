@@ -2,10 +2,13 @@ import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
 import { h } from 'vue'
 import ConsentBanner from './ConsentBanner.vue'
+import '@fontsource-variable/inter'
+import '@fontsource-variable/space-grotesk'
+import '@fontsource-variable/jetbrains-mono'
 import './caelum.css'
 
 /**
- * VitePress' default theme with the caelum palette applied over it.
+ * VitePress' default theme with the Caelum design system applied over it.
  *
  * Deliberately not a custom theme: the docs need search, a sidebar, prev/next
  * links and a working mobile layout far more than they need bespoke layout

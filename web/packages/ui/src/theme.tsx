@@ -76,16 +76,16 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       title={`Theme: ${LABELS[preference]} — click to change`}
       aria-label={`Theme: ${LABELS[preference]}. Click to change.`}
       className={[
-        'flex items-center gap-2 border border-line text-ink-dim transition',
-        'hover:border-amber-dim hover:text-ink',
-        compact ? 'h-8 w-8 justify-center' : 'w-full px-2.5 py-1.5 text-xs',
+        'flex items-center gap-2 rounded-md border border-border text-ink transition',
+        'hover:border-sky hover:bg-surface-400/40',
+        compact ? 'h-9 w-9 justify-center' : 'w-full px-3 py-1.5 text-sm font-medium',
       ].join(' ')}
     >
-      {theme === 'light' ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+      {theme === 'light' ? <SunIcon size={18} /> : <MoonIcon size={18} />}
       {compact ? null : (
-        <span className="tracking-wide uppercase">
+        <span>
           {LABELS[preference]}
-          {preference === 'system' ? <span className="text-ink-faint"> · {theme}</span> : null}
+          {preference === 'system' ? <span className="text-ink-muted"> · {theme}</span> : null}
         </span>
       )}
     </button>

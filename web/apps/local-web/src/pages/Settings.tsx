@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { JsonEditor } from 'json-edit-react'
 import type { AppConfig } from '@caelum/api-client'
-import { DOCS_URL, Loading, Message, PageHeader } from '@caelum/ui'
+import { DOCS_URL, Loading, Message, PageHeader, buttonClass } from '@caelum/ui'
 import { CameraPicker } from '../components/CameraPicker.tsx'
 import { localApiClient } from '../services/client.ts'
 
@@ -64,7 +64,7 @@ export function Settings() {
             href={`${DOCS_URL}/guide/concepts.html`}
             target="_blank"
             rel="noreferrer noopener"
-            className="border border-line px-3 py-1.5 text-xs tracking-wide text-ink-dim uppercase transition hover:border-amber-dim hover:text-ink"
+            className={buttonClass('secondary')}
           >
             What do these mean?
           </a>
@@ -77,7 +77,7 @@ export function Settings() {
         <CameraPicker onConfigChange={setConfig} />
       </div>
 
-      <div className="border border-line bg-panel p-2">
+      <div className="border border-border bg-panel p-2 rounded-md">
         <JsonEditor
           data={config}
           setData={(newData) => setConfig(newData as AppConfig)}
@@ -115,29 +115,29 @@ const caelumJsonTheme = {
   displayName: 'caelum',
   styles: {
     container: { backgroundColor: 'transparent', fontFamily: 'var(--font-mono)', fontSize: '13px' },
-    property: 'var(--color-ink-dim)',
-    bracket: { color: 'var(--color-ink-faint)', fontWeight: 'normal' },
-    itemCount: { color: 'var(--color-ink-faint)', fontStyle: 'italic' },
-    string: 'var(--color-cyan)',
-    number: 'var(--color-amber)',
+    property: 'var(--color-ink-muted)',
+    bracket: { color: 'var(--color-ink-muted)', fontWeight: 'normal' },
+    itemCount: { color: 'var(--color-ink-muted)', fontStyle: 'italic' },
+    string: 'var(--color-sky)',
+    number: 'var(--color-amber-ink)',
     boolean: 'var(--color-success)',
-    null: { color: 'var(--color-danger)', fontVariant: 'small-caps', fontWeight: 'bold' },
+    null: { color: 'var(--color-error)', fontVariant: 'small-caps', fontWeight: 'bold' },
     input: [
       'var(--color-ink)',
       {
         fontSize: '95%',
-        backgroundColor: 'var(--color-void)',
-        border: '1px solid var(--color-line)',
+        backgroundColor: 'var(--color-surface-0)',
+        border: '1px solid var(--color-border)', borderRadius: '4px',
       },
     ],
     inputHighlight: 'var(--selection-bg)',
-    error: { fontSize: '0.8em', color: 'var(--color-danger)', fontWeight: 'bold' },
-    iconCollection: 'var(--color-ink-faint)',
-    iconEdit: 'var(--color-amber)',
-    iconDelete: 'var(--color-danger)',
-    iconAdd: 'var(--color-amber)',
-    iconCopy: 'var(--color-cyan)',
+    error: { fontSize: '0.8em', color: 'var(--color-error)', fontWeight: 'bold' },
+    iconCollection: 'var(--color-ink-muted)',
+    iconEdit: 'var(--color-sky)',
+    iconDelete: 'var(--color-error)',
+    iconAdd: 'var(--color-sky)',
+    iconCopy: 'var(--color-sky)',
     iconOk: 'var(--color-success)',
-    iconCancel: 'var(--color-danger)',
+    iconCancel: 'var(--color-error)',
   },
 }

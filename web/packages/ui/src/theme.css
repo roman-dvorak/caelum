@@ -1,123 +1,251 @@
-/* Shared design tokens for both apps — an instrument-panel aesthetic
- * deliberately distinct from generic dashboard-template chrome: a warm
- * ground (not slate/navy), an amber "instrument glow" primary accent, and a
- * cool cyan secondary reserved for night-sky/moon data so the two read as
- * distinct signal colors rather than one generic "brand blue".
+/* The Caelum design system, as Tailwind theme tokens for both apps.
  *
- * Dark is the base palette — this is software for looking at the night sky,
- * and it is what a camera's own screen shows at 2am. Light is a full
- * override of the same token names further down.
+ * Token names and values are the design system's own (tokens.json of the
+ * "Caelum" design system): surfaces `surface-0`…`surface-400` from space
+ * black outward, `border`/`border-subtle`, the AstroMeters `navy`/`nebula`,
+ * interactive `sky`, Caelum's signature `amber`, text `ink`/`ink-muted`/
+ * `ink-dim`, and the status colours each with a `*-surface` for callouts.
  *
- * `ThemeProvider` (theme.tsx) always writes a resolved `data-theme` of
- * exactly "dark" or "light" onto <html>; "follow the system" is resolved in
- * JS rather than here, so the CSS never has to reason about a media query
- * and an explicit choice at the same time.
+ * Usage, in short (the design system's README has the why):
+ * - A card is always lighter than what it sits on: page `surface-0`,
+ *   panels `panel`, tiles inside them `panel-raised` (see the aliases).
+ * - `amber` means "this is happening now, from the sky": the active sky
+ *   period, the live camera state, primary actions. Not decoration.
+ * - `sky` is information and navigation: links, focus rings, secondary
+ *   interactive elements.
+ * - Status colours fill a callout only through their `*-surface`.
+ * - Text: `ink` primary, `ink-muted` secondary and captions, `ink-dim` only
+ *   for disabled text and placeholders.
+ * - Live data values (exposure, gains, counts, coordinates) are `font-mono`.
+ *
+ * Dark is the base palette — this is software for looking at the night
+ * sky. `ThemeProvider` (theme.tsx) always writes a resolved `data-theme` of
+ * "dark" or "light" onto <html>; light re-assigns the same names below.
  *
  * Imported by each app's index.css via a relative path (packages/ui ships
  * raw source, no build step — see that package's README/exports).
  */
 
-@theme {
-  --color-void: #0b0a08;
-  --color-panel: #16130f;
-  --color-panel-raised: #1e1a14;
-  --color-line: #2f2a20;
-  --color-line-soft: #211d17;
+/* Bundled with the app rather than loaded from Google Fonts: a camera's
+ * web UI is often reached on a LAN with no internet at all. */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/space-grotesk';
+@import '@fontsource-variable/jetbrains-mono';
 
-  --color-ink: #f3ede1;
-  --color-ink-dim: #ab9d89;
-  --color-ink-faint: #6e6353;
+@theme {
+  /* ---- colour (dark) ------------------------------------------------- */
+  --color-surface-0: #070a10;
+  --color-surface-100: #0d1117;
+  --color-surface-200: #141a24;
+  --color-surface-300: #1c2535;
+  --color-surface-400: #243047;
+  --color-border: #2a3a52;
+  --color-border-subtle: #1e2d42;
+
+  --color-navy: #1c305c;
+  --color-nebula: #2a4a8a;
+  --color-sky: #5a8ee8;
+  --color-sky-dim: #3a6ec8;
+  --color-sky-surface: #0e1a2e;
 
   --color-amber: #e8a13a;
-  --color-amber-bright: #ffc266;
-  --color-amber-dim: #7a5a2c;
+  --color-amber-light: #f5c96a;
+  --color-amber-dim: #c4832a;
+  --color-amber-surface: #1e1508;
 
-  --color-cyan: #6bb3c4;
-  --color-cyan-dim: #3c5c65;
+  --color-ink: #e2e8f5;
+  --color-ink-muted: #8a9db8;
+  --color-ink-dim: #4a5e78;
 
-  --color-danger: #de6a56;
-  --color-success: #7cad76;
+  --color-success: #2ecc9a;
+  --color-success-surface: #081a14;
+  --color-warning: #e8a13a;
+  --color-error: #e85a4a;
+  --color-error-surface: #1e0c0a;
 
-  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Roboto Mono', Consolas, monospace;
+  /* ---- app aliases: roles, each one of the tokens above -------------- */
+  /* Panels and the sidebar; the tiles and inputs inside them. In light the
+   * design system's surface-200 is darker than the page, so panels take
+   * surface-100 (white) there to keep "a card is lighter than its page". */
+  --color-panel: #141a24; /* surface-200 */
+  --color-panel-raised: #1c2535; /* surface-300 */
+  /* Amber as text: amber itself in dark; in light, amber-dim — the light
+   * theme's amber (#c4832a) is 3.2:1 on white, below AA for text. */
+  --color-amber-ink: #e8a13a; /* amber */
+  /* Text on an amber fill and on navy: the same in both themes. */
+  --color-on-amber: #070a10; /* surface-0 (dark) */
+  --color-on-navy: #e2e8f5; /* ink (dark) */
+
+  /* ---- type ---------------------------------------------------------- */
+  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  --text-display-2xl: 3rem;
+  --text-display-2xl--line-height: 1.1;
+  --text-display-2xl--font-weight: 700;
+  --text-display-xl: 2.25rem;
+  --text-display-xl--line-height: 1.15;
+  --text-display-xl--font-weight: 700;
+  --text-display-lg: 1.75rem;
+  --text-display-lg--line-height: 1.2;
+  --text-display-lg--font-weight: 600;
+  --text-display-md: 1.375rem;
+  --text-display-md--line-height: 1.25;
+  --text-display-md--font-weight: 600;
+  --text-display-sm: 1.125rem;
+  --text-display-sm--line-height: 1.3;
+  --text-display-sm--font-weight: 600;
+
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.625rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+
+  --text-label-lg: 0.875rem;
+  --text-label-lg--line-height: 1rem;
+  --text-label-lg--font-weight: 600;
+  --text-label-md: 0.75rem;
+  --text-label-md--line-height: 0.875rem;
+  --text-label-md--font-weight: 600;
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 0.75rem;
+  --text-label-sm--font-weight: 600;
+
+  --text-code-lg: 0.9375rem;
+  --text-code-lg--line-height: 1.5rem;
+  --text-code-md: 0.875rem;
+  --text-code-md--line-height: 1.375rem;
+  --text-code-sm: 0.75rem;
+  --text-code-sm--line-height: 1.125rem;
+
+  /* ---- radius -------------------------------------------------------- */
+  --radius-xs: 2px; /* tags, status badges */
+  --radius-sm: 4px; /* code blocks, small controls */
+  --radius-md: 8px; /* buttons, inputs */
+  --radius-lg: 12px; /* cards, panels */
+  --radius-xl: 16px; /* large overlays */
+
+  /* ---- shadow -------------------------------------------------------- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.65);
+  /* Reserved for the live camera state and the active sky period. */
+  --shadow-glow-amber: 0 0 20px rgba(232, 161, 58, 0.28);
+  --shadow-glow-sky: 0 0 16px rgba(90, 142, 232, 0.28);
 }
 
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
-  /* Ambient glow behind the page, and the shadow under raised surfaces.
-   * Both have to flip with the theme, so they are tokens too. */
-  --glow: rgba(232, 161, 58, 0.05);
-  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --selection-bg: rgba(232, 161, 58, 0.25);
+  --selection-bg: rgba(232, 161, 58, 0.28);
 }
 
-/* Light theme: the same roles, re-pitched for a paper ground. The accents
- * are darkened rather than reused — #e8a13a on white is around 2:1 contrast
- * and unreadable as text, so `--color-amber` becomes a deeper ochre and
- * `--color-amber-bright` becomes *darker* still (it is the "stronger"
- * variant in both themes, not literally the lighter one). */
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --color-void: #f7f4ee;
-  --color-panel: #ffffff;
-  --color-panel-raised: #fbf8f2;
-  --color-line: #ddd5c5;
-  --color-line-soft: #ece7dc;
+  --color-surface-0: #f4f6fa;
+  --color-surface-100: #ffffff;
+  --color-surface-200: #eef1f7;
+  --color-surface-300: #e0e6f0;
+  --color-surface-400: #d0d8e8;
+  --color-border: #c0cce0;
+  --color-border-subtle: #dde4f0;
 
-  --color-ink: #1b1712;
-  --color-ink-dim: #5d5346;
-  --color-ink-faint: #8d8271;
+  --color-sky: #3a6ec8;
+  --color-sky-dim: #2a5aaa;
+  --color-sky-surface: #e8f0fc;
 
-  --color-amber: #a9690f;
-  --color-amber-bright: #855009;
-  --color-amber-dim: #e0c79a;
+  --color-amber: #c4832a;
+  --color-amber-light: #e8a13a;
+  --color-amber-dim: #a06820;
+  --color-amber-surface: #fdf3e0;
 
-  --color-cyan: #276476;
-  --color-cyan-dim: #a4c6d0;
+  --color-ink: #0d1117;
+  --color-ink-muted: #4a5e78;
+  --color-ink-dim: #8a9db8;
 
-  --color-danger: #b23a26;
-  --color-success: #3c7336;
+  --color-success: #1aaa78;
+  --color-success-surface: #e0f8f0;
+  --color-warning: #c4832a;
+  --color-error: #c03020;
+  --color-error-surface: #fde8e5;
 
-  --glow: rgba(169, 105, 15, 0.06);
-  --shadow-panel: 0 1px 2px rgba(64, 52, 32, 0.08);
-  --selection-bg: rgba(169, 105, 15, 0.18);
+  --color-panel: #ffffff; /* surface-100 */
+  --color-panel-raised: #eef1f7; /* surface-200 */
+  --color-amber-ink: #a06820; /* amber-dim */
+
+  --selection-bg: rgba(196, 131, 42, 0.22);
 }
 
-* {
-  box-sizing: border-box;
+/* Light surfaces need far less shadow than the design system's dark-tuned
+ * values. Tailwind inlines a shadow's geometry but takes its colour from
+ * --tw-shadow-color, so only the colour is re-pitched here. */
+:root[data-theme='light'] :is(.shadow-sm, .shadow-md, .shadow-lg) {
+  --tw-shadow-color: rgba(13, 17, 23, 0.12);
 }
 
-body {
-  margin: 0;
-  min-height: 100svh;
-  background: var(--color-void);
-  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, var(--glow), transparent);
-  color: var(--color-ink);
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  /* Theme switches are instant by default, which reads as a harsh flash on
-   * a full-page color change. A short transition on the ground only (not on
-   * every element) softens it without making the UI feel laggy. */
-  transition: background-color 150ms ease, color 150ms ease;
-}
+/* Element defaults go in Tailwind's base layer so utilities still win. */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-#root {
-  min-height: 100svh;
-}
+  body {
+    margin: 0;
+    min-height: 100svh;
+    background: var(--color-surface-0);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    -webkit-font-smoothing: antialiased;
+    /* Theme switches are instant by default, which reads as a harsh flash on
+     * a full-page colour change; a short transition on the ground only. */
+    transition: background-color 150ms ease, color 150ms ease;
+  }
 
-::selection {
-  background: var(--selection-bg);
-}
+  #root {
+    min-height: 100svh;
+  }
 
-.tabular-nums {
-  font-variant-numeric: tabular-nums;
-}
+  ::selection {
+    background: var(--selection-bg);
+  }
 
-/* Scrollbars default to the browser's light chrome inside dark panels;
- * `color-scheme` above fixes that for the page, this covers the overflow
- * containers (file browser, terminal, frame grid) that scroll internally. */
-* {
-  scrollbar-color: var(--color-line) transparent;
-  scrollbar-width: thin;
+  /* Focus is `sky` everywhere — the design system's colour of navigation. */
+  :focus-visible {
+    outline: 2px solid var(--color-sky);
+    outline-offset: 2px;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  input[type='range'],
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--color-amber);
+  }
+
+  ::placeholder {
+    color: var(--color-ink-dim);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Scrollbars default to the browser's light chrome inside dark panels;
+   * `color-scheme` above fixes that for the page, this covers the overflow
+   * containers (file browser, terminal, frame grid) that scroll internally. */
+  * {
+    scrollbar-color: var(--color-border) transparent;
+    scrollbar-width: thin;
+  }
 }

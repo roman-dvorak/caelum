@@ -67,23 +67,23 @@ export function Calendar({ entries, selected, onSelect, className }: CalendarPro
   const cells: (number | null)[] = [...Array(leading).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)]
 
   return (
-    <div className={['inline-flex flex-col gap-2 border border-line bg-panel p-3', className ?? ''].join(' ')}>
+    <div className={['inline-flex flex-col gap-2 border border-border bg-panel p-3 rounded-md', className ?? ''].join(' ')}>
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => shiftMonth(-1)}
-          className="px-2 py-1 text-ink-faint hover:text-ink"
+          className="px-2 py-1 text-ink-muted hover:text-ink"
           aria-label="Previous month"
         >
           ‹
         </button>
-        <span className="font-mono text-xs font-semibold tracking-wide text-ink-dim uppercase">
+        <span className="font-mono text-xs font-semibold tracking-wide text-ink-muted uppercase">
           {MONTH_NAMES[month - 1]} {year}
         </span>
         <button
           type="button"
           onClick={() => shiftMonth(1)}
-          className="px-2 py-1 text-ink-faint hover:text-ink"
+          className="px-2 py-1 text-ink-muted hover:text-ink"
           aria-label="Next month"
         >
           ›
@@ -92,7 +92,7 @@ export function Calendar({ entries, selected, onSelect, className }: CalendarPro
 
       <div className="grid grid-cols-7 gap-1">
         {WEEKDAY_LABELS.map((w) => (
-          <span key={w} className="text-center font-mono text-[10px] text-ink-faint">
+          <span key={w} className="text-center font-mono text-[10px] text-ink-muted">
             {w}
           </span>
         ))}
@@ -110,14 +110,14 @@ export function Calendar({ entries, selected, onSelect, className }: CalendarPro
               title={entry ? `${dateStr} — ${entry.count} frame${entry.count === 1 ? '' : 's'}` : dateStr}
               className={[
                 'flex flex-col items-center gap-0.5 py-1 font-mono text-xs transition',
-                !entry ? 'cursor-default text-ink-faint/40' : 'cursor-pointer text-ink-dim hover:text-ink',
-                isSelected ? 'bg-amber text-void font-semibold' : entry ? 'hover:bg-amber/10' : '',
+                !entry ? 'cursor-default text-ink-dim' : 'cursor-pointer text-ink-muted hover:text-ink',
+                isSelected ? 'bg-nebula text-on-navy font-semibold' : entry ? 'hover:bg-amber/10' : '',
               ].join(' ')}
             >
               <span>{day}</span>
               {entry ? (
                 <span
-                  className={['h-1 w-1 rounded-full', isSelected ? 'bg-void' : 'bg-amber'].join(' ')}
+                  className={['h-1 w-1 rounded-full', isSelected ? 'bg-surface-0' : 'bg-amber'].join(' ')}
                 />
               ) : (
                 <span className="h-1 w-1" />

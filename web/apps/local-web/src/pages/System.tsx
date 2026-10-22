@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { NetworkInterfaceInfo } from '@caelum/api-client'
-import { Button, Message, PageHeader, Panel, PowerIcon, Readout, StatusTile, formatBytes } from '@caelum/ui'
+import { Button, Message, MetricGrid, PageHeader, Panel, PowerIcon, Readout, StatusBadge, StatusTile, formatBytes } from '@caelum/ui'
 import { useSystemInfo } from '../hooks/useSystemInfo.ts'
 import { localApiClient } from '../services/client.ts'
 import { SoftwareUpdate } from '../components/SoftwareUpdate.tsx'
@@ -44,10 +44,10 @@ export function System() {
         description="The host machine this camera software is running on."
         actions={
           <>
-            <Button variant="danger" icon={<PowerIcon size={14} />} disabled={!!pending} onClick={() => void runAction('reboot')}>
+            <Button variant="error" icon={<PowerIcon size={14} />} disabled={!!pending} onClick={() => void runAction('reboot')}>
               Reboot
             </Button>
-            <Button variant="danger" icon={<PowerIcon size={14} />} disabled={!!pending} onClick={() => void runAction('shutdown')}>
+            <Button variant="error" icon={<PowerIcon size={14} />} disabled={!!pending} onClick={() => void runAction('shutdown')}>
               Shut down
             </Button>
           </>
@@ -64,7 +64,7 @@ export function System() {
 
       {!info ? null : (
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-px bg-line-soft sm:grid-cols-3 lg:grid-cols-4">
+          <MetricGrid>
             <StatusTile label="caelum" value={info.version} />
             <StatusTile label="Hostname" value={info.hostname} />
             <StatusTile label="Uptime" value={formatUptime(info.uptime_s)} />
@@ -80,7 +80,7 @@ export function System() {
               unit="%"
               hint={`${formatBytes(info.mem_used_bytes)} / ${formatBytes(info.mem_total_bytes)}`}
             />
-          </div>
+          </MetricGrid>
 
           {Object.keys(info.temperatures_c).length > 0 ? (
             <Panel title="Temperatures">
@@ -97,14 +97,14 @@ export function System() {
               {info.disks.map((disk) => (
                 <div key={disk.path} className="flex flex-col gap-1">
                   <div className="flex items-baseline justify-between text-sm">
-                    <span className="font-mono text-ink-dim">{disk.path}</span>
-                    <span className="text-ink-faint">
+                    <span className="font-mono text-ink-muted">{disk.path}</span>
+                    <span className="font-mono text-code-sm text-ink-muted">
                       {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)} ({disk.percent.toFixed(0)}%)
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-line-soft">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-400">
                     <div
-                      className={`h-full ${disk.percent >= 90 ? 'bg-danger' : 'bg-amber'}`}
+                      className={`h-full rounded-full ${disk.percent >= 90 ? 'bg-error' : disk.percent >= 80 ? 'bg-warning' : 'bg-sky'}`}
                       style={{ width: `${Math.min(100, disk.percent)}%` }}
                     />
                   </div>
@@ -129,7 +129,7 @@ function NetworkTable({ interfaces }: { interfaces: NetworkInterfaceInfo[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="text-xs tracking-wide text-ink-faint uppercase">
+          <tr className="text-label-sm tracking-[0.08em] text-ink-muted uppercase">
             <th className="pb-2 pr-4">Interface</th>
             <th className="pb-2 pr-4">Status</th>
             <th className="pb-2 pr-4">Speed</th>
@@ -138,15 +138,13 @@ function NetworkTable({ interfaces }: { interfaces: NetworkInterfaceInfo[] }) {
         </thead>
         <tbody>
           {interfaces.map((iface) => (
-            <tr key={iface.name} className="border-t border-line-soft">
+            <tr key={iface.name} className="border-t border-border-subtle">
               <td className="py-1.5 pr-4 font-mono text-ink">{iface.name}</td>
               <td className="py-1.5 pr-4">
-                <span className={iface.is_up ? 'text-success' : 'text-ink-faint'}>
-                  {iface.is_up ? 'Up' : 'Down'}
-                </span>
+                <StatusBadge tone={iface.is_up ? 'success' : 'neutral'}>{iface.is_up ? 'Up' : 'Down'}</StatusBadge>
               </td>
-              <td className="py-1.5 pr-4 text-ink-dim">{iface.speed_mbps ? `${iface.speed_mbps} Mbps` : '—'}</td>
-              <td className="py-1.5 font-mono text-xs text-ink-dim">
+              <td className="py-1.5 pr-4 text-ink-muted">{iface.speed_mbps ? `${iface.speed_mbps} Mbps` : '—'}</td>
+              <td className="py-1.5 font-mono text-code-sm text-ink-muted">
                 {iface.addresses.length ? iface.addresses.join(', ') : '—'}
               </td>
             </tr>

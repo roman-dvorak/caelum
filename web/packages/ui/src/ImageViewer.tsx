@@ -32,7 +32,7 @@ export function ImageViewer({ src, overlaySrc, showOverlay = true, alt, classNam
   return (
     <div className={['relative inline-block w-full leading-none', className ?? ''].join(' ')}>
       {failed ? (
-        <div className="flex aspect-video w-full items-center justify-center bg-panel text-sm text-ink-faint">
+        <div className="flex aspect-video w-full items-center justify-center bg-panel text-sm text-ink-muted">
           Image failed to load
         </div>
       ) : (
@@ -60,7 +60,7 @@ export function ImageViewer({ src, overlaySrc, showOverlay = true, alt, classNam
 /** The "Overlay" on/off switch shown next to an `ImageViewer`. */
 export function OverlayToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-dim uppercase select-none">
+    <label className="flex items-center gap-2 text-label-md text-ink-muted select-none">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-amber" />
       Overlay
     </label>

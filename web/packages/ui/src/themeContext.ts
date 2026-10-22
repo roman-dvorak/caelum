@@ -31,8 +31,11 @@ export function systemTheme(): ResolvedTheme {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 
+/** Without a stored choice: dark. The design system has the camera
+ * dashboard always default to dark — it is used at night, and a light page
+ * ruins night vision; light is there for whoever picks it. */
 export function readStoredPreference(): ThemePreference {
-  if (typeof localStorage === 'undefined') return 'system'
+  if (typeof localStorage === 'undefined') return 'dark'
   const stored = localStorage.getItem(THEME_STORAGE_KEY)
-  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark'
 }

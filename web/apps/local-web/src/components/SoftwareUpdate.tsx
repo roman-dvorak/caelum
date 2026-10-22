@@ -113,7 +113,7 @@ export function SoftwareUpdate({ runningVersion }: { runningVersion: string | un
         </div>
 
         {!status.managed ? (
-          <p className="text-sm text-ink-faint">
+          <p className="text-sm text-ink-muted">
             This is not a managed install (made by install-system.sh), so it is updated by hand, not from here.
           </p>
         ) : null}
@@ -148,8 +148,8 @@ export function SoftwareUpdate({ runningVersion }: { runningVersion: string | un
         ) : null}
 
         {status.managed && available && !busy && !restarting ? (
-          <div className="flex flex-col gap-2 border border-line-soft p-3">
-            {available.notes ? <p className="text-sm whitespace-pre-line text-ink-dim">{available.notes}</p> : null}
+          <div className="flex flex-col gap-2 border border-border-subtle p-3 rounded-md">
+            {available.notes ? <p className="text-sm whitespace-pre-line text-ink-muted">{available.notes}</p> : null}
             <div>
               <Button
                 variant="primary"
@@ -168,7 +168,7 @@ export function SoftwareUpdate({ runningVersion }: { runningVersion: string | un
         ) : null}
 
         {status.managed ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm text-ink-dim">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-ink-muted">
             <label className="flex items-center gap-2">
               Install a wheel file:
               <input
@@ -181,20 +181,20 @@ export function SoftwareUpdate({ runningVersion }: { runningVersion: string | un
                 }}
               />
             </label>
-            <button type="button" className="text-xs text-ink-faint underline" onClick={() => setShowLog((v) => !v)}>
+            <button type="button" className="text-xs text-ink-muted underline" onClick={() => setShowLog((v) => !v)}>
               {showLog ? 'Hide install log' : 'Show install log'}
             </button>
           </div>
         ) : null}
 
         {showLog ? (
-          <pre className="h-64 overflow-y-auto border border-line bg-void p-3 font-mono text-xs text-ink-dim">
+          <pre className="h-64 overflow-y-auto border border-border bg-surface-0 p-3 font-mono text-xs text-ink-muted rounded-sm">
             {log.length ? log.map((e) => e.message).join('\n') : 'No update has run since caelum started.'}
           </pre>
         ) : null}
 
         {status.managed ? (
-          <p className="text-xs text-ink-faint">
+          <p className="text-xs text-ink-muted">
             Releases from <span className="font-mono">{status.manifest_url}</span> (Settings → update.manifest_url).
           </p>
         ) : null}
