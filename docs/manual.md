@@ -102,13 +102,21 @@ on:
 
 - **today's** new files go to the storage server about once a minute,
 - **everything** is compared and completed every 30 minutes, so files missed
-  during a network outage are sent once it is back,
-- local files are deleted after **2 days**, but only once the server is
-  confirmed to have them.
+  during a network outage are sent once it is back.
 
-If the disk runs low (under 1 GB free by default), the oldest files are
-deleted even if they were never uploaded — the camera never stops capturing
-because of a full disk. Without upload, files are simply kept for 2 days.
+**Retention** keeps the disk from filling up, and adapts to the space there
+is. Two settings under **Settings → retention** drive it:
+
+- **maximum age** (2 days by default) — older files are deleted, but only
+  once the server is confirmed to have them;
+- **minimum free space** (1 GB by default) — when free space drops below it,
+  the oldest files are deleted sooner, uploaded ones first. Only if that is
+  not enough do files the server does not have yet go too, so the camera
+  never stops capturing because of a full disk.
+
+A larger card or SSD simply holds more, and a long network outage eats into
+the free space before anything unarchived is lost. Without upload, the same
+two limits apply to all files.
 
 Details: [Upload & archive](/guide/upload), [Storage & retention](/guide/storage).
 
@@ -184,6 +192,6 @@ the previous one by itself. See [Updates](/guide/updates).
 | Frames are black by day or white at night | **Location** and **time zone** in Settings, and the camera clock — the sky period on the Dashboard must match the real sky. |
 | Frames are blurred | Focus — see above — and dew on the dome. |
 | Nothing new in Caelum Viewer | Upload settings, and **Logs**: every upload pass is logged, failures with the reason. |
-| The disk is filling up | Upload is off or failing, so files are only removed at the free-space limit. Fix upload or shorten the retention. |
+| The disk is filling up | Upload is failing, so files wait for the server and are only removed at the free-space limit. Fix upload, or adjust the retention settings. |
 | An update failed | Nothing to do: the camera keeps, or goes back to, the release that worked. The reason is in **System → Software update** and in **Logs**. |
 | Forgotten admin password | [Resetting a forgotten admin password](/guide/security#resetting-a-forgotten-admin-password). |

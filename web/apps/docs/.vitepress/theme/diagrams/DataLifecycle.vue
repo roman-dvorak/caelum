@@ -7,7 +7,8 @@ import DiagramBox from './DiagramBox.vue'
     <svg viewBox="0 0 800 280" role="img" aria-labelledby="cd-data-title">
       <title id="cd-data-title">
         Frames go to the camera's disk, which is a rotating cache; today's files are uploaded about every minute and
-        everything every 30 minutes; retention deletes local files only after they are confirmed on the server.
+        everything every 30 minutes; retention deletes the oldest local files by age, or sooner when space runs
+        low, uploaded ones first.
       </title>
       <defs>
         <marker id="cd-data-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -31,9 +32,9 @@ import DiagramBox from './DiagramBox.vue'
       <path d="M280 150 V188" class="cd-edge cd-dash" marker-end="url(#cd-data-arrow)" />
       <rect x="185" y="190" width="440" height="72" rx="8" class="cd-box cd-dash-box" />
       <text x="405" y="214" text-anchor="middle" class="cd-t">Retention</text>
-      <text x="405" y="234" text-anchor="middle" class="cd-s">local files go after 2 days, once the server has them;</text>
-      <text x="405" y="251" text-anchor="middle" class="cd-s">below 1 GB free, the oldest go regardless</text>
+      <text x="405" y="234" text-anchor="middle" class="cd-s">oldest first, by a set age — sooner when space runs low;</text>
+      <text x="405" y="251" text-anchor="middle" class="cd-s">uploaded files go before those the server lacks</text>
     </svg>
-    <figcaption>Where frames go, and when the camera forgets them. Intervals and limits are the defaults.</figcaption>
+    <figcaption>Where frames go, and when the camera forgets them. Intervals are the defaults; the age and space limits are settings.</figcaption>
   </figure>
 </template>
