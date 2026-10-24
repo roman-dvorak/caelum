@@ -239,3 +239,76 @@ html:not(.dark) {
   font-size: 13px;
   color: var(--vp-c-text-3);
 }
+
+/* Mermaid diagrams (```mermaid in the pages, docs/_diagrams/): recoloured
+ * from the theme tokens, so they follow light and dark mode. Mermaid writes
+ * its own styles under the diagram's #id, hence !important. Node classes
+ * `accent`, `bus` and `dashed` are set with `class X accent` in the source. */
+.vp-doc .mermaid {
+  margin: 24px 0 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.vp-doc .mermaid .node rect,
+.vp-doc .mermaid .node polygon,
+.vp-doc .mermaid .node path,
+.vp-doc .mermaid .node circle {
+  fill: var(--vp-c-bg-soft) !important;
+  stroke: var(--vp-c-border) !important;
+  stroke-width: 1px !important;
+}
+.vp-doc .mermaid .node.accent rect,
+.vp-doc .mermaid .node.accent path {
+  fill: var(--vp-c-brand-soft) !important;
+  stroke: var(--vp-c-brand-1) !important;
+}
+.vp-doc .mermaid .node.bus polygon {
+  fill: transparent !important;
+  stroke: var(--vp-button-brand-bg) !important;
+  stroke-width: 1.5px !important;
+}
+.vp-doc .mermaid .node.dashed rect {
+  stroke-dasharray: 5 4 !important;
+}
+.vp-doc .mermaid .nodeLabel,
+.vp-doc .mermaid .node .label {
+  color: var(--vp-c-text-2) !important;
+  fill: var(--vp-c-text-2) !important;
+}
+/* Sizes stay mermaid's own (config.ts): it measures the labels outside the
+ * page, so anything here that changes their size clips them — including the
+ * paragraph margins and line height `.vp-doc p` would otherwise give them. */
+.vp-doc .mermaid p {
+  margin: 0 !important;
+  line-height: 1.5 !important;
+}
+.vp-doc .mermaid .nodeLabel b {
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+}
+.vp-doc .mermaid .cluster rect {
+  fill: transparent !important;
+  stroke: var(--vp-c-border) !important;
+  stroke-dasharray: 4 4 !important;
+}
+.vp-doc .mermaid .cluster-label .nodeLabel,
+.vp-doc .mermaid .cluster .label {
+  color: var(--vp-c-text-2) !important;
+}
+.vp-doc .mermaid .flowchart-link,
+.vp-doc .mermaid .edgePath .path {
+  stroke: var(--vp-c-text-2) !important;
+}
+.vp-doc .mermaid marker path,
+.vp-doc .mermaid .arrowheadPath,
+.vp-doc .mermaid .arrowMarkerPath {
+  fill: var(--vp-c-text-2) !important;
+  stroke: var(--vp-c-text-2) !important;
+}
+.vp-doc .mermaid .edgeLabel,
+.vp-doc .mermaid .edgeLabel p,
+.vp-doc .mermaid .edgeLabel rect {
+  background-color: var(--vp-c-bg) !important;
+  fill: var(--vp-c-bg) !important;
+  color: var(--vp-c-text-2) !important;
+}

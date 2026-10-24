@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
 import { defineConfig, type HeadConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 import { DEVELOPER_NAME, DEVELOPER_URL, DOCS_URL } from '../../../packages/ui/src/brand.ts'
 
 // The pages are compiled to Vue components that import `vue`, but they sit in
@@ -41,7 +42,10 @@ function pageUrl(relativePath: string): string {
   return `${siteUrl}/${path}`
 }
 
-export default defineConfig({
+// `withMermaid` renders ```mermaid blocks (the diagrams in the manual) in
+// the browser; their colours come from theme/caelum.css, not from mermaid's
+// own themes, so they follow light and dark mode like everything else.
+export default withMermaid(defineConfig({
   title: 'caelum',
   description: 'Software stack for allsky and astronomical cameras',
   base,
@@ -118,13 +122,13 @@ export default defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Getting started', link: '/getting-started' },
       { text: 'Manual', link: '/manual' },
+      { text: 'Cameras', link: '/cameras/', activeMatch: '^/cameras/' },
+      { text: 'Web viewer', link: '/viewer' },
       {
         text: 'Documentation',
         link: '/guide/',
         activeMatch: '^/(guide/|capture-programs|dng-capture-sets)',
       },
-      { text: 'Cameras', link: '/cameras/', activeMatch: '^/cameras/' },
-      { text: 'Web viewer', link: '/viewer' },
       // The maintainer, as a top-level link rather than buried in the footer.
       { text: 'AstroMeters', link: 'https://astrometers.eu' },
     ],
@@ -203,4 +207,16 @@ export default defineConfig({
       copyright: '© AstroMeters',
     },
   },
-})
+
+  // Diagram snippets shared by several pages (`<!--@include: ...-->`); not
+  // pages themselves.
+  srcExclude: ['_diagrams/**'],
+
+  mermaid: {
+    // Plain base styles; caelum.css recolours nodes, edges and labels from
+    // the theme tokens.
+    theme: 'base',
+    themeVariables: { fontFamily: "'Inter Variable', Inter, system-ui, sans-serif", fontSize: '14px' },
+    flowchart: { curve: 'basis', padding: 14, nodeSpacing: 40, rankSpacing: 50 },
+  },
+}))

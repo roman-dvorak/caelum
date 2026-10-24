@@ -40,7 +40,7 @@ can never disagree.
 
 ## Architecture
 
-<FramePipeline />
+<!--@include: ../_diagrams/frame-pipeline.md-->
 
 **The capture thread is the sole owner of the camera.** One `CameraBackend`
 instance is created at startup and handed to one `CaptureWorker`, which runs on

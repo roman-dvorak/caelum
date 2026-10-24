@@ -24,7 +24,9 @@ Pi, unattended, day and night:
 
 ## How the system fits together
 
-<SystemOverview />
+<!--@include: ./_diagrams/system-overview.md-->
+
+*The parts of a caelum installation and how data moves between them.*
 
 **The camera** does all the work. Its *capture engine* takes the pictures and
 processes them; its *web interface* is how you see and control it. Nothing
@@ -43,7 +45,9 @@ network it can also read a camera directly.
 
 ## What happens to every frame
 
-<FramePipeline />
+<!--@include: ./_diagrams/frame-pipeline.md-->
+
+*What happens to every frame inside the camera.*
 
 1. **Sky state.** From the camera's location and the clock, caelum computes
    where the sun and the moon are and which part of the day it is. This needs
@@ -72,7 +76,16 @@ caelum divides the day into five **sky periods** by how far the sun is below
 the horizon. Each has its own exposure limits, capture interval and storage
 rule:
 
-<SkyPeriods />
+| | Day | Civil twilight | Nautical | Astronomical | Night |
+|---|---|---|---|---|---|
+| **Sun altitude** | above −0.8° | −0.8° to −6° | −6° to −12° | −12° to −18° | below −18° |
+| **Exposure** | 0.1–10 ms | 0.2–100 ms | 1 ms–2 s | 10 ms–8 s | 0.1–15 s |
+| **Gain** | 1–2× | 1–4× | 1–8× | 1–12× | 1–16× |
+| **Frame every** | 60 s | 60 s | 60 s | 30 s | 30 s |
+| **Raw DNG** | — | — | — | **saved** | **saved** |
+
+*One evening, left to right; the morning runs the same way back. These are the
+defaults — every value is a setting.*
 
 - **Daytime** frames are short and frequent enough to follow clouds; only the
   preview is kept.
@@ -95,7 +108,9 @@ hide it.
 
 ## Where your data goes
 
-<DataLifecycle />
+<!--@include: ./_diagrams/data-lifecycle.md-->
+
+*Where frames go, and when the camera forgets them. Intervals are the defaults; the age and space limits are settings.*
 
 The camera's disk is a **rotating cache**, not an archive. With upload turned
 on:
