@@ -117,6 +117,7 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Getting started', link: '/getting-started' },
+      { text: 'Manual', link: '/manual' },
       {
         text: 'Documentation',
         link: '/guide/',
@@ -134,8 +135,8 @@ export default defineConfig({
       pattern: 'https://github.com/roman-dvorak/caelum/edit/master/docs/:path',
     },
 
-    // One sidebar per top-level section. Getting started is a single page
-    // with its own outline, so it has none.
+    // One sidebar per top-level section. Getting started, the manual and the
+    // web viewer are single pages with their own outline (`sidebar: false`).
     sidebar: {
       '/cameras/': [
         {
@@ -152,6 +153,7 @@ export default defineConfig({
           text: 'Overview',
           items: [
             { text: 'Introduction', link: '/guide/' },
+            { text: 'Installation', link: '/guide/installation' },
             { text: 'Concepts', link: '/guide/concepts' },
           ],
         },
@@ -179,6 +181,7 @@ export default defineConfig({
           items: [
             { text: 'Capture programs', link: '/capture-programs' },
             { text: 'Capture sets in DNG', link: '/dng-capture-sets' },
+            { text: 'Running from source', link: '/guide/development' },
           ],
         },
       ],

@@ -1,0 +1,72 @@
+/* Docs diagrams (theme/diagrams/*.vue): inline SVG coloured by the theme
+ * tokens, so one drawing serves light and dark mode. On a phone the figure
+ * scrolls sideways instead of shrinking the text to nothing. */
+.cd {
+  margin: 28px 0;
+  overflow-x: auto;
+}
+.cd svg {
+  display: block;
+  width: 100%;
+  min-width: 620px;
+  height: auto;
+}
+.cd figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+}
+.cd-group {
+  fill: none;
+  stroke: var(--vp-c-border);
+  stroke-dasharray: 4 4;
+}
+.cd-box {
+  fill: var(--vp-c-bg-soft);
+  stroke: var(--vp-c-border);
+}
+.cd-accent {
+  fill: var(--vp-c-brand-soft);
+  stroke: var(--vp-c-brand-1);
+}
+.cd-bus {
+  fill: none;
+  stroke: var(--vp-button-brand-bg);
+  stroke-width: 1.5;
+}
+.cd-dash-box {
+  stroke-dasharray: 5 4;
+}
+.cd-t {
+  fill: var(--vp-c-text-1);
+  font: 600 15px var(--vp-font-family-base);
+}
+.cd-s {
+  fill: var(--vp-c-text-2);
+  font: 13px var(--vp-font-family-base);
+}
+.cd-strong {
+  fill: var(--vp-c-text-1);
+  font-weight: 600;
+}
+.cd-band {
+  font: 600 14px var(--vp-font-family-base);
+}
+.cd-lbl {
+  fill: var(--vp-c-text-2);
+  font: italic 12.5px var(--vp-font-family-base);
+}
+.cd-edge {
+  fill: none;
+  stroke: var(--vp-c-text-2);
+  stroke-width: 1.5;
+}
+.cd-dash {
+  stroke-dasharray: 5 4;
+}
+.cd-head {
+  fill: var(--vp-c-text-2);
+}
+.cd-rule {
+  stroke: var(--vp-c-divider);
+}

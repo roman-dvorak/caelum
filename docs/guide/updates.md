@@ -4,7 +4,7 @@ description: 'Updating caelum from the web UI: release manifests, offline wheel 
 
 # Updates
 
-An install made by the [installer](/guide/deployment#install) updates itself
+An install made by the [installer](/guide/installation) updates itself
 from the web UI: **System → Software update**. Admin only.
 
 ## What happens

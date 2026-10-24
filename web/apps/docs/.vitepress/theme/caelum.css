@@ -194,10 +194,12 @@ html:not(.dark) {
   border-radius: 8px;
 }
 
-/* Six top-bar entries plus search don't fit between the 768px breakpoint
- * (where VitePress shows the menu) and a laptop width: tighten them there. */
+/* Seven top-bar entries plus search don't fit between the 768px breakpoint
+ * (where VitePress shows the menu) and a laptop width: tighten them there.
+ * `.VPNavBarMenu` in front: VitePress' own rule is scoped (`[data-v-…]`)
+ * and would win otherwise. */
 @media (min-width: 768px) and (max-width: 1099px) {
-  .VPNavBarMenuLink { padding: 0 7px; font-size: 13px; }
+  .VPNavBarMenu .VPNavBarMenuLink { padding: 0 7px; font-size: 13px; }
   .VPNavBar .VPNavBarSearch { padding-left: 12px; }
   .VPNavBar .DocSearch-Button-Placeholder,
   .VPNavBar .DocSearch-Button-Keys { display: none; }
@@ -205,6 +207,9 @@ html:not(.dark) {
 /* Narrowest of those: drop "Home" — the "caelum" title links home too. */
 @media (min-width: 768px) and (max-width: 899px) {
   .VPNavBarMenu > .VPNavBarMenuLink:first-of-type { display: none; }
+}
+@media (min-width: 768px) and (max-width: 839px) {
+  .VPNavBarMenu .VPNavBarMenuLink { padding: 0 5px; font-size: 13px; }
 }
 
 /* "Open Caelum Viewer" call to action on the Web viewer page. */

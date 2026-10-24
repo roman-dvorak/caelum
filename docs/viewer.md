@@ -111,7 +111,7 @@ Apache:
 ## Straight from a camera
 
 Give the viewer the camera's address. A camera installed with
-[`--proxy`](/guide/deployment#install) serves caelum over https on port 443,
+[`--proxy`](/guide/installation#https-with-proxy) serves caelum over https on port 443,
 so pass its full URL:
 
 ```

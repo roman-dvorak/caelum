@@ -13,8 +13,8 @@ hero:
       text: Get started
       link: /getting-started
     - theme: alt
-      text: Documentation
-      link: /guide/
+      text: User manual
+      link: /manual
     - theme: alt
       text: Cameras
       link: /cameras/

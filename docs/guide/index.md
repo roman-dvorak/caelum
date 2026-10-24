@@ -40,6 +40,8 @@ can never disagree.
 
 ## Architecture
 
+<FramePipeline />
+
 **The capture thread is the sole owner of the camera.** One `CameraBackend`
 instance is created at startup and handed to one `CaptureWorker`, which runs on
 its own thread for the entire process lifetime. Nothing else in the system ever
@@ -92,6 +94,7 @@ remotely. A local disk that is genuinely full while upload lags far behind will
 not free space until upload catches up. That is a deliberate trade — data
 safety over guaranteed headroom — not an oversight.
 
-Where to go next: [Getting started](/getting-started) to run it,
+Where to go next: [Getting started](/getting-started) to run it, the
+[User manual](/manual) for the whole system from an operator's point of view,
 [Concepts](/guide/concepts) for the domain model, or straight to
 [Exposure](/guide/exposure) for the control loop in detail.
