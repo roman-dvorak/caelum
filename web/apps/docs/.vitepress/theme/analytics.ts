@@ -16,9 +16,9 @@ export const ANALYTICS_HOST = 'caelum.astrometers.eu'
  * report on the docs alone. */
 export const GA_ID = 'G-NBPYLMPRY4'
 
-/** For now the astrometers.eu Clarity project; a project of its own would
- * keep the docs' heatmaps apart from the product site. Empty = not loaded. */
-export const CLARITY_ID = 'sofpwcakki'
+/** The docs' own Clarity project, so their heatmaps and recordings stay
+ * apart from the product site's. Empty = not loaded. */
+export const CLARITY_ID = 'z3gsdtmd7q'
 
 export type Consent = 'granted' | 'denied'
 
