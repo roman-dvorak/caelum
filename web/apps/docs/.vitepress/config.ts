@@ -107,7 +107,9 @@ export default withMermaid(defineConfig({
           url: `${siteUrl}/`,
           applicationCategory: 'ScientificApplication',
           operatingSystem: 'Linux (Raspberry Pi OS)',
-          codeRepository: 'https://github.com/roman-dvorak/caelum',
+          // `codeRepository` belongs to SoftwareSourceCode, not to
+          // SoftwareApplication — validators flag it here; sameAs is valid.
+          sameAs: ['https://github.com/roman-dvorak/caelum'],
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
           author: { '@type': 'Organization', name: DEVELOPER_NAME, url: DEVELOPER_URL },
           maintainer: { '@type': 'Organization', name: DEVELOPER_NAME, url: DEVELOPER_URL },

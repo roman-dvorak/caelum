@@ -58,3 +58,23 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Tells Bing (and the other IndexNow engines) that the pages changed, rather
+  # than waiting for the next crawl. The key is public by design: it is served
+  # as docs/public/<key>.txt, which is how the engines check we own the host.
+  # The site is small, so every URL in the sitemap goes in each time.
+  indexnow:
+    needs: deploy
+    runs-on: ubuntu-latest
+    env:
+      SITE: https://caelum.astrometers.eu
+      KEY: 3e9ebe167417822040d108364c18d180
+    steps:
+      - run: |
+          curl -fsS "$SITE/sitemap.xml" | grep -o '<loc>[^<]*</loc>' | sed 's/<[^>]*>//g' \
+            | jq -R . | jq -s --arg key "$KEY" --arg host "${SITE#https://}" --arg site "$SITE" \
+                '{host: $host, key: $key, keyLocation: "\($site)/\($key).txt", urlList: .}' \
+            > body.json
+          jq '.urlList | length' body.json
+          curl -fsS -w '%{http_code}\n' -o /dev/null -X POST https://api.indexnow.org/indexnow \
+            -H 'Content-Type: application/json; charset=utf-8' --data @body.json
