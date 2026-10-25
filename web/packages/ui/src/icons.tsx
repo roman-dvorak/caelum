@@ -15,6 +15,7 @@ import {
   CaretLeft,
   CaretRight,
   CheckCircle,
+  CircleNotch,
   CloudArrowUp,
   Cpu,
   DownloadSimple,
@@ -85,6 +86,8 @@ export const UploadIcon = icon(CloudArrowUp)
 export const SuccessIcon = icon(CheckCircle)
 export const ErrorIcon = icon(WarningCircle)
 export const InfoIcon = icon(Info)
+/** Static glyph — use `Spinner` for one that turns. */
+export const SpinnerIcon = icon(CircleNotch)
 
 // Controls
 export const LogoutIcon = icon(SignOut)

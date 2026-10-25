@@ -6,7 +6,7 @@
  */
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { ErrorIcon, InfoIcon, SuccessIcon } from './icons.js'
+import { ErrorIcon, InfoIcon, SpinnerIcon, SuccessIcon } from './icons.js'
 import { buttonClass } from './buttonClass.js'
 import type { ButtonVariant } from './buttonClass.js'
 
@@ -76,11 +76,11 @@ const MESSAGE_STYLES: Record<MessageKind, { box: string; icon: ReactNode }> = {
 
 /** A callout: a status colour only as its `*-surface` fill, border and
  * icon; the text stays `ink` so it reads in both themes. */
-export function Message({ kind, children }: { kind: MessageKind; children: ReactNode }) {
+export function Message({ kind, icon, children }: { kind: MessageKind; icon?: ReactNode; children: ReactNode }) {
   const style = MESSAGE_STYLES[kind]
   return (
     <div role={kind === 'error' ? 'alert' : 'status'} className={`flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm text-ink ${style.box}`}>
-      <span className="mt-0.5 shrink-0">{style.icon}</span>
+      <span className="mt-0.5 shrink-0">{icon ?? style.icon}</span>
       <div className="min-w-0">{children}</div>
     </div>
   )
@@ -125,6 +125,12 @@ export function EmptyState({ children }: { children: ReactNode }) {
       {children}
     </div>
   )
+}
+
+/** Something is in progress and will finish on its own. Turns only where
+ * the viewer allows motion; still, it reads as the progress glyph. */
+export function Spinner({ size = 18, className = 'text-sky' }: { size?: number; className?: string }) {
+  return <SpinnerIcon size={size} className={`motion-safe:animate-spin ${className}`} />
 }
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {

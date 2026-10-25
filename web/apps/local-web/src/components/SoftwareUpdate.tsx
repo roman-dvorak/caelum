@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { connectUpdateLog, type LogEntry, type UpdateStatusResponse } from '@caelum/api-client'
-import { Button, DownloadIcon, Message, Panel, Readout, RefreshIcon } from '@caelum/ui'
+import { Button, DownloadIcon, Message, Panel, Readout, RefreshIcon, Spinner } from '@caelum/ui'
 import { localApiClient } from '../services/client.ts'
 
 const BUSY_STATES = new Set(['downloading', 'installing', 'restarting'])
@@ -126,12 +126,14 @@ export function SoftwareUpdate({ runningVersion }: { runningVersion: string | un
           </Message>
         ) : null}
         {busy ? (
-          <Message kind="info">
+          <Message kind="info" icon={<Spinner />}>
             {status.job_state === 'restarting' ? 'Restarting into' : 'Installing'} {status.job_target}… the camera keeps
             running until the switch.
           </Message>
         ) : restarting ? (
-          <Message kind="info">Waiting for caelum to come back…</Message>
+          <Message kind="info" icon={<Spinner />}>
+            Waiting for caelum to come back…
+          </Message>
         ) : null}
         {!busy && !restarting && result?.state === 'rolled_back' ? (
           <Message kind="error">
@@ -139,7 +141,9 @@ export function SoftwareUpdate({ runningVersion }: { runningVersion: string | un
           </Message>
         ) : null}
         {!busy && !restarting && confirming ? (
-          <Message kind="info">Running {result?.to}; confirming it stays up before removing old releases…</Message>
+          <Message kind="info" icon={<Spinner />}>
+            Running {result?.to}; confirming it stays up before removing old releases…
+          </Message>
         ) : null}
         {!busy && !restarting && result?.state === 'success' && result.to === status.current_version ? (
           <Message kind="success">
