@@ -11,12 +11,13 @@ same gains the camera default for future frames is the existing
 `POST /api/camera/white-balance`.
 
 `/raw/white-balance/live` serves the same pixels from the newest frame's
-raw data still in RAM (`CaptureWorker.latest_raw`) — nothing has to be
-stored as a DNG, and nothing is written.
+raw data still in shared memory (`FrameSink.latest()`) — nothing has to
+be stored as a DNG, and nothing is written.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from pathlib import Path
 
@@ -150,15 +151,20 @@ def get_live_white_balance_pixels(
 
     Goes through an uncompressed in-memory DNG so unpacking, black levels,
     CFA order and colour matrix are exactly what a stored DNG would give."""
-    frame = worker.latest_raw
-    if frame is None or frame.raw_bayer is None or frame.raw_stream_config is None:
-        raise HTTPException(status_code=409, detail="No frame with raw sensor data captured yet")
+    with worker.frame_sink.latest() as frame:
+        if frame is None or frame.raw_bayer is None or frame.raw_stream_config is None:
+            raise HTTPException(status_code=409, detail="No frame with raw sensor data captured yet")
+        try:
+            # Copies the raw data out — the slot is free again right after.
+            data = dng_writer.build_dng(
+                frame.raw_bayer, frame.raw_stream_config, frame.camera_metadata,
+                captured_at=frame.captured_at, exposure_us=frame.exposure_us,
+                analogue_gain=frame.analogue_gain, camera_model=frame.camera_model, compress=False,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Raw data of the latest frame: {exc}") from exc
+        frame = dataclasses.replace(frame, image=None, raw_bayer=None)
     try:
-        data = dng_writer.build_dng(
-            frame.raw_bayer, frame.raw_stream_config, frame.camera_metadata,
-            captured_at=frame.captured_at, exposure_us=frame.exposure_us,
-            analogue_gain=frame.analogue_gain, camera_model=frame.camera_model, compress=False,
-        )
         info = dng_reader.parse(data)
     except (ValueError, dng_reader.DngFormatError) as exc:
         raise HTTPException(status_code=422, detail=f"Raw data of the latest frame: {exc}") from exc

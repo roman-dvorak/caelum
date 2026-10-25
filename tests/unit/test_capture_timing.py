@@ -50,6 +50,11 @@ class _RecordingSink:
 
     stats: dict = {}
 
+    def reserve(self, rgb_shape, raw_shape):
+        return None
+
+    def release(self, slot) -> None: ...
+
     def submit(self, submission) -> bool:
         with self.lock:
             self.times.append(time.monotonic())

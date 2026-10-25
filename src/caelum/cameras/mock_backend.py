@@ -61,6 +61,11 @@ class MockCameraBackend(CameraBackend):
         self._exposure_us = exposure_us
         self._analogue_gain = analogue_gain
 
+    def frame_layout(self):
+        # Not worth it for frames this small — but it keeps the slot path
+        # exercised wherever the mock runs.
+        return (*self._base_scene.shape, 3), None
+
     def capture_frame(self) -> RawFrame:
         if not self._opened:
             raise RuntimeError("MockCameraBackend.capture_frame() called before open()")

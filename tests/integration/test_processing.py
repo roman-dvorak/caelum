@@ -4,6 +4,7 @@ shared-memory cleanup."""
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import signal
@@ -12,6 +13,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from caelum.capture.frame_store import FrameStore, ProcessedFrame
@@ -173,6 +175,43 @@ def test_resolution_change_reallocates_slots(client):
     processing.submit(make_submission(raw_frame=bigger))
     assert _wait_until(lambda: len(collected) == 2)
     assert collected.frames[1].image.shape == (240, 320, 3)
+
+
+def _submit_into_slot(processing, fill: int) -> object:
+    """As the capture thread does it: reserve, let the "camera" write into
+    the slot, submit with it."""
+    frame = make_raw_frame(image=make_image(fill=fill))
+    slot = processing.reserve(frame.image.shape, frame.raw_bayer.shape)
+    assert slot is not None
+    slot.rgb[...] = frame.image
+    slot.raw[...] = frame.raw_bayer
+    submission = make_submission(raw_frame=dataclasses.replace(frame, image=slot.rgb, raw_bayer=slot.raw))
+    assert processing.submit(dataclasses.replace(submission, slot=slot)) is True
+    return frame
+
+
+def test_reserved_slot_becomes_the_latest_frame_and_stays_while_read(client):
+    processing, collected, _store = client
+    with processing.latest() as nothing:
+        assert nothing is None
+
+    first = _submit_into_slot(processing, fill=60)
+    assert _wait_until(lambda: processing.stats["processed"] == 1 and processing.stats["latest_frame"])
+    with processing.latest() as latest:
+        assert latest.captured_at == first.captured_at
+        np.testing.assert_array_equal(latest.raw_bayer, first.raw_bayer)
+        np.testing.assert_array_equal(latest.image, collected.frames[0].image)  # calibrated RGB
+
+        # While it is being read, newer frames can't take its slot.
+        for n in range(2, 5):
+            _submit_into_slot(processing, fill=10 * n)
+            assert _wait_until(lambda n=n: processing.stats["processed"] == n)
+        assert latest.image.mean() == pytest.approx(collected.frames[0].image.mean())
+
+    with processing.latest() as latest:
+        assert latest.image.mean() == pytest.approx(collected.frames[-1].image.mean())
+    stats = processing.stats
+    assert stats["dropped"] == 0 and stats["in_flight"] == 0 and stats["reserved"] == 0
 
 
 def test_stop_leaves_no_shared_memory_behind(tmp_path):

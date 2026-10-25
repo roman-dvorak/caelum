@@ -245,6 +245,7 @@ class ProcessingConfig(StrictModel):
     mode: Literal["process", "inline"] = "process"
     #: Shared-memory frame slots — how many captures may be waiting for or
     #: in processing at once before new ones are dropped (never blocked).
+    #: One more slot is allocated for the latest frame.
     slots: int = Field(default=3, ge=1, le=8)
     #: A frame still unfinished after this long counts as a hung worker,
     #: which is then killed and restarted.

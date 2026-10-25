@@ -14,4 +14,8 @@ the WebP thumbnail and the raw DNG — happens behind the sink:
 Both end the same way: a `ProcessedFrame` lands in the `FrameStore` and is
 published as `FRAME_CAPTURED` in the main process, so derivatives, plugins,
 the live stream and the uploader don't care which one is in use.
+
+`FrameSink.latest()` gives the newest processed frame's calibrated RGB and
+raw sensor data, always of the same capture — in place, from its
+shared-memory slot, with `ProcessingClient`.
 """

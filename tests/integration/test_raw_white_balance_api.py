@@ -75,7 +75,7 @@ async def test_live_frame_comes_from_ram(tmp_path, redis_url):
             await login(client)
             assert (await client.get("/api/raw/white-balance/live")).status_code == 409  # nothing captured yet
 
-            harness.worker.latest_raw = make_raw_frame()
+            harness.worker.frame_sink._latest = make_raw_frame()
             response = await client.get("/api/raw/white-balance/live", params={"max_dim": 64})
             assert response.status_code == 200
             info = json.loads(response.headers["x-info"])

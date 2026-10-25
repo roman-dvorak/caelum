@@ -3,17 +3,21 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from caelum.cameras.base import RawFrame
 from caelum.capture.calibration import DarkLibrary
 from caelum.capture.frame_store import FrameStore, ProcessedFrame
 from caelum.events import FRAME_CAPTURED, EventBus
 
 from . import pipeline
-from .jobs import FrameInfo, FrameSubmission
+from .jobs import FrameInfo, FrameSlot, FrameSubmission
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ class InlineFrameSink:
         self._processed = 0
         self._failed = 0
         self._last_timings: dict[str, float] = {}
+        self._latest: RawFrame | None = None
 
     def start(self) -> None:
         pass
@@ -52,6 +57,18 @@ class InlineFrameSink:
                 "in_flight": 0,
                 "last_timings_ms": dict(self._last_timings),
             }
+
+    def reserve(self, rgb_shape: tuple[int, ...], raw_shape: tuple[int, ...] | None) -> FrameSlot | None:
+        return None  # frames are processed in place anyway
+
+    def release(self, slot: FrameSlot) -> None:
+        pass
+
+    @contextmanager
+    def latest(self) -> Iterator[RawFrame | None]:
+        with self._lock:
+            frame = self._latest
+        yield frame  # its own arrays, never written again — nothing to guard
 
     def submit(self, submission: FrameSubmission) -> bool:
         self._process(submission, write_raw=True)
@@ -86,6 +103,8 @@ class InlineFrameSink:
             )
             self._frame_store.update(processed)
             self._event_bus.publish(FRAME_CAPTURED, processed)
+            with self._lock:
+                self._latest = dataclasses.replace(submission.raw, image=calibrated)
 
         raw = submission.raw.raw_bayer
         if (write_raw and submission.save_raw and raw is not None and info.raw_config is not None

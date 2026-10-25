@@ -138,9 +138,9 @@ class CameraBackend(ABC):
     process lifetime — see events.py / the project plan for why."""
 
     capabilities: CameraCapabilities
-    #: Where the last `capture_frame()` spent its time, in ms, for backends
-    #: that measure it (start, frame, copy, stop) — replaced on every
-    #: capture, never mutated.
+    #: Where the last capture spent its time, in ms, for backends that
+    #: measure it (start, frame, copy, stop) — replaced on every capture,
+    #: never mutated.
     last_timings_ms: Mapping[str, float] = MappingProxyType({})
 
     @abstractmethod
@@ -166,6 +166,27 @@ class CameraBackend(ABC):
     def capture_frame(self) -> RawFrame:
         """Blocking. Called only from the owning CaptureWorker's thread."""
         ...
+
+    def frame_layout(self) -> tuple[tuple[int, ...], tuple[int, ...] | None] | None:
+        """uint8 shapes of the next frame's `image` and `raw_bayer`, for
+        backends worth handing buffers to (`capture_frame_into`); None if
+        unknown or not worth it."""
+        return None
+
+    def capture_frame_into(self, rgb: np.ndarray, raw: np.ndarray | None) -> RawFrame:
+        """`capture_frame()` with its pixels in `rgb` and `raw` (buffers
+        shaped as `frame_layout()` said). This default copies them there; a
+        backend may write straight from its own buffers. A frame that
+        doesn't fit them comes back as `capture_frame()` gave it."""
+        frame = self.capture_frame()
+        if frame.image.shape != rgb.shape:
+            return frame
+        if frame.raw_bayer is not None and (raw is None or frame.raw_bayer.shape != raw.shape):
+            return frame
+        np.copyto(rgb, frame.image)
+        if frame.raw_bayer is not None:
+            np.copyto(raw, frame.raw_bayer)
+        return replace(frame, image=rgb, raw_bayer=raw if frame.raw_bayer is not None else None)
 
     def set_request_colour_gains(self, gains: tuple[float, float] | None) -> None:  # noqa: B027
         """Colour gains for the next capture only; None goes back to the

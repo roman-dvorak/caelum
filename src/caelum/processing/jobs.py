@@ -4,15 +4,21 @@ picklable data — pixel arrays never do, they travel through shared memory."""
 
 from __future__ import annotations
 
+import math
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
+
+import numpy as np
 
 from caelum.cameras.base import RawFrame
 from caelum.capture.brightness import BrightnessSample
 from caelum.capture.metadata import SkyStateModel
 from caelum.capture.stats import FrameStats
 from caelum.config.schema import FULL_SCALE_ADU, AppConfig
+
+_RAW_ALIGN = 64
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,28 @@ class FrameSubmission:
     #: representative are stored under `<stem>_set/` and never published.
     capture_set: dict[str, Any] | None = None
     annotations: dict[str, Any] | None = None
+    #: The sink's slot the camera already wrote this frame into (`raw.image`
+    #: is `slot.rgb`) — then nothing is copied on submit.
+    slot: FrameSlot | None = None
+
+
+@dataclass(frozen=True)
+class FrameSlot:
+    """Shared memory reserved for one capture before it is taken, so the
+    camera copies its buffers straight in (`FrameSink.reserve`). Handed back
+    with the frame's `FrameSubmission`, or with `FrameSink.release`."""
+
+    index: int
+    generation: int
+    rgb: np.ndarray
+    raw: np.ndarray | None
+
+
+def slot_layout(rgb_shape: tuple[int, ...], raw_shape: tuple[int, ...] | None) -> tuple[int, int]:
+    """Where a frame's raw buffer starts in its slot, and the slot size it needs."""
+    rgb_bytes = math.prod(rgb_shape)
+    raw_offset = -(-rgb_bytes // _RAW_ALIGN) * _RAW_ALIGN
+    return raw_offset, raw_offset + (math.prod(raw_shape) if raw_shape is not None else 0)
 
 
 @dataclass(frozen=True)
@@ -180,6 +208,22 @@ class FrameSink(Protocol):
 
     def submit_set(self, submissions: list[FrameSubmission]) -> bool:
         """Hand off all members of a capture set — all or nothing."""
+        ...
+
+    def reserve(self, rgb_shape: tuple[int, ...], raw_shape: tuple[int, ...] | None) -> FrameSlot | None:
+        """A slot for the next capture to be written into, or None (no free
+        slot, or this sink has none) — then the frame is copied on submit."""
+        ...
+
+    def release(self, slot: FrameSlot) -> None:
+        """Give back a reserved slot that no submission took."""
+        ...
+
+    def latest(self) -> AbstractContextManager[RawFrame | None]:
+        """The newest processed frame, while the `with` lasts: `image` is
+        the calibrated RGB and `raw_bayer` the sensor data of the same
+        capture, both views without a copy — keep the block short and copy
+        what has to outlive it. None until a frame has been processed."""
         ...
 
     @property

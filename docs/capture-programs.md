@@ -54,6 +54,9 @@ A frame (`CapturedFrame`) has `raw` (the camera frame: `image`,
 `exposure_us`, `analogue_gain`, `camera_metadata`, `capture_settings`),
 `brightness` (`median`, `p99` of the central circle, 0–255), `sky`,
 `requested`, `index`, and `annotations` (a dict stored with the frame).
+The camera writes a frame's pixels straight into shared memory that is
+reused after the run: to keep pixels in `ctx.state` for a later run, store
+a copy (`frame.raw.image.copy()`), not the frame.
 
 **Nothing is refused for exceeding the camera:** values outside its ranges
 are clamped to the nearest possible, options it doesn't have (incl. any

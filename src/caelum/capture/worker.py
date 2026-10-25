@@ -24,8 +24,6 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-import numpy as np
-
 from caelum import __version__
 from caelum.cameras.base import CameraBackend, CameraStalled, CaptureRequest, RawFrame
 from caelum.capture_runtime import (
@@ -49,7 +47,7 @@ from caelum.control.exposure import (
 )
 from caelum.control.skystate import SkyState, SkyStateCalculator
 from caelum.control.storage_policy import StoragePolicy
-from caelum.processing.jobs import FrameSink, FrameSubmission, ProcessingSettings
+from caelum.processing.jobs import FrameSink, FrameSlot, FrameSubmission, ProcessingSettings
 from caelum.storage import paths
 
 from .metadata import SkyStateModel
@@ -133,9 +131,6 @@ class ManualExposureOverride:
             return self._target
 
 
-_NO_IMAGE = np.zeros((0, 0, 3), dtype=np.uint8)
-
-
 class WhiteBalanceOverride:
     """Thread-safe one-shot white-balance request — like `ManualExposureOverride`,
     but applied once (white balance gains stick on the sensor until changed,
@@ -198,11 +193,6 @@ class CaptureWorker(threading.Thread):
         self.stream_mode.add_listener(self._wake.set)
         self.manual_exposure = manual_exposure or ManualExposureOverride()
         self.white_balance_override = white_balance_override or WhiteBalanceOverride()
-        #: The newest published frame's sensor data, kept in RAM for the
-        #: white balance tool (`GET /api/camera/white-balance/frame`). Only
-        #: the raw buffer: the ISP image is dropped so this costs one raw
-        #: frame (~18 MB for an IMX477), not another full RGB copy too.
-        self.latest_raw: RawFrame | None = None
 
         self._stop_event = threading.Event()
         self._sky_state: SkyState | None = None
@@ -241,6 +231,10 @@ class CaptureWorker(threading.Thread):
         # current run's captures; published per cycle as `capture_timings_ms`.
         self._timings: dict[str, float] = {}
         self._last_timings_ms: dict[str, float] = {}
+        # Sink slots the camera wrote this run's frames into: handed over
+        # with the frames submitted, the rest given back after the run.
+        self._reserving = False
+        self._run_slots: list[FrameSlot] = []
 
     @property
     def current_target(self) -> ExposureTarget:
@@ -507,15 +501,26 @@ class CaptureWorker(threading.Thread):
         # Waiting may have taken a whole interval — describe the sky as it
         # is now, at the capture.
         sky_state = self._refresh_sky_state()
+        slot = self._reserve_slot(camera)
         called_ns = time.monotonic_ns()
         capturing = time.perf_counter()
         watchdog = threading.Timer(exposure_s + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung)
         watchdog.daemon = True
         watchdog.start()
         try:
-            raw = camera.finish_request(camera.capture_frame(), record)
+            frame = camera.capture_frame_into(slot.rgb, slot.raw) if slot is not None else camera.capture_frame()
+        except BaseException:
+            if slot is not None:
+                self._frame_sink.release(slot)
+            raise
         finally:
             watchdog.cancel()
+        if slot is not None:
+            if frame.image is slot.rgb:
+                self._run_slots.append(slot)
+            else:
+                self._frame_sink.release(slot)  # didn't fit after all
+        raw = camera.finish_request(frame, record)
         self._add_timing("camera", time.perf_counter() - capturing)
         for name, ms in camera.last_timings_ms.items():
             self._add_timing(f"camera_{name}", ms / 1e3)
@@ -527,6 +532,27 @@ class CaptureWorker(threading.Thread):
             if 0.0 <= latency < 2.0:
                 self._start_latency_s = 0.7 * self._start_latency_s + 0.3 * latency
         return raw, sky_state
+
+    def _reserve_slot(self, camera: CameraBackend) -> FrameSlot | None:
+        """A sink slot for the camera to write the next frame into — only
+        in a production run (a test run's frames are stored elsewhere)."""
+        if not self._reserving:
+            return None
+        layout = camera.frame_layout()
+        return self._frame_sink.reserve(*layout) if layout is not None else None
+
+    def _with_slot(self, submission: FrameSubmission) -> FrameSubmission:
+        """`submission` with the slot its pixels are already in, if any."""
+        for slot in self._run_slots:
+            if submission.raw.image is slot.rgb:
+                self._run_slots.remove(slot)
+                return dataclasses.replace(submission, slot=slot)
+        return submission
+
+    def _release_run_slots(self) -> None:
+        for slot in self._run_slots:
+            self._frame_sink.release(slot)
+        self._run_slots = []
 
     def _add_timing(self, name: str, seconds: float) -> None:
         self._timings[name] = self._timings.get(name, 0.0) + seconds
@@ -672,33 +698,38 @@ class CaptureWorker(threading.Thread):
         self._timings = {}
         started = time.perf_counter()
         try:
-            capture_set = run_once(self._loop, program, ctx, timeout_s)
-        except ProgramStopped:
-            return
-        except CaptureProgramError as exc:
-            self._program_failed(program, exc, cfg)
-            capture_set = None
-        else:
-            self._program_failures = 0
-        finally:
-            hard_limit.cancel()
-            self._program_runs += 1
-            self._commanded = ctx.commanded
-        program_s = time.perf_counter() - started
-        if ctx.captures == 0:
-            # Nothing captured (or failed before capturing): still use up
-            # the slot, so a broken program can't spin.
-            due = self._wait_for_slot(interval_s)
-            if due is not None:
-                self._next_due = due + interval_s
-        self._frame_period(cfg, sky_state, self._commanded)
+            self._reserving = True
+            try:
+                capture_set = run_once(self._loop, program, ctx, timeout_s)
+            except ProgramStopped:
+                return
+            except CaptureProgramError as exc:
+                self._program_failed(program, exc, cfg)
+                capture_set = None
+            else:
+                self._program_failures = 0
+            finally:
+                self._reserving = False
+                hard_limit.cancel()
+                self._program_runs += 1
+                self._commanded = ctx.commanded
+            program_s = time.perf_counter() - started
+            if ctx.captures == 0:
+                # Nothing captured (or failed before capturing): still use up
+                # the slot, so a broken program can't spin.
+                due = self._wait_for_slot(interval_s)
+                if due is not None:
+                    self._next_due = due + interval_s
+            self._frame_period(cfg, sky_state, self._commanded)
 
-        if capture_set is not None:
-            submitting = time.perf_counter()
-            self._submit(cfg, capture_set, self._provenance(cfg, program, ctx.params, camera))
-            self._add_timing("submit", time.perf_counter() - submitting)
-        if ctx.captures:
-            self._publish_timings(ctx, program_s)
+            if capture_set is not None:
+                submitting = time.perf_counter()
+                self._submit(cfg, capture_set, self._provenance(cfg, program, ctx.params, camera))
+                self._add_timing("submit", time.perf_counter() - submitting)
+            if ctx.captures:
+                self._publish_timings(ctx, program_s)
+        finally:
+            self._release_run_slots()
 
     def _provenance(self, cfg: AppConfig, program: LoadedProgram, params: dict, camera: CameraBackend) -> dict:
         """What produced a frame — enough to reproduce or audit it."""
@@ -718,10 +749,8 @@ class CaptureWorker(threading.Thread):
         }
 
     def _submit(self, cfg: AppConfig, capture_set: CaptureSet, provenance: dict) -> None:
-        submissions = build_submissions(cfg, capture_set, provenance, self._storage_policy)
-        primary = capture_set.primary.raw
-        if primary.raw_bayer is not None and primary.raw_stream_config is not None:
-            self.latest_raw = dataclasses.replace(primary, image=_NO_IMAGE)
+        submissions = [self._with_slot(s) for s in build_submissions(cfg, capture_set, provenance,
+                                                                      self._storage_policy)]
         if len(submissions) == 1:
             self._frame_sink.submit(submissions[0])
         else:

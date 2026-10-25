@@ -30,9 +30,10 @@ from caelum.config.schema import CameraConfig
 from .base import CameraBackend, CameraCapabilities, CameraStalled, RawFrame
 
 try:
-    from picamera2 import Picamera2
+    from picamera2 import MappedArray, Picamera2
 except ImportError as exc:  # pragma: no cover - exercised only on real hardware
     Picamera2 = None  # type: ignore[assignment,misc]
+    MappedArray = None  # type: ignore[assignment,misc]
     _import_error: Exception | None = exc
 else:
     _import_error = None
@@ -172,6 +173,10 @@ class Picamera2Backend(CameraBackend):
         self._wb_blue_gain = cfg.wb_blue_gain
         self._picam2: Picamera2 | None = None
         self._raw_config: dict[str, Any] | None = None
+        self._main_config: dict[str, Any] | None = None
+        #: Copying straight from the camera buffers into the caller's (see
+        #: `_copy_out`): None until checked on the first frame.
+        self._direct_copy: bool | None = None
         self._model = ""
         self._requested: tuple[int, float] | None = None
         self._request_gains = False
@@ -247,6 +252,12 @@ class Picamera2Backend(CameraBackend):
             logger.info("Raw format %s adjusted by libcamera to %s — reconfiguring with it", requested, actual)
             self._configure(actual)
             return
+        main_cfg = self._picam2.camera_configuration().get("main") or {}
+        self._main_config = {
+            "format": str(main_cfg.get("format", "")),
+            "size": tuple(int(v) for v in main_cfg.get("size", (0, 0))),
+            "stride": int(main_cfg.get("stride", 0)),
+        } if main_cfg.get("stride") else None
         raw_cfg = self._picam2.camera_configuration().get("raw") or {}
         self._raw_config = {
             "format": str(raw_cfg.get("format", "")),
@@ -352,7 +363,22 @@ class Picamera2Backend(CameraBackend):
             self._picam2.cancel_all_and_flush()
             raise CameraStalled(f"No frame from the camera within {wait_s:.1f}s") from exc
 
+    def frame_layout(self) -> tuple[tuple[int, ...], tuple[int, ...] | None] | None:
+        if self._main_config is None or self._direct_copy is False:
+            return None
+        width, height = self._main_config["size"]
+        raw_shape = None
+        if self._raw_config is not None:
+            raw_shape = (int(self._raw_config["size"][1]), int(self._raw_config["stride"]))
+        return (height, width, 3), raw_shape
+
     def capture_frame(self) -> RawFrame:
+        return self._capture(None)
+
+    def capture_frame_into(self, rgb: np.ndarray, raw: np.ndarray | None) -> RawFrame:
+        return self._capture((rgb, raw))
+
+    def _capture(self, into: tuple[np.ndarray, np.ndarray | None] | None) -> RawFrame:
         assert self._picam2 is not None, "capture_frame() called before open()"
         picam2 = self._picam2
         wait_s = (self._requested[0] / 1e6 if self._requested else 0.0) + _FRAME_GRACE_S
@@ -371,10 +397,7 @@ class Picamera2Backend(CameraBackend):
                 request = self._next_request(wait_s)
             t_frame = time.perf_counter()
             try:
-                # make_array copies out of the mapped buffer (make_buffer is
-                # an np.array() of it), so both survive the release below.
-                image = request.make_array("main")
-                raw = request.make_array("raw") if self._raw_config is not None else None
+                image, raw = self._copy_out(request, into)
                 meta = request.get_metadata()
             finally:
                 request.release()
@@ -382,6 +405,14 @@ class Picamera2Backend(CameraBackend):
         finally:
             picam2.stop()
         t_stopped = time.perf_counter()
+        self.last_timings_ms = {
+            "start": (t_started - t_start) * 1e3,
+            # Exposure and readout, plus any extra frames taken.
+            "frame": (t_frame - t_started) * 1e3,
+            # Out of the camera's buffers, and the release.
+            "copy": (t_copied - t_frame) * 1e3,
+            "stop": (t_stopped - t_copied) * 1e3,
+        }
 
         exposure_us = int(meta.get("ExposureTime", 0))
         # SensorTimestamp is CLOCK_MONOTONIC at the end of the exposure.
@@ -396,24 +427,6 @@ class Picamera2Backend(CameraBackend):
                 captured_at -= timedelta(microseconds=lag_ns // 1000 + exposure_us)
             exposure_start_ns = sensor_ts - exposure_us * 1000
 
-        # picamera2's "main" stream for a still configuration is ISP-processed
-        # (already debayered); drop an alpha channel if the platform's default
-        # format includes one, keeping RGB order.
-        if image.ndim == 3 and image.shape[2] == 4:
-            image = image[:, :, :3]
-        image = np.ascontiguousarray(image)
-        t_done = time.perf_counter()
-        self.last_timings_ms = {
-            "start": (t_started - t_start) * 1e3,
-            # Exposure and readout, plus any extra frames taken.
-            "frame": (t_frame - t_started) * 1e3,
-            # make_array of main and raw, and the release.
-            "copy": (t_copied - t_frame) * 1e3,
-            "stop": (t_stopped - t_copied) * 1e3,
-            # Dropping the alpha channel — a second copy of the image if any.
-            "repack": (t_done - t_stopped) * 1e3,
-        }
-
         return RawFrame(
             image=image,
             exposure_us=exposure_us,
@@ -426,3 +439,67 @@ class Picamera2Backend(CameraBackend):
             camera_model=self._model,
             exposure_start_monotonic_ns=exposure_start_ns,
         )
+
+    # ---- getting the pixels out of the request -------------------------------
+
+    def _copy_out(
+        self, request: Any, into: tuple[np.ndarray, np.ndarray | None] | None
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """The frame's image and raw buffer, copied out before the request
+        is released: into `into` straight from the mapped buffers when given
+        (one copy), else with picamera2's `make_array`. The first direct
+        copy is checked against `make_array`; any mismatch or error and
+        direct copies are off for this camera."""
+        if into is None or self._direct_copy is False:
+            return self._make_arrays(request)
+        try:
+            image, raw = self._copy_direct(request, *into)
+        except Exception:  # noqa: BLE001 - never lose a frame to this; fall back for good
+            logger.exception("Copying straight out of the camera buffers failed — using picamera2's copies")
+            self._direct_copy = False
+            return self._make_arrays(request)
+        if self._direct_copy is None:
+            expected = self._make_arrays(request)
+            same_raw = (raw is None and expected[1] is None) or (
+                raw is not None and expected[1] is not None and np.array_equal(raw, expected[1])
+            )
+            if not (np.array_equal(image, expected[0]) and same_raw):
+                logger.error(
+                    "Direct copy out of the camera buffers differs from picamera2's (main %s, raw %s) — "
+                    "using picamera2's copies", self._main_config, self._raw_config,
+                )
+                self._direct_copy = False
+                return expected
+            self._direct_copy = True
+            logger.info("Frames are copied straight from the camera buffers into shared memory")
+        return image, raw
+
+    def _make_arrays(self, request: Any) -> tuple[np.ndarray, np.ndarray | None]:
+        # make_array copies out of the mapped buffer (make_buffer is an
+        # np.array() of it), so both survive the release.
+        image = request.make_array("main")
+        raw = request.make_array("raw") if self._raw_config is not None else None
+        # picamera2's "main" stream for a still configuration is ISP-processed
+        # (already debayered); drop an alpha channel if the platform's default
+        # format includes one, keeping RGB order.
+        if image.ndim == 3 and image.shape[2] == 4:
+            image = image[:, :, :3]
+        return np.ascontiguousarray(image), raw
+
+    def _copy_direct(
+        self, request: Any, rgb: np.ndarray, raw: np.ndarray | None
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        assert self._main_config is not None
+        height, width = rgb.shape[:2]
+        stride = self._main_config["stride"]
+        bpp = 4 if self._main_config["format"] in ("XBGR8888", "XRGB8888") else 3
+        with MappedArray(request, "main", reshape=False, write=False) as mapped:
+            rows = mapped.array[: height * stride].reshape(height, stride)
+            # Rows padded to the stride, pixels maybe with an alpha byte:
+            # one strided copy of just the RGB.
+            np.copyto(rgb, rows[:, : width * bpp].reshape(height, width, bpp)[:, :, :3])
+        if self._raw_config is None or raw is None:
+            return rgb, None
+        with MappedArray(request, "raw", reshape=False, write=False) as mapped:
+            np.copyto(raw, mapped.array[: raw.size].reshape(raw.shape))
+        return rgb, raw
