@@ -1,6 +1,6 @@
 ---
 sidebar: false
-description: 'Caelum Viewer: a static web app for browsing allsky camera data — timeline by sky period, time-lapse playback, frame metadata, charts, filters and RAW download.'
+description: 'Caelum Viewer: a static web app for browsing allsky camera data — timeline by sky period, time-lapse playback, video and image export, frame metadata, charts, filters and RAW download.'
 ---
 
 # Web viewer
@@ -36,15 +36,32 @@ it runs as static files and reads the data from one of two places:
 - **Downloads** — the original RAW (DNG), the preview and the JSON metadata.
   RAW files are only ever fetched when you ask for one.
 - **Time-lapse** — playback at 2–30 frames per second, preloading ahead.
-- **Live** — reloads every 30 s and shows the newest frame.
+- **Section of the day** — mark it with `[` / `]` at the current frame or by
+  Shift+dragging on the timeline; playback loops within it, it is kept in the
+  URL and `Esc` cancels it.
+- **Export** — the section (or the whole day), filtered frames only, as an
+  MP4 video encoded in the browser (WebCodecs; optionally with the camera
+  name and time burnt into the picture) or as a ZIP of the previews,
+  optionally with their JSON metadata. Nothing is uploaded anywhere.
+- **Live** — reloads every 30 s and shows the newest frame. When the newest
+  frame is over an hour old, a banner warns that the camera may have stopped
+  sending data; past a day the banner turns red.
 - **Charts** — any numeric metadata over the day, with a cursor synchronised
   to the frame shown; click a chart to jump to that frame.
 - **Filters** — by sky period, by value ranges of any metadata field and by
   whether a RAW exists. They apply to playback, the gallery and the charts.
 - **Gallery** — the day's WebP thumbnails.
+- **About** — the viewer's version, build commit and build time.
+
+The viewer opens in **simple mode** — image, overlay, playback and timeline
+only. **Advanced mode** adds the metadata, filter, export, gallery and chart
+panels; the section of the day and the export are available only there. The
+side panels can be collapsed (filter and export start collapsed). The browser
+remembers the chosen mode and which panels are open.
 
 Keyboard: `←`/`→` (with Shift, by 10), `Home`/`End`, `Space` plays,
-`F` fullscreen, `+`/`−`/`0` zoom, `L` live, `O` overlay.
+`F` fullscreen, `+`/`−`/`0` zoom, `L` live, `O` overlay, `[`/`]` section
+start/end at the current frame, `Esc` cancels the section.
 
 ## From a storage server
 
@@ -75,7 +92,8 @@ https://viewer.caelum.astrometers.eu/?catalog=https://example.org/cameras.json
 ```
 
 Further parameters: `camera=`, `date=YYYY-MM-DD`, `time=HH:MM[:SS]` (UTC),
-`live=1`.
+`live=1`, `from=` / `to=HH:MM[:SS]` (section of the day, UTC),
+`mode=simple|advanced`.
 
 ::: warning CORS and public data
 The data is on a different domain than the viewer, so the server has to send
