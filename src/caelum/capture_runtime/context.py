@@ -107,6 +107,8 @@ class CaptureContext:
         #: A camera failure inside `capture()` — re-raised by the worker even
         #: if the program swallowed it, so camera recovery still happens.
         self.camera_error: BaseException | None = None
+        #: Time spent measuring brightness this run — for the worker's timings.
+        self.measure_s = 0.0
 
     @property
     def captures(self) -> int:
@@ -148,7 +150,9 @@ class CaptureContext:
         except BaseException as exc:
             self.camera_error = exc
             raise
+        started = time.perf_counter()
         sample = measure(frame_raw.image, self.config.exposure_policy.brightness_roi_diameter_frac)
+        self.measure_s += time.perf_counter() - started
         return CapturedFrame(raw=frame_raw, brightness=sample, sky=sky, requested=req, index=index)
 
     def capture_set(

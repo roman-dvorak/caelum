@@ -237,6 +237,10 @@ class CaptureWorker(threading.Thread):
         self._loop: asyncio.AbstractEventLoop | None = None
         # Per run: the interval of the grid and the slot the run is aimed at.
         self._run_interval_s = 0.0
+        # Where this thread's time goes, in seconds, summed over the
+        # current run's captures; published per cycle as `capture_timings_ms`.
+        self._timings: dict[str, float] = {}
+        self._last_timings_ms: dict[str, float] = {}
 
     @property
     def current_target(self) -> ExposureTarget:
@@ -277,6 +281,14 @@ class CaptureWorker(threading.Thread):
     @property
     def exposure_diagnostics(self) -> ExposureDiagnostics | None:
         return self._exposure_controller.diagnostics
+
+    @property
+    def capture_timings_ms(self) -> dict[str, float]:
+        """The last cycle on this thread, in ms (summed over its captures):
+        waiting for the slot, the camera (with the backend's own breakdown
+        as `camera_*`), brightness measurement, the rest of the program
+        (regulator, metadata) and handing the frames to the sink."""
+        return dict(self._last_timings_ms)
 
     @property
     def frame_period_s(self) -> float | None:
@@ -479,6 +491,7 @@ class CaptureWorker(threading.Thread):
         record = camera.apply_request(req)
         exposure_s = record["commanded"]["exposure_us"] / 1e6
         due = None
+        waiting = time.perf_counter()
         if align_to_slot:
             while True:
                 due = self._wait_for_slot(self._run_interval_s)
@@ -490,10 +503,12 @@ class CaptureWorker(threading.Thread):
                 # aim at the next slot of the new grid instead.
                 self._run_interval_s = self._interval(self._config_manager.current, self._refresh_sky_state())
                 logger.info("Capture cadence changed — next capture on the %.2fs grid", self._run_interval_s)
+        self._add_timing("wait_slot", time.perf_counter() - waiting)
         # Waiting may have taken a whole interval — describe the sky as it
         # is now, at the capture.
         sky_state = self._refresh_sky_state()
         called_ns = time.monotonic_ns()
+        capturing = time.perf_counter()
         watchdog = threading.Timer(exposure_s + _CAPTURE_WATCHDOG_GRACE_S, self._capture_hung)
         watchdog.daemon = True
         watchdog.start()
@@ -501,6 +516,9 @@ class CaptureWorker(threading.Thread):
             raw = camera.finish_request(camera.capture_frame(), record)
         finally:
             watchdog.cancel()
+        self._add_timing("camera", time.perf_counter() - capturing)
+        for name, ms in camera.last_timings_ms.items():
+            self._add_timing(f"camera_{name}", ms / 1e3)
         if due is not None:
             self._next_due = due + self._run_interval_s
             raw = stamp_slot(raw, due)
@@ -509,6 +527,19 @@ class CaptureWorker(threading.Thread):
             if 0.0 <= latency < 2.0:
                 self._start_latency_s = 0.7 * self._start_latency_s + 0.3 * latency
         return raw, sky_state
+
+    def _add_timing(self, name: str, seconds: float) -> None:
+        self._timings[name] = self._timings.get(name, 0.0) + seconds
+
+    def _publish_timings(self, ctx: CaptureContext, program_s: float) -> None:
+        t = self._timings
+        t["brightness"] = ctx.measure_s
+        t["program_other"] = max(
+            0.0, program_s - t.get("wait_slot", 0.0) - t.get("camera", 0.0) - ctx.measure_s
+        )
+        published = {name: round(seconds * 1e3, 1) for name, seconds in t.items()}
+        published["captures"] = ctx.captures
+        self._last_timings_ms = published
 
     def _current_program(self, cfg: AppConfig) -> LoadedProgram:
         try:
@@ -638,6 +669,8 @@ class CaptureWorker(threading.Thread):
         hard_limit = threading.Timer(timeout_s + 120.0, self._program_hung, args=(program,))
         hard_limit.daemon = True
         hard_limit.start()
+        self._timings = {}
+        started = time.perf_counter()
         try:
             capture_set = run_once(self._loop, program, ctx, timeout_s)
         except ProgramStopped:
@@ -651,16 +684,21 @@ class CaptureWorker(threading.Thread):
             hard_limit.cancel()
             self._program_runs += 1
             self._commanded = ctx.commanded
+        program_s = time.perf_counter() - started
         if ctx.captures == 0:
             # Nothing captured (or failed before capturing): still use up
             # the slot, so a broken program can't spin.
-            due = self._wait_for_slot(interval_s, 0.0)
+            due = self._wait_for_slot(interval_s)
             if due is not None:
                 self._next_due = due + interval_s
         self._frame_period(cfg, sky_state, self._commanded)
 
         if capture_set is not None:
+            submitting = time.perf_counter()
             self._submit(cfg, capture_set, self._provenance(cfg, program, ctx.params, camera))
+            self._add_timing("submit", time.perf_counter() - submitting)
+        if ctx.captures:
+            self._publish_timings(ctx, program_s)
 
     def _provenance(self, cfg: AppConfig, program: LoadedProgram, params: dict, camera: CameraBackend) -> dict:
         """What produced a frame — enough to reproduce or audit it."""

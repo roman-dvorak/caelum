@@ -43,6 +43,7 @@ def get_status(
         exposure_diagnostics=ExposureDiagnosticsResponse(**diagnostics.__dict__),
         timezone=config_manager.current.location.timezone,
         processing=frame_sink.stats if frame_sink is not None else None,
+        capture_timings_ms=worker.capture_timings_ms or None,
         frame_period_s=worker.frame_period_s,
         capture_program=worker.program_status,
     )

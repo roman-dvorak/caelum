@@ -73,6 +73,9 @@ def test_user_program_frames_are_submitted():
     status = worker.program_status
     assert status["name"] == "pair.py" and status["origin"] == "user"
     assert not status["fallback_active"]
+    timings = worker.capture_timings_ms
+    assert timings["captures"] == 2
+    assert {"wait_slot", "camera", "brightness", "program_other", "submit"} <= timings.keys()
 
 
 def test_failing_program_falls_back_to_default():
@@ -88,6 +91,33 @@ def test_failing_program_falls_back_to_default():
     assert provenance["capture_program_fallback"] is True
     assert provenance["camera_capabilities"]["model"] == "mock"
     assert sink.submissions[-1].capture_set is None
+
+
+def test_program_that_captures_nothing_just_uses_up_its_slot():
+    program = load_program("idle.py", "async def capture(ctx):\n    return None\n")
+    opened = []
+
+    def camera_factory(_cfg):
+        opened.append(1)
+        return MockCameraBackend()
+
+    worker = CaptureWorker(
+        camera_factory=camera_factory,
+        config_manager=_Config(_config(0.1)),
+        skystate_calculator=_Sky(),
+        exposure_controller=ExposureController(),
+        storage_policy=StoragePolicy(),
+        frame_sink=_SetSink(),
+        program_provider=lambda _cfg: program,
+    )
+    worker.start()
+    try:
+        assert _wait(lambda: worker.program_status["runs"] >= 4, timeout=3.0)
+    finally:
+        worker.request_stop()
+        worker.join(2)
+    # No cycle failed: a failure would reopen the camera and back off.
+    assert opened == [1]
 
 
 def _store_worker(store, cfg_holder, sink):

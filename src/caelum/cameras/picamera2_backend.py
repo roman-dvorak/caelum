@@ -356,8 +356,10 @@ class Picamera2Backend(CameraBackend):
         assert self._picam2 is not None, "capture_frame() called before open()"
         picam2 = self._picam2
         wait_s = (self._requested[0] / 1e6 if self._requested else 0.0) + _FRAME_GRACE_S
+        t_start = time.perf_counter()
         picam2.start()
         try:
+            t_started = time.perf_counter()
             request = self._next_request(wait_s)
             # The first frame normally carries the start controls already; if
             # the sensor ever disagrees, give it a frame or two more.
@@ -367,6 +369,7 @@ class Picamera2Backend(CameraBackend):
                 logger.warning("First frame after start not at the requested exposure/gain — taking another")
                 request.release()
                 request = self._next_request(wait_s)
+            t_frame = time.perf_counter()
             try:
                 # make_array copies out of the mapped buffer (make_buffer is
                 # an np.array() of it), so both survive the release below.
@@ -375,8 +378,10 @@ class Picamera2Backend(CameraBackend):
                 meta = request.get_metadata()
             finally:
                 request.release()
+            t_copied = time.perf_counter()
         finally:
             picam2.stop()
+        t_stopped = time.perf_counter()
 
         exposure_us = int(meta.get("ExposureTime", 0))
         # SensorTimestamp is CLOCK_MONOTONIC at the end of the exposure.
@@ -397,6 +402,17 @@ class Picamera2Backend(CameraBackend):
         if image.ndim == 3 and image.shape[2] == 4:
             image = image[:, :, :3]
         image = np.ascontiguousarray(image)
+        t_done = time.perf_counter()
+        self.last_timings_ms = {
+            "start": (t_started - t_start) * 1e3,
+            # Exposure and readout, plus any extra frames taken.
+            "frame": (t_frame - t_started) * 1e3,
+            # make_array of main and raw, and the release.
+            "copy": (t_copied - t_frame) * 1e3,
+            "stop": (t_stopped - t_copied) * 1e3,
+            # Dropping the alpha channel — a second copy of the image if any.
+            "repack": (t_done - t_stopped) * 1e3,
+        }
 
         return RawFrame(
             image=image,

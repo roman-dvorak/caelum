@@ -60,6 +60,9 @@ class StatusResponse(BaseModel):
     #: Counters from the frame-processing sink (worker pid/liveness,
     #: in-flight/dropped/failed frames, last latency) — None if not wired.
     processing: dict[str, Any] | None = None
+    #: Where the capture thread's last cycle spent its time, in ms — the
+    #: capture-side counterpart of `processing.last_timings_ms`.
+    capture_timings_ms: dict[str, float] | None = None
     #: Current spacing between captures — `capture_interval_s`, or a whole
     #: multiple of it while the exposure doesn't fit in one interval.
     frame_period_s: float | None = None

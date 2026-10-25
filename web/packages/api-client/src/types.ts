@@ -91,6 +91,9 @@ export interface StatusResponse {
   exposure_diagnostics: ExposureDiagnostics | null
   /** Frame-processing worker counters (pid, in-flight/dropped/failed frames, latency). */
   processing?: Record<string, unknown> | null
+  /** Where the capture thread's last cycle spent its time, ms (wait_slot,
+   * camera, camera_*, brightness, program_other, submit, captures). */
+  capture_timings_ms?: Record<string, number> | null
   /** Current spacing between captures, seconds. */
   frame_period_s?: number | null
   /** The running capture program (name, sha256, origin, failures…). */

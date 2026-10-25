@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 
 import numpy as np
@@ -136,6 +138,10 @@ class CameraBackend(ABC):
     process lifetime — see events.py / the project plan for why."""
 
     capabilities: CameraCapabilities
+    #: Where the last `capture_frame()` spent its time, in ms, for backends
+    #: that measure it (start, frame, copy, stop) — replaced on every
+    #: capture, never mutated.
+    last_timings_ms: Mapping[str, float] = MappingProxyType({})
 
     @abstractmethod
     def open(self) -> None: ...
