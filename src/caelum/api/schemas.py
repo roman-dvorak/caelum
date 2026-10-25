@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from caelum.auth import Role
 from caelum.capture.stats import FrameStats
-from caelum.config.schema import CameraConfig
+from caelum.config.schema import AppConfig, CameraConfig
 
 
 class ExposureDiagnosticsResponse(BaseModel):
@@ -87,6 +87,28 @@ class SkyStateResponse(BaseModel):
 
 class ConfigPatchRequest(BaseModel):
     patch: dict[str, Any]
+
+
+class ConfigImportRequest(BaseModel):
+    #: A whole exported config or any part of it — merged like a PUT patch.
+    config: dict[str, Any]
+    #: Only report what would change.
+    dry_run: bool = True
+
+
+class ConfigChange(BaseModel):
+    #: Dotted path, e.g. "exposure_policy.presets.night.target_ev".
+    path: str
+    old: Any = None
+    new: Any = None
+
+
+class ConfigImportResponse(BaseModel):
+    changes: list[ConfigChange]
+    #: Top-level sections in the file that are never imported.
+    ignored: list[str]
+    applied: bool
+    config: AppConfig
 
 
 class CameraModeRequest(BaseModel):

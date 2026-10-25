@@ -103,6 +103,28 @@ anyway.
 To change the camera backend, edit `config.json` directly (or use
 `CAELUM_CAMERA_BACKEND` for a one-off) and restart.
 
+### Export and import
+
+**Export** downloads the configuration as a JSON file
+(`GET /api/config/export`), without `config_version` and `redis`, which
+always stay with the camera they belong to.
+
+**Import…** takes such a file — or any part of one. Only the values in the
+file are set, everything else stays as it is; a list (e.g.
+`storage_policy.raw_periods`) is replaced whole. So a file like
+
+```json
+{ "location": { "lat": 49.1951, "lon": 16.6068 },
+  "exposure_policy": { "presets": { "night": { "target_ev": -1.6 } } } }
+```
+
+changes just those three values. Before anything is applied the page lists
+every value the file would change, with its current and new value; nothing
+changes until **Apply**. A file with an unknown key or an invalid value is
+refused as a whole, naming the offending key. The same is available as
+`POST /api/config/import` (`{"config": {...}, "dry_run": true}` only reports
+the changes).
+
 ## Plugins
 
 Lists every entry in the `plugins` config block, sorted by `order` ascending —

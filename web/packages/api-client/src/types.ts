@@ -267,6 +267,23 @@ export interface CaptureConfig {
   max_consecutive_failures: number
 }
 
+/** One value a config import changes (`POST /api/config/import`). */
+export interface ConfigChange {
+  /** Dotted path, e.g. "exposure_policy.presets.night.target_ev". */
+  path: string
+  old: unknown
+  new: unknown
+}
+
+export interface ConfigImportResponse {
+  changes: ConfigChange[]
+  /** Top-level sections in the file that are never imported (config_version, redis). */
+  ignored: string[]
+  applied: boolean
+  /** The config after the import (unchanged for a dry run). */
+  config: AppConfig
+}
+
 /** Recursive partial, used for `PUT /api/config` patch bodies. */
 export type DeepPartial<T> = T extends (infer U)[]
   ? DeepPartial<U>[]

@@ -141,6 +141,37 @@ async def test_config_get_and_patch_roundtrip(tmp_path, redis_url):
         await harness.config_manager.stop()
 
 
+async def test_config_export_and_partial_import(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "apitest-cfgio")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            exported = await client.get("/api/config/export")
+            assert exported.status_code == 200
+            assert "attachment" in exported.headers["content-disposition"]
+            data = exported.json()
+            assert "config_version" not in data and "redis" not in data
+
+            # The whole export goes back in unchanged.
+            same = await client.post("/api/config/import", json={"config": data, "dry_run": False})
+            assert same.json()["changes"] == [] and same.json()["applied"] is False
+
+            partial = {"location": {"lat": 12.5}, "redis": {"url": "redis://elsewhere"}}
+            dry = (await client.post("/api/config/import", json={"config": partial})).json()
+            assert dry["changes"] == [{"path": "location.lat", "old": 50.0755, "new": 12.5}]
+            assert dry["ignored"] == ["redis"] and dry["applied"] is False
+            assert harness.config_manager.current.location.lat == 50.0755
+
+            done = (await client.post("/api/config/import", json={"config": partial, "dry_run": False})).json()
+            assert done["applied"] is True and done["config"]["location"]["lat"] == 12.5
+            assert harness.config_manager.current.location.lon == data["location"]["lon"]  # untouched
+
+            bad = await client.post("/api/config/import", json={"config": {"location": {"latt": 1}}})
+            assert bad.status_code == 422
+    finally:
+        await harness.config_manager.stop()
+
+
 async def test_camera_mode_and_exposure_override_endpoints(tmp_path, redis_url):
     harness = await _build_harness(tmp_path, redis_url, "apitest3")
     try:

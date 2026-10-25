@@ -14,6 +14,7 @@ import type {
   CaptureProgramSource,
   CaptureProgramTestRun,
   CaptureProgramsResponse,
+  ConfigImportResponse,
   DeepPartial,
   DeleteFramesRequest,
   DerivativeKindSummary,
@@ -137,6 +138,16 @@ export class LocalApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patch }),
     })
+  }
+
+  /** The config as a downloadable JSON file (without config_version and redis). */
+  configExportUrl(): string {
+    return this.apiUrl('/config/export')
+  }
+
+  /** Merge a whole exported config or any part of it; `dryRun` only reports the changes. */
+  importConfig(config: Record<string, unknown>, dryRun: boolean): Promise<ConfigImportResponse> {
+    return this.postJson<ConfigImportResponse>('/config/import', { config, dry_run: dryRun })
   }
 
   getCameraOptions(): Promise<CameraOptions> {

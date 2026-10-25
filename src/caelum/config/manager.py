@@ -130,13 +130,17 @@ class ConfigManager:
         if self._redis is not None:
             await self._redis.aclose()
 
-    async def update(self, patch: dict[str, Any]) -> AppConfig:
-        """Validate and apply a partial patch, bump config_version, apply it
-        in-memory immediately, and schedule a debounced disk+Redis flush."""
+    def preview(self, patch: dict[str, Any]) -> AppConfig:
+        """What `update(patch)` would make of the config — validated, not applied."""
         with self._lock:
             merged = _deep_merge(self._current.model_dump(mode="json"), patch)
             merged["config_version"] = self._current.config_version + 1
-        new_config = AppConfig.model_validate(merged)
+        return AppConfig.model_validate(merged)
+
+    async def update(self, patch: dict[str, Any]) -> AppConfig:
+        """Validate and apply a partial patch, bump config_version, apply it
+        in-memory immediately, and schedule a debounced disk+Redis flush."""
+        new_config = self.preview(patch)
 
         with self._lock:
             self._current = new_config
