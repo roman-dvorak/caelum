@@ -1,0 +1,48 @@
+# caelum
+
+> caelum is open-source, headless capture software for allsky and astronomical cameras on Raspberry Pi and Linux. It drives exposure and gain from real Sun and Moon geometry through day, twilight and night, processes frames in RAM, produces keograms, timelapses and meteor detections, keeps a rotating local cache and uploads to a permanent remote archive. It runs as a systemd service with a web UI. Developed and maintained by AstroMeters (https://astrometers.eu); default software of the AstroMeters AMASC01 allsky camera.
+
+- Source code and releases: https://github.com/roman-dvorak/caelum
+- Install on Raspberry Pi OS / Debian: `curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/install.sh | sudo bash`
+- Requirements: Linux, Python 3.11+, Redis (recommended); Raspberry Pi 4 or 5 with Raspberry Pi OS Bookworm (64-bit)
+- Camera backends: picamera2 (Raspberry Pi camera modules), OpenCV/V4L2 (USB webcams), mock (development)
+
+## Start here
+
+- [Home](https://caelum.astrometers.eu/): Overview of caelum and its features.
+- [Getting started](https://caelum.astrometers.eu/getting-started.html): From a camera to the first night of allsky images – install, log in, set the observing site, check the picture and publish it.
+- [Manual](https://caelum.astrometers.eu/manual.html): How the system works, what happens through the day and night, where the data goes, and how to operate and look after the camera.
+
+## Documentation
+
+- [Introduction](https://caelum.astrometers.eu/guide/): What problem caelum solves and how its architecture fits together.
+- [Installation](https://caelum.astrometers.eu/guide/installation.html): What you need, the one-line installer and its options, https, the first login and where everything lives.
+- [Concepts](https://caelum.astrometers.eu/guide/concepts.html): Sky state from real Sun and Moon geometry, sky periods, and how exposure and storage policies key off them.
+- [Camera backends](https://caelum.astrometers.eu/guide/cameras.html): picamera2 for Raspberry Pi camera modules, OpenCV/V4L2 for USB webcams and a mock backend for development.
+- [Exposure control](https://caelum.astrometers.eu/guide/exposure.html): Closed feedback loop on exposure time and gain inside per-period envelopes, with the camera auto-exposure disabled.
+- [Storage & retention](https://caelum.astrometers.eu/guide/storage.html): What is kept at full resolution, thumbnails, overlays, and how old files are rotated out.
+- [Upload & archive](https://caelum.astrometers.eu/guide/upload.html): Uploading frames to a permanent remote archive with rsync, SCP or S3, and the JSON manifests the remote viewer reads.
+- [Web interface](https://caelum.astrometers.eu/guide/web-ui.html): Dashboard, live stream, settings, plugins, recordings, files and terminal.
+- [Access & security](https://caelum.astrometers.eu/guide/security.html): Accounts, roles, sessions, preview access and the web terminal.
+- [Deployment](https://caelum.astrometers.eu/guide/deployment.html): Raspberry Pi installer, systemd service, and the static archive and remote viewer on Apache.
+- [Updates](https://caelum.astrometers.eu/guide/updates.html): Release manifests, offline wheel upload and automatic rollback after a bad release.
+- [Plugins](https://caelum.astrometers.eu/guide/plugins.html): Hooks, configuration, keograms, meteor detection and overlay elements.
+
+## Cameras
+
+- [Supported cameras](https://caelum.astrometers.eu/cameras/): The AstroMeters AMASC01 allsky camera, DIY builds, and the available backends.
+- [AMASC01](https://caelum.astrometers.eu/cameras/amasc01.html): AstroMeters allsky camera – Sony IMX477, 180° fisheye, heated dome, PoE+; components, example images and running caelum on it.
+- [DIY cameras](https://caelum.astrometers.eu/cameras/diy.html): Recommended Raspberry Pi, camera module, lens, dome and dew heater for building your own allsky camera.
+
+## Reference
+
+- [Web viewer](https://caelum.astrometers.eu/viewer.html): Caelum Viewer, a static web app for browsing allsky camera data – timeline by sky period, time-lapse playback, video and image export, frame metadata, charts, filters and RAW download.
+- [Capture programs](https://caelum.astrometers.eu/capture-programs.html): The Python coroutine that decides what caelum captures in each slot, from single frames to HDR sets.
+- [Capture sets in DNG](https://caelum.astrometers.eu/dng-capture-sets.html): How a capture set of several raw frames is stored in one multi-frame DNG file.
+- [Running from source](https://caelum.astrometers.eu/guide/development.html): Requirements, the mock camera, environment variables, building the web interface and running the tests.
+
+## Optional
+
+- [AstroMeters](https://astrometers.eu): Maintainer of caelum; hardware for astronomy including the AMASC01 allsky camera.
+- [AMASC01 product page](https://astrometers.eu/products/AMASC01/)
+- [Sitemap](https://caelum.astrometers.eu/sitemap.xml)
