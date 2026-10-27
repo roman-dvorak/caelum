@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 
 import redis.asyncio as redis
 
-from .schema import AppConfig
+from .schema import AppConfig, load_stored
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ async def read(client: redis.Redis, key_prefix: str) -> AppConfig | None:
     raw = await client.get(_config_key(key_prefix))
     if raw is None:
         return None
-    return AppConfig.model_validate_json(raw)
+    return load_stored(raw)
 
 
 async def write(client: redis.Redis, key_prefix: str, config: AppConfig) -> None:

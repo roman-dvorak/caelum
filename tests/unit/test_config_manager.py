@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
+import pytest
 import redis.asyncio as redis
+from pydantic import ValidationError
 
 from caelum.config import store_disk, store_redis
 from caelum.config.manager import ConfigManager
@@ -145,5 +148,69 @@ async def test_redis_unreachable_falls_back_to_disk_only(tmp_path):
         assert mgr.current == AppConfig()
         updated = await mgr.update({"location": {"lat": 55.0}})
         assert updated.location.lat == 55.0
+    finally:
+        await mgr.stop()
+
+
+def _stored_config_from_a_newer_release(path: Path) -> None:
+    data = AppConfig().model_dump(mode="json")
+    data["location"]["lat"] = 49.5
+    data["location"]["future_key"] = 1
+    data["plugins"]["keogram"]["future_flag"] = True
+    data["future_section"] = {"enabled": True}
+    path.write_text(json.dumps(data))
+
+
+async def test_start_ignores_settings_from_a_newer_release(tmp_path):
+    """After a rollback the older release must still start on the config the
+    newer one wrote, which holds settings it does not know."""
+    _stored_config_from_a_newer_release(tmp_path / "config.json")
+    mgr = ConfigManager(
+        disk_path=tmp_path / "config.json",
+        default_path=None,
+        redis_url="redis://127.0.0.1:1/0",
+        key_prefix="caelumtest",
+    )
+    await mgr.start()
+    try:
+        assert mgr.current.location.lat == 49.5, "known settings must survive"
+        on_disk = json.loads((tmp_path / "config.json").read_text())
+        assert "future_section" not in on_disk
+        assert "future_key" not in on_disk["location"]
+    finally:
+        await mgr.stop()
+
+
+async def test_redis_copy_from_a_newer_release_is_read_too(tmp_path, redis_url):
+    data = AppConfig(config_version=50).model_dump(mode="json")
+    data["future_section"] = {"enabled": True}
+    client = redis.from_url(redis_url, decode_responses=True)
+    try:
+        await client.set("caelumtest:config", json.dumps(data))
+        assert (await store_redis.read(client, "caelumtest")).config_version == 50
+    finally:
+        await client.delete("caelumtest:config")
+        await client.aclose()
+
+
+def test_stored_config_with_an_invalid_value_is_still_refused(tmp_path):
+    data = AppConfig().model_dump(mode="json")
+    data["location"]["lat"] = "north"
+    (tmp_path / "config.json").write_text(json.dumps(data))
+    with pytest.raises(ValidationError):
+        store_disk.read(tmp_path / "config.json")
+
+
+async def test_updates_still_refuse_unknown_settings(tmp_path):
+    mgr = ConfigManager(
+        disk_path=tmp_path / "config.json",
+        default_path=None,
+        redis_url="redis://127.0.0.1:1/0",
+        key_prefix="caelumtest",
+    )
+    await mgr.start()
+    try:
+        with pytest.raises(ValidationError):
+            await mgr.update({"location": {"future_key": 1}})
     finally:
         await mgr.stop()

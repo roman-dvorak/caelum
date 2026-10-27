@@ -6,13 +6,13 @@ import os
 import tempfile
 from pathlib import Path
 
-from .schema import AppConfig
+from .schema import AppConfig, load_stored
 
 
 def read(path: Path) -> AppConfig | None:
     if not path.exists():
         return None
-    return AppConfig.model_validate_json(path.read_text())
+    return load_stored(path.read_text())
 
 
 def write(path: Path, config: AppConfig) -> None:

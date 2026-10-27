@@ -7,10 +7,14 @@ defaults (see `scripts/dev_run.sh` / tests for how it's (re)generated).
 
 from __future__ import annotations
 
+import json
+import logging
 import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+logger = logging.getLogger(__name__)
 
 SkyPeriod = Literal[
     "day",
@@ -422,3 +426,32 @@ class AppConfig(StrictModel):
         if isinstance(data, dict) and "docs" in data:
             data = {k: v for k, v in data.items() if k != "docs"}
         return data
+
+
+def load_stored(raw: str) -> AppConfig:
+    """Load a config this install stored itself (disk, Redis) — leniently.
+
+    A newer release writes every setting it knows into config.json on its
+    first start. After a rollback (automatic or by hand) the older release
+    would refuse those settings as unknown keys and not start at all; here
+    they are dropped with a warning instead. Anything else invalid still
+    raises, and API writes and imports stay strict."""
+    data = json.loads(raw)
+    dropped: list[str] = []
+    while True:
+        try:
+            config = AppConfig.model_validate(data)
+            break
+        except ValidationError as exc:
+            extras = [e["loc"] for e in exc.errors() if e["type"] == "extra_forbidden"]
+            if not extras or not isinstance(data, dict):
+                raise
+            for loc in extras:
+                parent = data
+                for key in loc[:-1]:
+                    parent = parent[key]
+                parent.pop(loc[-1], None)
+                dropped.append(".".join(str(k) for k in loc))
+    if dropped:
+        logger.warning("Ignoring config settings this release does not know: %s", ", ".join(dropped))
+    return config

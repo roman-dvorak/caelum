@@ -95,13 +95,17 @@ options the release notes recommend — use a small partial JSON file and
 **Settings → Import…**: you see every change before it is applied. See
 [Configuration files](/guide/config-files).
 
-::: warning Going back to an older release
-A configuration is only understood by releases that know all its settings.
-Once a newer release has added settings to `config.json`, an older release
-may refuse that file. Before going back to an older release by hand (see
-[From the command line](#from-the-command-line)), keep the export you made
-before the update: restore it as `config.json` if the older release will not
-start.
+::: info Going back to an older release
+After a rollback — automatic or by hand — the older release finds settings
+in `config.json` that only the newer release knows. It ignores them, logs
+*Ignoring config settings this release does not know: …* and starts
+normally; every other setting is kept. The ignored values are gone, though:
+updating again brings those settings back with their defaults. If you changed
+any of them, the export made before the update has the values.
+
+Releases up to 0.5.4 do not do this yet and refuse such a file. Going back
+to one of them, restore the export made before the update as
+`/etc/caelum/config.json` if it does not start.
 :::
 
 ## When something goes wrong
