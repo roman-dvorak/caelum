@@ -109,12 +109,20 @@ missing key or an unknown host all fail immediately rather than hanging the
 upload thread forever. `accept-new` records the host key on first contact but
 refuses a *changed* one.
 
-On the camera, as the user caelum runs as:
+The installer generates this key (ed25519, no passphrase) as
+`/etc/caelum/upload_key`, owned by the service account, prints its public half
+at the end of its output, and points `ssh_key_path` at it in a newly seeded
+`config.json`. It never replaces an existing key. To print the public key
+again later:
+
+```bash
+sudo cat /etc/caelum/upload_key.pub
+```
+
+On a hand-made install, create it as the user caelum runs as:
 
 ```bash
 sudo -u caelum ssh-keygen -t ed25519 -N '' -f /etc/caelum/upload_key
-sudo chown caelum:caelum /etc/caelum/upload_key /etc/caelum/upload_key.pub
-sudo chmod 600 /etc/caelum/upload_key
 ```
 
 On the archive host, append `/etc/caelum/upload_key.pub` to the upload user's

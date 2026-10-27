@@ -77,6 +77,10 @@ in as `admin`, change the password under **Accounts** and delete the file.
 Lost the password later? See
 [Resetting a forgotten admin password](/guide/security#resetting-a-forgotten-admin-password).
 
+The installer also generates an SSH key for [uploads](/guide/upload#ssh-key-setup),
+`/etc/caelum/upload_key`, and ends its output with the public half — the line
+to put in the archive host's `authorized_keys`.
+
 Then continue with [Getting started](/getting-started) — the observing site
 comes next.
 

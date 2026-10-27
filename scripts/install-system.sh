@@ -26,7 +26,8 @@
 #   /opt/caelum/releases/<version>/venv   one venv per release
 #   /opt/caelum/current, previous         symlinks: running / rollback target
 #   /opt/caelum/bin/caelum-launch         boot guard, systemd's ExecStart
-#   /etc/caelum/                          caelum.env, config.json, auth.json
+#   /etc/caelum/                          caelum.env, config.json, auth.json,
+#                                         upload_key(.pub) — the SSH key for uploads
 #   /var/lib/caelum/                      captured data
 set -euo pipefail
 
@@ -72,7 +73,7 @@ fi
 case "$CAMERA" in picamera2|opencv|mock) ;; *) echo "bad --camera: $CAMERA" >&2; exit 64 ;; esac
 
 echo "==> System packages"
-PKGS=(python3 python3-venv redis-server curl unzip)
+PKGS=(python3 python3-venv redis-server curl unzip openssh-client)
 # libcamera has no PyPI wheel — apt's picamera2 is the only way to get it.
 if [[ "$CAMERA" == picamera2 ]]; then PKGS+=(python3-picamera2); fi
 if [[ $PROXY -eq 1 ]]; then
@@ -176,13 +177,22 @@ DEPLOY="$("$PREFIX/current/venv/bin/python" -c 'import caelum, pathlib; print(pa
 install -m 0755 "$DEPLOY/caelum-launch" "$PREFIX/bin/caelum-launch"
 
 echo "==> Configuration in $CONFIG_DIR"
+# The SSH key the rsync/scp upload transports log in with: generated once,
+# never replaced — its public half may already be in a remote authorized_keys.
+UPLOAD_KEY="$CONFIG_DIR/upload_key"
+if [[ ! -f "$UPLOAD_KEY" ]]; then
+  runuser -u "$SVC_USER" -- ssh-keygen -q -t ed25519 -N '' \
+    -C "caelum@$(hostname)" -f "$UPLOAD_KEY"
+  echo "    generated the upload SSH key $UPLOAD_KEY"
+fi
 if [[ ! -f "$CONFIG_DIR/config.json" ]]; then
-  "$PREFIX/current/venv/bin/python" - "$CONFIG_DIR/config.json" "$CAMERA" <<'EOF'
+  "$PREFIX/current/venv/bin/python" - "$CONFIG_DIR/config.json" "$CAMERA" "$UPLOAD_KEY" <<'EOF'
 import sys
 from caelum.config.schema import AppConfig
-path, camera = sys.argv[1], sys.argv[2]
+path, camera, upload_key = sys.argv[1], sys.argv[2], sys.argv[3]
 cfg = AppConfig()
 cfg.camera.backend = camera
+cfg.upload.ssh_key_path = upload_key
 if camera == "opencv":
     cfg.camera.sensor_id = "0"
 open(path, "w").write(cfg.model_dump_json(indent=2) + "\n")
@@ -285,6 +295,11 @@ else
 fi
 echo "First admin password (created on first start): $CONFIG_DIR/initial-admin-password.txt"
 echo "Logs: journalctl -u caelum -f"
+echo
+echo "Upload SSH public key ($UPLOAD_KEY.pub) — add it to ~/.ssh/authorized_keys"
+echo "of the upload user on the archive host:"
+echo
+cat "$UPLOAD_KEY.pub"
 }
 
 main "$@"
