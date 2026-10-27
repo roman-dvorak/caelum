@@ -76,4 +76,5 @@ local network.
 
 - [User manual](/manual) — how caelum works and how to operate it day to day.
 - [Web interface](/guide/web-ui) — every page of the camera's interface.
+- [Configuration files](/guide/config-files) — change several settings at once with a small JSON file.
 - [Updates](/guide/updates) — new releases install from the web interface.

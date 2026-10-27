@@ -87,21 +87,19 @@ cannot accidentally turn a number into a string.
 
 ![Settings](/images/screenshots/settings.webp)
 
-Three sections are locked against editing:
+Two sections are locked against editing:
 
 | Section | Why |
 | --- | --- |
 | `config_version` | Server-managed. The config manager bumps it on every write and uses it to resolve disk-versus-Redis conflicts at startup. |
-| `camera` | Only takes effect on the next process restart, since the backend instance is created once at startup. Editing it here would silently do nothing until then, which is more confusing than locking it. |
 | `redis` | A connection setting, not a tunable parameter. |
+
+The camera itself is chosen with the camera picker above the tree.
 
 Adding and deleting nodes is restricted to `storage_policy.raw_periods`, the
 one list where adding or removing an entry is a meaningful edit. Everywhere
 else the schema is fixed and `extra="forbid"` would reject an invented key
 anyway.
-
-To change the camera backend, edit `config.json` directly (or use
-`CAELUM_CAMERA_BACKEND` for a one-off) and restart.
 
 ### Export and import
 
@@ -118,7 +116,9 @@ file are set, everything else stays as it is; a list (e.g.
   "exposure_policy": { "presets": { "night": { "target_ev": -1.6 } } } }
 ```
 
-changes just those three values. Before anything is applied the page lists
+changes just those three values — the
+[Configuration files](/guide/config-files) page covers partial files in
+detail, with examples. Before anything is applied the page lists
 every value the file would change, with its current and new value; nothing
 changes until **Apply**. A file with an unknown key or an invalid value is
 refused as a whole, naming the offending key. The same is available as

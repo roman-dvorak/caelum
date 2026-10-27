@@ -176,6 +176,7 @@ export default withMermaid(defineConfig({
           text: 'Operating',
           items: [
             { text: 'Web interface', link: '/guide/web-ui' },
+            { text: 'Configuration files', link: '/guide/config-files' },
             { text: 'Access & security', link: '/guide/security' },
             { text: 'Deployment', link: '/guide/deployment' },
             { text: 'Updates', link: '/guide/updates' },

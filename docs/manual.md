@@ -180,10 +180,24 @@ account, see [Access & security](/guide/security#preview-access).
 **Change the overlay.** **Overlay** shows the real rendering while you edit;
 changes apply once saved.
 
-**Update the software.** **System → Software update** checks for a new
-release, shows what changed and installs it. Capturing pauses for a few
-seconds; if the new release does not start properly, the camera returns to
-the previous one by itself. See [Updates](/guide/updates).
+**Change several settings at once.** Write the values you want into a small
+JSON file — only those, nothing else — and load it with **Settings →
+Import…**. caelum lists every value the file would change, and applies them
+only when you press **Apply**. The same file works on any number of cameras;
+**Settings → Export** saves the whole configuration as a backup. See
+[Configuration files](/guide/config-files).
+
+```json
+{ "location": { "lat": 49.1951, "lon": 16.6068 },
+  "retention": { "max_age_days": 7 } }
+```
+
+**Update the software.** First **Settings → Export** to keep a copy of the
+configuration. Then **System → Software update → Check for updates** shows
+the new release and what changed; **Update to …** installs it. Capturing
+pauses for a few seconds; your settings and data stay. If the new release
+does not start properly, the camera returns to the previous one by itself.
+Step by step, with every message explained: [Updates](/guide/updates).
 
 ## Looking after the camera
 

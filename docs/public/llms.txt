@@ -25,7 +25,8 @@
 - [Web interface](https://caelum.astrometers.eu/guide/web-ui.html): Dashboard, live stream, settings, plugins, recordings, files and terminal.
 - [Access & security](https://caelum.astrometers.eu/guide/security.html): Accounts, roles, sessions, preview access and the web terminal.
 - [Deployment](https://caelum.astrometers.eu/guide/deployment.html): Raspberry Pi installer, systemd service, and the static archive and remote viewer on Apache.
-- [Updates](https://caelum.astrometers.eu/guide/updates.html): Release manifests, offline wheel upload and automatic rollback after a bad release.
+- [Configuration files](https://caelum.astrometers.eu/guide/config-files.html): Export, and changing part of the configuration with a partial JSON file — merge rules, preview, examples, API.
+- [Updates](https://caelum.astrometers.eu/guide/updates.html): Updating from the web UI step by step, settings across updates, offline wheel upload, automatic rollback and release channels.
 - [Plugins](https://caelum.astrometers.eu/guide/plugins.html): Hooks, configuration, keograms, meteor detection and overlay elements.
 
 ## Cameras
