@@ -44,6 +44,9 @@ to do when something does not go to plan.
 **System → Software update → Check for updates.** caelum fetches the
 release list (the *manifest*, from `update.manifest_url`) and shows:
 
+![System page with the Software update panel at the bottom](/images/screenshots/system.webp)
+
+
 - **Running version** — what the camera runs now,
 - **Available** — the newest release newer than that, or *Up to date*.
 

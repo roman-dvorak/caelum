@@ -19,7 +19,10 @@ That second point is what makes files useful day to day: you can keep a
 small file such as `brno-site.json` or `night-exposure.json`, apply it to one
 camera or ten, and see exactly what it changes before it does.
 
-Both are on the **Settings** page, admin only.
+Both are on the **Settings** page, admin only, at the top next to **What do
+these mean?**:
+
+![Settings page with the Export and Import… buttons](/images/screenshots/settings.webp)
 
 ## A first partial file
 
