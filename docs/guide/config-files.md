@@ -51,7 +51,31 @@ exactly as it was. `location.timezone` is not in the file, so it is not in
 the list and keeps its value.
 
 Applied values take effect right away, the same way as an edit in the tree:
-the next frame already uses them. No restart is needed.
+the next frame already uses them. No restart is needed — the one exception
+is `processing`, which is read at startup only.
+
+## What the settings mean
+
+The configuration has these sections — the same in the Settings tree, in an
+export and in a partial file. Each links to the page that explains its
+values.
+
+| Section | What it sets | Explained in |
+|---|---|---|
+| `config_version` | A change counter the camera keeps itself. Read-only. | — |
+| `camera` | Camera backend and device, resolution, lens, white balance. | [Camera backends](/guide/cameras) |
+| `location` | Latitude, longitude, elevation and time zone of the site — everything that follows the sun depends on it. | [Concepts](/guide/concepts#sky-state) |
+| `observation_day` | When an observation day starts (`"sunrise"` or a local time `"HH:MM"`); recordings and keograms are grouped by it. | [Plugins](/guide/plugins#worked-example-the-keogram-worker) |
+| `exposure_policy` | Exposure and gain limits and the brightness target per sky period, and how fast the exposure follows. | [Exposure control](/guide/exposure) |
+| `storage_policy` | In which periods full raw frames are kept, thumbnail size and quality, capture interval. | [Storage & retention](/guide/storage) |
+| `processing` | Where per-frame processing runs. Read at startup only; rarely changed. | [Capture programs](/capture-programs) |
+| `capture` | Which capture program runs, and its parameters. | [Capture programs](/capture-programs) |
+| `retention` | How long frames stay on the camera's disk and how much space stays free. | [Storage & retention](/guide/storage) |
+| `upload` | Where frames are uploaded, how, and under which camera name. | [Upload & archive](/guide/upload) |
+| `redis` | How caelum reaches its Redis. Read-only, never imported. | [Deployment](/guide/deployment) |
+| `auth` | Login, preview access, session length, terminal. | [Access & security](/guide/security) |
+| `update` | Where software releases come from. | [Updates](/guide/updates#update-channels-and-self-hosting) |
+| `plugins` | Each plugin on or off, its order and its options. | [Plugins](/guide/plugins) |
 
 ## How the file is merged
 

@@ -127,7 +127,7 @@ export function Settings() {
               }}
             />
             <a
-              href={`${DOCS_URL}/guide/concepts.html`}
+              href={`${DOCS_URL}/guide/config-files.html#what-the-settings-mean`}
               target="_blank"
               rel="noreferrer noopener"
               className={buttonClass('secondary')}
