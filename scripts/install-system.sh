@@ -87,7 +87,7 @@ report() {
   line=""
   for unit in caelum redis-server nginx; do
     if [[ $unit == caelum || -e "/etc/systemd/system/$unit.service" || -n "$(systemctl list-unit-files --no-legend "$unit.service" 2>/dev/null)" ]]; then
-      line+="$unit $(systemctl is-active "$unit" 2>/dev/null), "
+      line+="$unit $(systemctl is-active "$unit" 2>/dev/null || true), "
     fi
   done
   printf '%-14s%s\n' "Services" "${line%, }"
