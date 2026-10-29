@@ -1,6 +1,6 @@
 [project]
 name = "caelum"
-version = "0.5.5"
+version = "0.5.6"
 description = "Headless allsky / astro camera engine for Raspberry Pi: sky-aware auto-exposure, RAM-first image pipeline, keograms, meteor detection, timelapses, web UI and remote archive upload"
 readme = "README.md"
 keywords = [
