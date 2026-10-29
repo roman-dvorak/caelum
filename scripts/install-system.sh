@@ -6,18 +6,7 @@
 #   curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/install.sh | sudo bash
 #   curl -fsSL .../install.sh | sudo bash -s -- --camera opencv
 #
-# Options:
-#   --wheel FILE|URL    install this wheel instead of the newest one in the manifest
-#   --manifest URL      release manifest to read (default: latest GitHub release)
-#   --camera BACKEND    picamera2 | opencv | mock — only used to seed a new
-#                       config.json (default: picamera2 on a Raspberry Pi,
-#                       mock elsewhere); picamera2 also selects the apt
-#                       camera stack and the numpy pins that go with it
-#   --user NAME         service account (default: caelum)
-#   --proxy             serve the web UI on ports 80 and 443 through nginx, with a
-#                       self-signed certificate for this host's name; caelum
-#                       itself then listens on 127.0.0.1:8000 only
-#   --no-start          install everything but don't enable/start the service
+# Options: see usage() below, or run it with --help.
 #
 # Re-running it with a newer wheel upgrades; config, accounts and data are
 # kept. Day-to-day upgrades are meant to happen from the web UI instead
@@ -28,8 +17,60 @@
 #   /opt/caelum/bin/caelum-launch         boot guard, systemd's ExecStart
 #   /etc/caelum/                          caelum.env, config.json, auth.json,
 #                                         upload_key(.pub) — the SSH key for uploads
+#                                         and the tunnel, tunnel.env
 #   /var/lib/caelum/                      captured data
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: install.sh [options]      (as root)
+
+Installs or upgrades caelum as a systemd service from a release wheel.
+Re-running it upgrades; configuration, accounts and data are kept.
+
+Installation:
+  --wheel FILE|URL      install this wheel instead of the newest in the manifest
+  --manifest URL        release manifest to read (default: latest GitHub release)
+  --camera BACKEND      picamera2 | opencv | mock — only used to seed a new
+                        config.json (default: picamera2 on a Raspberry Pi,
+                        mock elsewhere); picamera2 also selects the apt camera
+                        stack and the numpy pins that go with it
+  --user NAME           service account (default: caelum)
+  --proxy               serve the web UI on ports 80 and 443 through nginx with
+                        a self-signed certificate; caelum itself then listens on
+                        127.0.0.1:8000 only
+  --no-start            install everything but don't enable/start the services
+
+This camera (written into an existing config.json too):
+  --name TEXT           camera name (upload.camera_name), shown on images
+  --slug ID             camera's directory on the upload target
+                        (upload.camera_slug) — unique per camera
+  --lat DEG             latitude, north positive
+  --lon DEG             longitude, east positive
+  --elevation M         elevation in metres
+  --hostname NAME       set the system's host name (and NAME.local)
+  --new-identity        for a card cloned from another camera: a new upload/
+                        tunnel SSH key, a new admin password (printed at the
+                        end; signs everyone out), a new session key and a new
+                        TLS certificate
+
+Reverse SSH tunnel (remote shell access through a server you control):
+  --tunnel USER@HOST    keep `ssh -R PORT:localhost:22 USER@HOST` running, logged
+                        in with the upload key
+  --tunnel-port PORT    port on HOST that leads to this camera's sshd —
+                        unique per camera
+  --tunnel-ssh-port N   HOST's own sshd port (default 22)
+  --no-tunnel           remove the tunnel
+  Given once, the tunnel settings are kept in /etc/caelum/tunnel.env; a later
+  run changes only what it names (e.g. just --tunnel-port).
+
+  -h, --help            show this help
+
+Example — a card cloned from camera 1 turned into camera 2:
+  sudo bash install.sh --new-identity --hostname caelum-02 --name "Ondřejov 2" \
+    --slug ondrejov-02 --lat 49.91 --lon 14.78 --elevation 530 --tunnel-port 20002
+EOF
+}
 
 # Wrapped in a function so that bash has read the whole script before running
 # any of it — under `curl | bash`, apt-get would otherwise eat the rest of the
@@ -44,16 +85,36 @@ CAMERA=""
 WHEEL=""
 START=1
 PROXY=0
+NEW_IDENTITY=0
+HOSTNAME_CHANGED=0
+NAME="" SLUG="" LAT="" LON="" ELEVATION="" NEW_HOSTNAME=""
+TUNNEL_ARG="" TUNNEL_PORT_ARG="" TUNNEL_SSH_PORT_ARG="" NO_TUNNEL=0
 
+need_value() {
+  [[ $# -ge 2 && "$2" != --* ]] || { echo "$1 needs a value (see --help)" >&2; exit 64; }
+}
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --wheel|--manifest|--camera|--user|--name|--slug|--lat|--lon|--elevation|--hostname|--tunnel|--tunnel-port|--tunnel-ssh-port)
+      need_value "$@" ;;&
     --wheel) WHEEL="$2"; shift 2 ;;
     --manifest) MANIFEST_URL="$2"; shift 2 ;;
     --camera) CAMERA="$2"; shift 2 ;;
     --user) SVC_USER="$2"; shift 2 ;;
     --no-start) START=0; shift ;;
     --proxy) PROXY=1; shift ;;
-    -h|--help) echo "see the comment at the top of install-system.sh"; exit 0 ;;
+    --name) NAME="$2"; shift 2 ;;
+    --slug) SLUG="$2"; shift 2 ;;
+    --lat) LAT="$2"; shift 2 ;;
+    --lon) LON="$2"; shift 2 ;;
+    --elevation) ELEVATION="$2"; shift 2 ;;
+    --hostname) NEW_HOSTNAME="$2"; shift 2 ;;
+    --new-identity) NEW_IDENTITY=1; shift ;;
+    --tunnel) TUNNEL_ARG="$2"; shift 2 ;;
+    --tunnel-port) TUNNEL_PORT_ARG="$2"; shift 2 ;;
+    --tunnel-ssh-port) TUNNEL_SSH_PORT_ARG="$2"; shift 2 ;;
+    --no-tunnel) NO_TUNNEL=1; shift ;;
+    -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 64 ;;
   esac
 done
@@ -71,11 +132,53 @@ if [[ -z "$CAMERA" ]]; then
   if grep -qs "Raspberry Pi" /proc/device-tree/model; then CAMERA=picamera2; else CAMERA=mock; fi
 fi
 case "$CAMERA" in picamera2|opencv|mock) ;; *) echo "bad --camera: $CAMERA" >&2; exit 64 ;; esac
+is_num() { [[ "$1" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; }
+is_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 )); }
+for v in LAT LON ELEVATION; do
+  [[ -z "${!v}" ]] || is_num "${!v}" || { echo "bad --${v,,}: ${!v}" >&2; exit 64; }
+done
+[[ -z "$SLUG" || "$SLUG" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad --slug: $SLUG (letters, digits, . _ -)" >&2; exit 64; }
+[[ -z "$NEW_HOSTNAME" || "$NEW_HOSTNAME" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] \
+  || { echo "bad --hostname: $NEW_HOSTNAME" >&2; exit 64; }
+
+# Tunnel: what tunnel.env already says, overridden by whatever was given now.
+TUNNEL_ENV="$CONFIG_DIR/tunnel.env"
+TUNNEL_HOST="" TUNNEL_PORT="" TUNNEL_SSH_PORT=22
+if [[ -f "$TUNNEL_ENV" ]]; then
+  TUNNEL_HOST="$(sed -n 's/^TUNNEL_HOST=//p' "$TUNNEL_ENV")"
+  TUNNEL_PORT="$(sed -n 's/^TUNNEL_PORT=//p' "$TUNNEL_ENV")"
+  TUNNEL_SSH_PORT="$(sed -n 's/^TUNNEL_SSH_PORT=//p' "$TUNNEL_ENV")"
+fi
+TUNNEL_HOST="${TUNNEL_ARG:-$TUNNEL_HOST}"
+TUNNEL_PORT="${TUNNEL_PORT_ARG:-$TUNNEL_PORT}"
+TUNNEL_SSH_PORT="${TUNNEL_SSH_PORT_ARG:-${TUNNEL_SSH_PORT:-22}}"
+TUNNEL=0
+if [[ $NO_TUNNEL -eq 1 ]]; then
+  [[ -z "$TUNNEL_ARG$TUNNEL_PORT_ARG$TUNNEL_SSH_PORT_ARG" ]] || { echo "--no-tunnel with other --tunnel options" >&2; exit 64; }
+elif [[ -n "$TUNNEL_HOST$TUNNEL_PORT" ]]; then
+  [[ "$TUNNEL_HOST" =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] || { echo "the tunnel needs --tunnel USER@HOST" >&2; exit 64; }
+  is_port "$TUNNEL_PORT" || { echo "the tunnel needs --tunnel-port 1-65535" >&2; exit 64; }
+  is_port "$TUNNEL_SSH_PORT" || { echo "bad --tunnel-ssh-port: $TUNNEL_SSH_PORT" >&2; exit 64; }
+  TUNNEL=1
+fi
+
+if [[ -n "$NEW_HOSTNAME" && "$NEW_HOSTNAME" != "$(hostname)" ]]; then
+  echo "==> Host name $(hostname) -> $NEW_HOSTNAME"
+  HOSTNAME_CHANGED=1
+  hostnamectl set-hostname "$NEW_HOSTNAME"
+  # Debian's 127.0.1.1 line; without it sudo complains it can't resolve the name.
+  sed -i -E "s/^(127\.0\.1\.1[[:space:]]+).*$/\1$NEW_HOSTNAME/" /etc/hosts
+  grep -qE "^127\.0\.1\.1[[:space:]]" /etc/hosts || echo "127.0.1.1	$NEW_HOSTNAME" >> /etc/hosts
+  # The avahi daemon announces NAME.local; it caches the old name.
+  systemctl try-restart avahi-daemon 2>/dev/null || true
+fi
 
 echo "==> System packages"
 PKGS=(python3 python3-venv redis-server curl unzip openssh-client)
 # libcamera has no PyPI wheel — apt's picamera2 is the only way to get it.
 if [[ "$CAMERA" == picamera2 ]]; then PKGS+=(python3-picamera2); fi
+# The tunnel leads to this machine's own sshd.
+if [[ $TUNNEL -eq 1 ]]; then PKGS+=(openssh-server); fi
 if [[ $PROXY -eq 1 ]]; then
   # Checked before installing nginx, whose default site wants port 80 too.
   if ss -ltnpH 'sport = :80 or sport = :443' | grep -qv nginx; then
@@ -177,9 +280,15 @@ DEPLOY="$("$PREFIX/current/venv/bin/python" -c 'import caelum, pathlib; print(pa
 install -m 0755 "$DEPLOY/caelum-launch" "$PREFIX/bin/caelum-launch"
 
 echo "==> Configuration in $CONFIG_DIR"
-# The SSH key the rsync/scp upload transports log in with: generated once,
-# never replaced — its public half may already be in a remote authorized_keys.
+# Nothing below may race the running service rewriting its own config; the
+# end of the script starts it again (unless --no-start).
+systemctl stop caelum 2>/dev/null || true
+
+# The SSH key the rsync/scp upload transports and the tunnel log in with:
+# generated once and kept — its public half may already be in a remote
+# authorized_keys — unless this card is becoming another camera.
 UPLOAD_KEY="$CONFIG_DIR/upload_key"
+if [[ $NEW_IDENTITY -eq 1 ]]; then rm -f "$UPLOAD_KEY" "$UPLOAD_KEY.pub"; fi
 if [[ ! -f "$UPLOAD_KEY" ]]; then
   runuser -u "$SVC_USER" -- ssh-keygen -q -t ed25519 -N '' \
     -C "caelum@$(hostname)" -f "$UPLOAD_KEY"
@@ -199,7 +308,7 @@ open(path, "w").write(cfg.model_dump_json(indent=2) + "\n")
 EOF
   chown "$SVC_USER:$SVC_USER" "$CONFIG_DIR/config.json"
   chmod 0600 "$CONFIG_DIR/config.json"
-  echo "    seeded config.json (camera.backend=$CAMERA) — set the location in the web UI"
+  echo "    seeded config.json (camera.backend=$CAMERA)"
 fi
 
 if [[ ! -f "$CONFIG_DIR/caelum.env" ]]; then
@@ -218,22 +327,89 @@ EOF
   chown "root:$SVC_USER" "$CONFIG_DIR/caelum.env"
 fi
 
+if [[ -n "$NAME$SLUG$LAT$LON$ELEVATION" ]]; then
+  "$PREFIX/current/venv/bin/python" - "$CONFIG_DIR/config.json" "$NAME" "$SLUG" "$LAT" "$LON" "$ELEVATION" <<'EOF'
+import sys
+from pathlib import Path
+from caelum.config import store_disk
+from caelum.config.schema import AppConfig
+path, name, slug, lat, lon, elevation = Path(sys.argv[1]), *sys.argv[2:]
+data = store_disk.read(path).model_dump()
+for section, key, value in [("upload", "camera_name", name), ("upload", "camera_slug", slug),
+                            ("location", "lat", lat), ("location", "lon", lon),
+                            ("location", "elevation_m", elevation)]:
+    if value:
+        data[section][key] = value
+        print(f"    {section}.{key} = {value}")
+store_disk.write(path, AppConfig.model_validate(data))
+EOF
+  chown "$SVC_USER:$SVC_USER" "$CONFIG_DIR/config.json"
+  chmod 0600 "$CONFIG_DIR/config.json"
+  # Redis holds the running config too, and wins at start when its version is
+  # newer; dropping it makes caelum take config.json as it is now.
+  REDIS_URL="$(sed -n 's/^CAELUM_REDIS_URL=//p' "$CONFIG_DIR/caelum.env")"
+  redis-cli -u "${REDIS_URL:-redis://127.0.0.1:6379/0}" DEL caelum:config caelum:config:version >/dev/null \
+    || echo "    warning: could not clear the config cached in Redis — check the values in the web UI" >&2
+fi
+
+ADMIN_PASSWORD=""
+if [[ $NEW_IDENTITY -eq 1 ]]; then
+  # A new admin password and session key: the cloned card's would otherwise
+  # let the other camera's admin (and its open sessions) in here. Other
+  # accounts are kept.
+  ADMIN_PASSWORD="$("$PREFIX/current/venv/bin/python" - "$CONFIG_DIR" <<'EOF'
+import json, os, secrets, sys
+from datetime import UTC, datetime
+from pathlib import Path
+from caelum.auth.passwords import hash_password
+from caelum.auth.store import BOOTSTRAP_PASSWORD_FILE, BOOTSTRAP_USERNAME
+config_dir = Path(sys.argv[1])
+path = config_dir / "auth.json"
+document = json.loads(path.read_text()) if path.exists() else {"version": 1, "users": {}}
+password = secrets.token_urlsafe(18)
+document["session_secret"] = secrets.token_bytes(32).hex()
+document["users"][BOOTSTRAP_USERNAME] = {
+    "role": "admin",
+    "password_hash": hash_password(password),
+    "token_version": 1,
+    "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    "last_login_at": None,
+}
+for name, text in [("auth.json", json.dumps(document, indent=2)), (BOOTSTRAP_PASSWORD_FILE, password + "\n")]:
+    fd = os.open(config_dir / name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write(text)
+print(password)
+EOF
+)"
+  chown "$SVC_USER:$SVC_USER" "$CONFIG_DIR/auth.json" "$CONFIG_DIR/initial-admin-password.txt"
+  echo "    new admin password and session key"
+fi
+
+TLS_DIR="$CONFIG_DIR/tls"
+make_cert() {
+  # A camera on a LAN has no public name a CA could vouch for: self-signed,
+  # for the host's name only — its address may change (DHCP), its name not.
+  # Replace the two files with a real certificate to lose the browser warning.
+  install -d -m 0750 "$TLS_DIR"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$(hostname)" \
+    -addext "subjectAltName=DNS:$(hostname),DNS:$(hostname).local,DNS:localhost" \
+    -keyout "$TLS_DIR/caelum.key" -out "$TLS_DIR/caelum.crt" 2>/dev/null
+  chmod 0600 "$TLS_DIR/caelum.key"
+}
+# A certificate for the old name (or the other camera's key) is no use now.
+if [[ -f "$TLS_DIR/caelum.crt" && $PROXY -eq 0 ]] && (( NEW_IDENTITY || HOSTNAME_CHANGED )); then
+  echo "==> New TLS certificate for $(hostname)"
+  make_cert
+  systemctl try-reload-or-restart nginx 2>/dev/null || true
+fi
+
 if [[ $PROXY -eq 1 ]]; then
   echo "==> nginx on ports 80 and 443"
   # Nothing but nginx should reach caelum once it is in front.
   sed -i 's/^CAELUM_HTTP_HOST=.*/CAELUM_HTTP_HOST=127.0.0.1/' "$CONFIG_DIR/caelum.env"
   PORT="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env")"
-  TLS_DIR="$CONFIG_DIR/tls"
-  if [[ ! -f "$TLS_DIR/caelum.crt" ]]; then
-    # A camera on a LAN has no public name a CA could vouch for: self-signed,
-    # for the host's name only — its address may change (DHCP), its name not.
-    # Replace the two files with a real certificate to lose the browser warning.
-    install -d -m 0750 "$TLS_DIR"
-    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$(hostname)" \
-      -addext "subjectAltName=DNS:$(hostname),DNS:$(hostname).local,DNS:localhost" \
-      -keyout "$TLS_DIR/caelum.key" -out "$TLS_DIR/caelum.crt" 2>/dev/null
-    chmod 0600 "$TLS_DIR/caelum.key"
-  fi
+  if [[ ! -f "$TLS_DIR/caelum.crt" ]] || (( NEW_IDENTITY || HOSTNAME_CHANGED )); then make_cert; fi
   rm -f /etc/nginx/sites-enabled/default
   sed -e "s|@TLS_DIR@|$TLS_DIR|g" -e "s|@PORT@|${PORT:-8000}|g" > /etc/nginx/sites-available/caelum <<'NGINX'
 # Written by caelum's install-system.sh --proxy.
@@ -278,11 +454,54 @@ sed -e "s|@PREFIX@|$PREFIX|g" -e "s|@USER@|$SVC_USER|g" \
     -e "s|@CONFIG_DIR@|$CONFIG_DIR|g" -e "s|@DATA_DIR@|$DATA_DIR|g" \
     "$DEPLOY/caelum.service.in" > /etc/systemd/system/caelum.service
 
+TUNNEL_UNIT=/etc/systemd/system/caelum-tunnel.service
+if [[ $TUNNEL -eq 1 ]]; then
+  echo "==> Reverse SSH tunnel: $TUNNEL_HOST port $TUNNEL_PORT -> this camera's sshd"
+  cat > "$TUNNEL_ENV" <<EOF
+# Reverse SSH tunnel — written by install-system.sh; re-run it to change.
+TUNNEL_HOST=$TUNNEL_HOST
+TUNNEL_PORT=$TUNNEL_PORT
+TUNNEL_SSH_PORT=$TUNNEL_SSH_PORT
+EOF
+  chmod 0644 "$TUNNEL_ENV"
+  # Plain ssh restarted by systemd does what autossh would. ExitOnForwardFailure:
+  # a port still held on the server (stale session, another camera) is retried
+  # rather than leaving a tunnel-less connection up.
+  cat > "$TUNNEL_UNIT" <<EOF
+[Unit]
+Description=caelum reverse SSH tunnel
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=$SVC_USER
+EnvironmentFile=$TUNNEL_ENV
+ExecStart=/usr/bin/ssh -N -i $UPLOAD_KEY -p \${TUNNEL_SSH_PORT} \\
+  -o BatchMode=yes -o StrictHostKeyChecking=accept-new \\
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes \\
+  -R \${TUNNEL_PORT}:localhost:22 \${TUNNEL_HOST}
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+elif [[ $NO_TUNNEL -eq 1 && -f "$TUNNEL_UNIT" ]]; then
+  echo "==> Removing the reverse SSH tunnel"
+  systemctl disable --now caelum-tunnel 2>/dev/null || true
+  rm -f "$TUNNEL_UNIT" "$TUNNEL_ENV"
+fi
+
+systemctl daemon-reload
 if [[ $START -eq 1 ]]; then
-  systemctl daemon-reload
   systemctl enable --now redis-server
   systemctl enable caelum
   systemctl restart caelum
+  if [[ $TUNNEL -eq 1 ]]; then
+    systemctl enable --now ssh
+    systemctl enable caelum-tunnel
+    systemctl restart caelum-tunnel
+  fi
 fi
 
 PORT="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env")"
@@ -293,13 +512,23 @@ if [[ $PROXY -eq 1 ]]; then
 else
   echo "Open http://$(hostname).local:${PORT:-8000}/"
 fi
-echo "First admin password (created on first start): $CONFIG_DIR/initial-admin-password.txt"
+if [[ -n "$ADMIN_PASSWORD" ]]; then
+  echo "Admin login: admin / $ADMIN_PASSWORD"
+  echo "  (also in $CONFIG_DIR/initial-admin-password.txt — change it under Accounts, then delete the file)"
+else
+  echo "First admin password (created on first start): $CONFIG_DIR/initial-admin-password.txt"
+fi
 echo "Logs: journalctl -u caelum -f"
 echo
-echo "Upload SSH public key ($UPLOAD_KEY.pub) — add it to ~/.ssh/authorized_keys"
-echo "of the upload user on the archive host:"
+echo "SSH public key ($UPLOAD_KEY.pub) — add it to ~/.ssh/authorized_keys"
+echo "of the upload user on the archive host$([[ $TUNNEL -eq 1 ]] && echo " and of ${TUNNEL_HOST%@*} on ${TUNNEL_HOST#*@}"):"
 echo
 cat "$UPLOAD_KEY.pub"
+if [[ $TUNNEL -eq 1 ]]; then
+  echo
+  echo "Tunnel: on ${TUNNEL_HOST#*@}, \`ssh -p $TUNNEL_PORT <user>@localhost\` reaches this camera."
+  echo "Status: systemctl status caelum-tunnel"
+fi
 }
 
 main "$@"

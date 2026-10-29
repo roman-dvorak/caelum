@@ -112,7 +112,7 @@ refuses a *changed* one.
 The installer generates this key (ed25519, no passphrase) as
 `/etc/caelum/upload_key`, owned by the service account, prints its public half
 at the end of its output, and points `ssh_key_path` at it in a newly seeded
-`config.json`. It never replaces an existing key. To print the public key
+`config.json`. It replaces an existing key only with `--new-identity`. To print the public key
 again later:
 
 ```bash

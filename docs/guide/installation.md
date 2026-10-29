@@ -48,6 +48,56 @@ curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/insta
 | `--wheel FILE\|URL` | Install this release file instead of the newest one — for offline machines. |
 | `--manifest URL` | Read releases from another [update channel](/guide/updates#update-channels-and-self-hosting). |
 | `--no-start` | Install everything, but don't start the service. |
+| `-h`, `--help` | List all options. |
+
+### Setting up one camera of several
+
+These options set the values that differ from camera to camera. They are
+written into the configuration even when it already exists, so the same
+command also re-labels a camera that is already installed:
+
+| Option | What it does |
+|---|---|
+| `--name TEXT` | Camera name, shown on images (`upload.camera_name`). |
+| `--slug ID` | The camera's directory on the upload target (`upload.camera_slug`). Two cameras with the same slug overwrite each other's uploads. |
+| `--lat DEG`, `--lon DEG`, `--elevation M` | Observing site; north and east positive. |
+| `--hostname NAME` | The system's host name, so the camera is `NAME.local` on the network. |
+| `--new-identity` | For an SD card cloned from another camera: a new SSH key, a new admin password, a new session key (everyone is signed out) and a new TLS certificate. The new password is printed at the end. |
+
+A card cloned from camera 1, turned into camera 2:
+
+```bash
+sudo bash install.sh --new-identity --hostname caelum-02 --name "Ondřejov 2" \
+  --slug ondrejov-02 --lat 49.91 --lon 14.78 --elevation 530 --tunnel-port 20002
+```
+
+### Reverse SSH tunnel
+
+A camera behind NAT or a mobile connection can't be reached from outside. With
+a tunnel it keeps an SSH connection to a server you control open and forwards a
+port there back to its own SSH daemon:
+
+| Option | What it does |
+|---|---|
+| `--tunnel USER@HOST` | The server, and the account the camera logs in as. |
+| `--tunnel-port PORT` | Port on the server that leads to this camera — a different one for every camera. |
+| `--tunnel-ssh-port N` | The server's SSH port, if not 22. |
+| `--no-tunnel` | Remove the tunnel. |
+
+The settings are kept in `/etc/caelum/tunnel.env`; a later run changes only
+the ones it names, so `--tunnel-port 20002` alone re-numbers a cloned camera.
+The tunnel runs as the `caelum-tunnel` service, logs in with the same key as
+uploads and reconnects on its own. The installer also installs and enables the
+camera's SSH server.
+
+On the server, add the key the installer prints to the tunnel account's
+`~/.ssh/authorized_keys`, limited to opening that one port:
+
+```
+restrict,port-forwarding,permitlisten="20002" ssh-ed25519 AAAA... caelum@caelum-02
+```
+
+Then, on the server, `ssh -p 20002 pi@localhost` is a shell on the camera.
 
 ### https with `--proxy`
 
@@ -77,9 +127,12 @@ in as `admin`, change the password under **Accounts** and delete the file.
 Lost the password later? See
 [Resetting a forgotten admin password](/guide/security#resetting-a-forgotten-admin-password).
 
-The installer also generates an SSH key for [uploads](/guide/upload#ssh-key-setup),
-`/etc/caelum/upload_key`, and ends its output with the public half — the line
-to put in the archive host's `authorized_keys`.
+With `--new-identity` the installer sets a new admin password itself and
+prints it at the end of its output instead.
+
+The installer also generates an SSH key for [uploads](/guide/upload#ssh-key-setup)
+and the tunnel, `/etc/caelum/upload_key`, and ends its output with the public
+half — the line to put in the archive host's `authorized_keys`.
 
 Then continue with [Getting started](/getting-started) — the observing site
 comes next.
@@ -87,7 +140,8 @@ comes next.
 ## Where things live
 
 ```
-/etc/caelum/                          caelum.env, config.json, auth.json, tls/
+/etc/caelum/                          caelum.env, config.json, auth.json, tls/,
+                                      upload_key, tunnel.env
 /var/lib/caelum/                      captured data
 /opt/caelum/releases/<version>/       one installed release each
 /opt/caelum/current, previous         the running release and the rollback target
