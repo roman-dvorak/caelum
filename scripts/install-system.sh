@@ -17,7 +17,6 @@
 #   /opt/caelum/bin/caelum-launch         boot guard, systemd's ExecStart
 #   /etc/caelum/                          caelum.env, config.json, auth.json,
 #                                         upload_key(.pub) — the SSH key for uploads
-#                                         and the tunnel, tunnel.env
 #   /var/lib/caelum/                      captured data
 set -euo pipefail
 
@@ -42,7 +41,7 @@ Installation:
   --no-start            install everything but don't enable/start the services
   --report              only print the report on the installed camera (version,
                         addresses, camera, upload, admin password, SSH key,
-                        tunnel, services) — the same one every run ends with
+                        services) — the same one every run ends with
 
 This camera (written into an existing config.json too):
   --name TEXT           camera name (upload.camera_name), shown on images
@@ -52,26 +51,16 @@ This camera (written into an existing config.json too):
   --lon DEG             longitude, east positive
   --elevation M         elevation in metres
   --hostname NAME       set the system's host name (and NAME.local)
-  --new-identity        for a card cloned from another camera: a new upload/
-                        tunnel SSH key, a new admin password (printed at the
+  --new-identity        for a card cloned from another camera: a new upload
+                        SSH key, a new admin password (printed at the
                         end; signs everyone out), a new session key and a new
                         TLS certificate
-
-Reverse SSH tunnel (remote shell access through a server you control):
-  --tunnel USER@HOST    keep `ssh -R PORT:localhost:22 USER@HOST` running, logged
-                        in with the upload key
-  --tunnel-port PORT    port on HOST that leads to this camera's sshd —
-                        unique per camera
-  --tunnel-ssh-port N   HOST's own sshd port (default 22)
-  --no-tunnel           remove the tunnel
-  Given once, the tunnel settings are kept in /etc/caelum/tunnel.env; a later
-  run changes only what it names (e.g. just --tunnel-port).
 
   -h, --help            show this help
 
 Example — a card cloned from camera 1 turned into camera 2:
   sudo bash install.sh --new-identity --hostname caelum-lhota-2 --name "Lhota 2" \
-    --slug lhota-2 --lat 50.00 --lon 15.00 --elevation 300 --tunnel-port 20002
+    --slug lhota-2 --lat 50.00 --lon 15.00 --elevation 300
 EOF
 }
 
@@ -96,7 +85,7 @@ report() {
   printf '%-14s%s\n' "Addresses" "$(hostname -I 2>/dev/null | xargs)"
   printf '%-14s%s\n' "Web UI" "$url"
   line=""
-  for unit in caelum caelum-tunnel redis-server nginx ssh; do
+  for unit in caelum redis-server nginx; do
     if [[ $unit == caelum || -e "/etc/systemd/system/$unit.service" || -n "$(systemctl list-unit-files --no-legend "$unit.service" 2>/dev/null)" ]]; then
       line+="$unit $(systemctl is-active "$unit" 2>/dev/null), "
     fi
@@ -128,16 +117,6 @@ EOF
   else
     printf '%-14s%s\n' "Admin login" "password set by an admin, not stored (--new-identity sets a new one)"
   fi
-  if [[ -f "$CONFIG_DIR/tunnel.env" ]]; then
-    local t_host t_port t_ssh
-    t_host="$(sed -n 's/^TUNNEL_HOST=//p' "$CONFIG_DIR/tunnel.env")"
-    t_port="$(sed -n 's/^TUNNEL_PORT=//p' "$CONFIG_DIR/tunnel.env")"
-    t_ssh="$(sed -n 's/^TUNNEL_SSH_PORT=//p' "$CONFIG_DIR/tunnel.env")"
-    printf '%-14s%s\n' "Tunnel" "$t_host (sshd port ${t_ssh:-22}), port $t_port -> this camera's sshd"
-    printf '%-14s%s\n' "" "from ${t_host#*@}: ssh -p $t_port <user>@localhost"
-  else
-    printf '%-14s%s\n' "Tunnel" "none"
-  fi
   printf '%-14s%s\n' "Logs" "journalctl -u caelum -f"
   if [[ -f "$CONFIG_DIR/upload_key.pub" ]]; then
     echo
@@ -145,12 +124,6 @@ EOF
     echo "authorized_keys on the archive host:"
     echo
     cat "$CONFIG_DIR/upload_key.pub"
-    if [[ -f "$CONFIG_DIR/tunnel.env" ]]; then
-      echo
-      echo "and for ${t_host%@*}'s ~/.ssh/authorized_keys on ${t_host#*@}, limited to its port:"
-      echo
-      echo "restrict,port-forwarding,permitlisten=\"$t_port\" $(<"$CONFIG_DIR/upload_key.pub")"
-    fi
   fi
   echo "==============================================================="
 }
@@ -172,14 +145,13 @@ NEW_IDENTITY=0
 HOSTNAME_CHANGED=0
 REPORT_ONLY=0
 NAME="" SLUG="" LAT="" LON="" ELEVATION="" NEW_HOSTNAME=""
-TUNNEL_ARG="" TUNNEL_PORT_ARG="" TUNNEL_SSH_PORT_ARG="" NO_TUNNEL=0
 
 need_value() {
   [[ $# -ge 2 && "$2" != --* ]] || { echo "$1 needs a value (see --help)" >&2; exit 64; }
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --wheel|--manifest|--camera|--user|--name|--slug|--lat|--lon|--elevation|--hostname|--tunnel|--tunnel-port|--tunnel-ssh-port)
+    --wheel|--manifest|--camera|--user|--name|--slug|--lat|--lon|--elevation|--hostname)
       need_value "$@" ;;&
     --wheel) WHEEL="$2"; shift 2 ;;
     --manifest) MANIFEST_URL="$2"; shift 2 ;;
@@ -194,10 +166,6 @@ while [[ $# -gt 0 ]]; do
     --elevation) ELEVATION="$2"; shift 2 ;;
     --hostname) NEW_HOSTNAME="$2"; shift 2 ;;
     --new-identity) NEW_IDENTITY=1; shift ;;
-    --tunnel) TUNNEL_ARG="$2"; shift 2 ;;
-    --tunnel-port) TUNNEL_PORT_ARG="$2"; shift 2 ;;
-    --tunnel-ssh-port) TUNNEL_SSH_PORT_ARG="$2"; shift 2 ;;
-    --no-tunnel) NO_TUNNEL=1; shift ;;
     --report) REPORT_ONLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 64 ;;
@@ -223,34 +191,12 @@ if [[ -z "$CAMERA" ]]; then
 fi
 case "$CAMERA" in picamera2|opencv|mock) ;; *) echo "bad --camera: $CAMERA" >&2; exit 64 ;; esac
 is_num() { [[ "$1" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; }
-is_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 )); }
 for v in LAT LON ELEVATION; do
   [[ -z "${!v}" ]] || is_num "${!v}" || { echo "bad --${v,,}: ${!v}" >&2; exit 64; }
 done
 [[ -z "$SLUG" || "$SLUG" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad --slug: $SLUG (letters, digits, . _ -)" >&2; exit 64; }
 [[ -z "$NEW_HOSTNAME" || "$NEW_HOSTNAME" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] \
   || { echo "bad --hostname: $NEW_HOSTNAME" >&2; exit 64; }
-
-# Tunnel: what tunnel.env already says, overridden by whatever was given now.
-TUNNEL_ENV="$CONFIG_DIR/tunnel.env"
-TUNNEL_HOST="" TUNNEL_PORT="" TUNNEL_SSH_PORT=22
-if [[ -f "$TUNNEL_ENV" ]]; then
-  TUNNEL_HOST="$(sed -n 's/^TUNNEL_HOST=//p' "$TUNNEL_ENV")"
-  TUNNEL_PORT="$(sed -n 's/^TUNNEL_PORT=//p' "$TUNNEL_ENV")"
-  TUNNEL_SSH_PORT="$(sed -n 's/^TUNNEL_SSH_PORT=//p' "$TUNNEL_ENV")"
-fi
-TUNNEL_HOST="${TUNNEL_ARG:-$TUNNEL_HOST}"
-TUNNEL_PORT="${TUNNEL_PORT_ARG:-$TUNNEL_PORT}"
-TUNNEL_SSH_PORT="${TUNNEL_SSH_PORT_ARG:-${TUNNEL_SSH_PORT:-22}}"
-TUNNEL=0
-if [[ $NO_TUNNEL -eq 1 ]]; then
-  [[ -z "$TUNNEL_ARG$TUNNEL_PORT_ARG$TUNNEL_SSH_PORT_ARG" ]] || { echo "--no-tunnel with other --tunnel options" >&2; exit 64; }
-elif [[ -n "$TUNNEL_HOST$TUNNEL_PORT" ]]; then
-  [[ "$TUNNEL_HOST" =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] || { echo "the tunnel needs --tunnel USER@HOST" >&2; exit 64; }
-  is_port "$TUNNEL_PORT" || { echo "the tunnel needs --tunnel-port 1-65535" >&2; exit 64; }
-  is_port "$TUNNEL_SSH_PORT" || { echo "bad --tunnel-ssh-port: $TUNNEL_SSH_PORT" >&2; exit 64; }
-  TUNNEL=1
-fi
 
 if [[ -n "$NEW_HOSTNAME" && "$NEW_HOSTNAME" != "$(hostname)" ]]; then
   echo "==> Host name $(hostname) -> $NEW_HOSTNAME"
@@ -267,8 +213,6 @@ echo "==> System packages"
 PKGS=(python3 python3-venv redis-server curl unzip openssh-client)
 # libcamera has no PyPI wheel — apt's picamera2 is the only way to get it.
 if [[ "$CAMERA" == picamera2 ]]; then PKGS+=(python3-picamera2); fi
-# The tunnel leads to this machine's own sshd.
-if [[ $TUNNEL -eq 1 ]]; then PKGS+=(openssh-server); fi
 if [[ $PROXY -eq 1 ]]; then
   # Checked before installing nginx, whose default site wants port 80 too.
   if ss -ltnpH 'sport = :80 or sport = :443' | grep -qv nginx; then
@@ -374,7 +318,7 @@ echo "==> Configuration in $CONFIG_DIR"
 # end of the script starts it again (unless --no-start).
 systemctl stop caelum 2>/dev/null || true
 
-# The SSH key the rsync/scp upload transports and the tunnel log in with:
+# The SSH key the rsync/scp upload transports log in with:
 # generated once and kept — its public half may already be in a remote
 # authorized_keys — unless this card is becoming another camera.
 UPLOAD_KEY="$CONFIG_DIR/upload_key"
@@ -542,44 +486,6 @@ sed -e "s|@PREFIX@|$PREFIX|g" -e "s|@USER@|$SVC_USER|g" \
     -e "s|@CONFIG_DIR@|$CONFIG_DIR|g" -e "s|@DATA_DIR@|$DATA_DIR|g" \
     "$DEPLOY/caelum.service.in" > /etc/systemd/system/caelum.service
 
-TUNNEL_UNIT=/etc/systemd/system/caelum-tunnel.service
-if [[ $TUNNEL -eq 1 ]]; then
-  echo "==> Reverse SSH tunnel: $TUNNEL_HOST port $TUNNEL_PORT -> this camera's sshd"
-  cat > "$TUNNEL_ENV" <<EOF
-# Reverse SSH tunnel — written by install-system.sh; re-run it to change.
-TUNNEL_HOST=$TUNNEL_HOST
-TUNNEL_PORT=$TUNNEL_PORT
-TUNNEL_SSH_PORT=$TUNNEL_SSH_PORT
-EOF
-  chmod 0644 "$TUNNEL_ENV"
-  # Plain ssh restarted by systemd does what autossh would. ExitOnForwardFailure:
-  # a port still held on the server (stale session, another camera) is retried
-  # rather than leaving a tunnel-less connection up.
-  cat > "$TUNNEL_UNIT" <<EOF
-[Unit]
-Description=caelum reverse SSH tunnel
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-User=$SVC_USER
-EnvironmentFile=$TUNNEL_ENV
-ExecStart=/usr/bin/ssh -N -i $UPLOAD_KEY -p \${TUNNEL_SSH_PORT} \\
-  -o BatchMode=yes -o StrictHostKeyChecking=accept-new \\
-  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes \\
-  -R \${TUNNEL_PORT}:localhost:22 \${TUNNEL_HOST}
-Restart=always
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-EOF
-elif [[ $NO_TUNNEL -eq 1 && -f "$TUNNEL_UNIT" ]]; then
-  echo "==> Removing the reverse SSH tunnel"
-  systemctl disable --now caelum-tunnel 2>/dev/null || true
-  rm -f "$TUNNEL_UNIT" "$TUNNEL_ENV"
-fi
-
 AUTH_EXISTED=0
 [[ -f "$CONFIG_DIR/auth.json" ]] && AUTH_EXISTED=1
 systemctl daemon-reload
@@ -587,11 +493,6 @@ if [[ $START -eq 1 ]]; then
   systemctl enable --now redis-server
   systemctl enable caelum
   systemctl restart caelum
-  if [[ $TUNNEL -eq 1 ]]; then
-    systemctl enable --now ssh
-    systemctl enable caelum-tunnel
-    systemctl restart caelum-tunnel
-  fi
 fi
 
 if [[ $START -eq 1 && $AUTH_EXISTED -eq 0 ]]; then
