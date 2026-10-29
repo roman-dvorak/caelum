@@ -40,6 +40,9 @@ Installation:
                         a self-signed certificate; caelum itself then listens on
                         127.0.0.1:8000 only
   --no-start            install everything but don't enable/start the services
+  --report              only print the report on the installed camera (version,
+                        addresses, camera, upload, admin password, SSH key,
+                        tunnel, services) — the same one every run ends with
 
 This camera (written into an existing config.json too):
   --name TEXT           camera name (upload.camera_name), shown on images
@@ -67,9 +70,89 @@ Reverse SSH tunnel (remote shell access through a server you control):
   -h, --help            show this help
 
 Example — a card cloned from camera 1 turned into camera 2:
-  sudo bash install.sh --new-identity --hostname caelum-02 --name "Ondřejov 2" \
-    --slug ondrejov-02 --lat 49.91 --lon 14.78 --elevation 530 --tunnel-port 20002
+  sudo bash install.sh --new-identity --hostname caelum-lhota-2 --name "Lhota 2" \
+    --slug lhota-2 --lat 50.00 --lon 15.00 --elevation 300 --tunnel-port 20002
 EOF
+}
+
+# What is installed and how to reach it — printed at the end of every run,
+# and on its own with --report. Reads everything from disk, so it describes
+# the installation as it is, not what this run was asked to do.
+report() {
+  local current previous port url line
+  current="$(readlink "$PREFIX/current" 2>/dev/null)"
+  previous="$(readlink "$PREFIX/previous" 2>/dev/null)"
+  port="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env" 2>/dev/null)"
+  if [[ -e /etc/nginx/sites-enabled/caelum ]]; then
+    url="https://$(hostname).local/  (self-signed certificate; http on port 80 too)"
+  else
+    url="http://$(hostname).local:${port:-8000}/"
+  fi
+  echo
+  echo "======================== caelum report ========================"
+  printf '%-14s%s\n' "Generated" "$(date '+%Y-%m-%d %H:%M %Z')"
+  printf '%-14s%s\n' "Version" "${current#releases/}${previous:+  (rollback: ${previous#releases/})}"
+  printf '%-14s%s\n' "Host name" "$(hostname)"
+  printf '%-14s%s\n' "Addresses" "$(hostname -I 2>/dev/null | xargs)"
+  printf '%-14s%s\n' "Web UI" "$url"
+  line=""
+  for unit in caelum caelum-tunnel redis-server nginx ssh; do
+    if [[ $unit == caelum || -e "/etc/systemd/system/$unit.service" || -n "$(systemctl list-unit-files --no-legend "$unit.service" 2>/dev/null)" ]]; then
+      line+="$unit $(systemctl is-active "$unit" 2>/dev/null), "
+    fi
+  done
+  printf '%-14s%s\n' "Services" "${line%, }"
+  if [[ -f "$CONFIG_DIR/config.json" ]]; then
+    "$PREFIX/current/venv/bin/python" - "$CONFIG_DIR/config.json" <<'EOF'
+import sys
+from pathlib import Path
+from caelum.config import store_disk
+cfg = store_disk.read(Path(sys.argv[1]))
+u, loc = cfg.upload, cfg.location
+row = lambda key, value: print(f"{key:<14}{value}")
+row("Camera", f'"{u.camera_name}", slug {u.camera_slug}, backend {cfg.camera.backend}')
+row("Location", f"lat {loc.lat}, lon {loc.lon}, {loc.elevation_m:g} m, {loc.timezone}")
+if u.transport == "s3":
+    target = f"s3://{u.s3_bucket}/{u.s3_prefix}" + (f" at {u.s3_endpoint_url}" if u.s3_endpoint_url else "")
+elif u.remote_host:
+    target = f"{u.remote_user + '@' if u.remote_user else ''}{u.remote_host}:{u.remote_base_path}/{u.camera_slug}"
+    target += f" (port {u.ssh_port}, key {u.ssh_key_path})"
+else:
+    target = f"{u.remote_base_path}/{u.camera_slug}"
+row("Upload", f"{'on' if u.enabled else 'off'}, {u.transport} -> {target}")
+EOF
+  fi
+  if [[ -f "$CONFIG_DIR/initial-admin-password.txt" ]]; then
+    printf '%-14s%s\n' "Admin login" "admin / $(<"$CONFIG_DIR/initial-admin-password.txt")"
+    printf '%-14s%s\n' "" "change it under Accounts, then delete $CONFIG_DIR/initial-admin-password.txt"
+  else
+    printf '%-14s%s\n' "Admin login" "password set by an admin, not stored (--new-identity sets a new one)"
+  fi
+  if [[ -f "$CONFIG_DIR/tunnel.env" ]]; then
+    local t_host t_port t_ssh
+    t_host="$(sed -n 's/^TUNNEL_HOST=//p' "$CONFIG_DIR/tunnel.env")"
+    t_port="$(sed -n 's/^TUNNEL_PORT=//p' "$CONFIG_DIR/tunnel.env")"
+    t_ssh="$(sed -n 's/^TUNNEL_SSH_PORT=//p' "$CONFIG_DIR/tunnel.env")"
+    printf '%-14s%s\n' "Tunnel" "$t_host (sshd port ${t_ssh:-22}), port $t_port -> this camera's sshd"
+    printf '%-14s%s\n' "" "from ${t_host#*@}: ssh -p $t_port <user>@localhost"
+  else
+    printf '%-14s%s\n' "Tunnel" "none"
+  fi
+  printf '%-14s%s\n' "Logs" "journalctl -u caelum -f"
+  if [[ -f "$CONFIG_DIR/upload_key.pub" ]]; then
+    echo
+    echo "SSH public key ($CONFIG_DIR/upload_key.pub), for the upload user's ~/.ssh/"
+    echo "authorized_keys on the archive host:"
+    echo
+    cat "$CONFIG_DIR/upload_key.pub"
+    if [[ -f "$CONFIG_DIR/tunnel.env" ]]; then
+      echo
+      echo "and for ${t_host%@*}'s ~/.ssh/authorized_keys on ${t_host#*@}, limited to its port:"
+      echo
+      echo "restrict,port-forwarding,permitlisten=\"$t_port\" $(<"$CONFIG_DIR/upload_key.pub")"
+    fi
+  fi
+  echo "==============================================================="
 }
 
 # Wrapped in a function so that bash has read the whole script before running
@@ -87,6 +170,7 @@ START=1
 PROXY=0
 NEW_IDENTITY=0
 HOSTNAME_CHANGED=0
+REPORT_ONLY=0
 NAME="" SLUG="" LAT="" LON="" ELEVATION="" NEW_HOSTNAME=""
 TUNNEL_ARG="" TUNNEL_PORT_ARG="" TUNNEL_SSH_PORT_ARG="" NO_TUNNEL=0
 
@@ -114,6 +198,7 @@ while [[ $# -gt 0 ]]; do
     --tunnel-port) TUNNEL_PORT_ARG="$2"; shift 2 ;;
     --tunnel-ssh-port) TUNNEL_SSH_PORT_ARG="$2"; shift 2 ;;
     --no-tunnel) NO_TUNNEL=1; shift ;;
+    --report) REPORT_ONLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 64 ;;
   esac
@@ -122,6 +207,11 @@ done
 if [[ $EUID -ne 0 ]]; then
   echo "run as root (sudo)" >&2
   exit 1
+fi
+if [[ $REPORT_ONLY -eq 1 ]]; then
+  [[ -x "$PREFIX/current/venv/bin/python" ]] || { echo "caelum is not installed in $PREFIX" >&2; exit 1; }
+  report
+  exit 0
 fi
 if [[ -d "$PREFIX/.git" ]]; then
   echo "$PREFIX is a git checkout from an older install method — move it aside first" >&2
@@ -352,12 +442,12 @@ EOF
     || echo "    warning: could not clear the config cached in Redis — check the values in the web UI" >&2
 fi
 
-ADMIN_PASSWORD=""
 if [[ $NEW_IDENTITY -eq 1 ]]; then
   # A new admin password and session key: the cloned card's would otherwise
   # let the other camera's admin (and its open sessions) in here. Other
   # accounts are kept.
-  ADMIN_PASSWORD="$("$PREFIX/current/venv/bin/python" - "$CONFIG_DIR" <<'EOF'
+  # The report at the end prints it from initial-admin-password.txt.
+  "$PREFIX/current/venv/bin/python" - "$CONFIG_DIR" <<'EOF'
 import json, os, secrets, sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -379,9 +469,7 @@ for name, text in [("auth.json", json.dumps(document, indent=2)), (BOOTSTRAP_PAS
     fd = os.open(config_dir / name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as handle:
         handle.write(text)
-print(password)
 EOF
-)"
   chown "$SVC_USER:$SVC_USER" "$CONFIG_DIR/auth.json" "$CONFIG_DIR/initial-admin-password.txt"
   echo "    new admin password and session key"
 fi
@@ -492,6 +580,8 @@ elif [[ $NO_TUNNEL -eq 1 && -f "$TUNNEL_UNIT" ]]; then
   rm -f "$TUNNEL_UNIT" "$TUNNEL_ENV"
 fi
 
+AUTH_EXISTED=0
+[[ -f "$CONFIG_DIR/auth.json" ]] && AUTH_EXISTED=1
 systemctl daemon-reload
 if [[ $START -eq 1 ]]; then
   systemctl enable --now redis-server
@@ -504,31 +594,17 @@ if [[ $START -eq 1 ]]; then
   fi
 fi
 
-PORT="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env")"
+if [[ $START -eq 1 && $AUTH_EXISTED -eq 0 ]]; then
+  # The first start creates the admin account and writes its password.
+  for _ in $(seq 60); do
+    [[ -f "$CONFIG_DIR/initial-admin-password.txt" ]] && break
+    sleep 1
+  done
+fi
+
 echo
 echo "caelum $VERSION installed (camera=$CAMERA)."
-if [[ $PROXY -eq 1 ]]; then
-  echo "Open http://$(hostname).local/ or https://$(hostname).local/ (self-signed certificate)"
-else
-  echo "Open http://$(hostname).local:${PORT:-8000}/"
-fi
-if [[ -n "$ADMIN_PASSWORD" ]]; then
-  echo "Admin login: admin / $ADMIN_PASSWORD"
-  echo "  (also in $CONFIG_DIR/initial-admin-password.txt — change it under Accounts, then delete the file)"
-else
-  echo "First admin password (created on first start): $CONFIG_DIR/initial-admin-password.txt"
-fi
-echo "Logs: journalctl -u caelum -f"
-echo
-echo "SSH public key ($UPLOAD_KEY.pub) — add it to ~/.ssh/authorized_keys"
-echo "of the upload user on the archive host$([[ $TUNNEL -eq 1 ]] && echo " and of ${TUNNEL_HOST%@*} on ${TUNNEL_HOST#*@}"):"
-echo
-cat "$UPLOAD_KEY.pub"
-if [[ $TUNNEL -eq 1 ]]; then
-  echo
-  echo "Tunnel: on ${TUNNEL_HOST#*@}, \`ssh -p $TUNNEL_PORT <user>@localhost\` reaches this camera."
-  echo "Status: systemctl status caelum-tunnel"
-fi
+report
 }
 
 main "$@"

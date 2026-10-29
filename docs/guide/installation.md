@@ -48,6 +48,7 @@ curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/insta
 | `--wheel FILE\|URL` | Install this release file instead of the newest one — for offline machines. |
 | `--manifest URL` | Read releases from another [update channel](/guide/updates#update-channels-and-self-hosting). |
 | `--no-start` | Install everything, but don't start the service. |
+| `--report` | Install nothing, only print the report on the installed camera — see below. |
 | `-h`, `--help` | List all options. |
 
 ### Setting up one camera of several
@@ -67,8 +68,8 @@ command also re-labels a camera that is already installed:
 A card cloned from camera 1, turned into camera 2:
 
 ```bash
-sudo bash install.sh --new-identity --hostname caelum-02 --name "Ondřejov 2" \
-  --slug ondrejov-02 --lat 49.91 --lon 14.78 --elevation 530 --tunnel-port 20002
+sudo bash install.sh --new-identity --hostname caelum-lhota-2 --name "Lhota 2" \
+  --slug lhota-2 --lat 50.00 --lon 15.00 --elevation 300 --tunnel-port 20002
 ```
 
 ### Reverse SSH tunnel
@@ -94,7 +95,7 @@ On the server, add the key the installer prints to the tunnel account's
 `~/.ssh/authorized_keys`, limited to opening that one port:
 
 ```
-restrict,port-forwarding,permitlisten="20002" ssh-ed25519 AAAA... caelum@caelum-02
+restrict,port-forwarding,permitlisten="20002" ssh-ed25519 AAAA... caelum@caelum-lhota-2
 ```
 
 Then, on the server, `ssh -p 20002 pi@localhost` is a shell on the camera.
@@ -133,6 +134,19 @@ prints it at the end of its output instead.
 The installer also generates an SSH key for [uploads](/guide/upload#ssh-key-setup)
 and the tunnel, `/etc/caelum/upload_key`, and ends its output with the public
 half — the line to put in the archive host's `authorized_keys`.
+
+### The report
+
+Every run of the installer ends with a report on the camera: installed and
+rollback version, host name and addresses, web address, state of the services,
+camera name and slug, location, upload target, the admin password while
+`initial-admin-password.txt` still exists, the tunnel and the SSH public key —
+for the tunnel also the ready-made `authorized_keys` line. To print it again
+without installing anything:
+
+```bash
+curl -fsSL https://github.com/roman-dvorak/caelum/releases/latest/download/install.sh | sudo bash -s -- --report
+```
 
 Then continue with [Getting started](/getting-started) — the observing site
 comes next.
