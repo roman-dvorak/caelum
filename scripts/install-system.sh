@@ -69,9 +69,9 @@ EOF
 # the installation as it is, not what this run was asked to do.
 report() {
   local current previous port url line
-  current="$(readlink "$PREFIX/current" 2>/dev/null)"
-  previous="$(readlink "$PREFIX/previous" 2>/dev/null)"
-  port="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env" 2>/dev/null)"
+  current="$(readlink "$PREFIX/current" 2>/dev/null || true)"
+  previous="$(readlink "$PREFIX/previous" 2>/dev/null || true)"
+  port="$(sed -n 's/^CAELUM_HTTP_PORT=//p' "$CONFIG_DIR/caelum.env" 2>/dev/null || true)"
   if [[ -e /etc/nginx/sites-enabled/caelum ]]; then
     url="https://$(hostname).local/  (self-signed certificate; http on port 80 too)"
   else
