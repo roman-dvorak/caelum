@@ -238,9 +238,22 @@ def _polyline_points(c: _Canvas, run: list) -> list[tuple[float, float]]:
     return [(p[0] * c.width, p[1] * c.height) for p in run if isinstance(p, list) and len(p) >= 2]
 
 
+def _expand_sky(c: _Canvas, p: dict[str, Any], kind: str) -> dict[str, Any]:
+    """A sky element holds either explicit coordinates (older sidecars) or
+    `params` (time, place, lens, options) to work them out from."""
+    params = p.get("params")
+    if not isinstance(params, dict):
+        return p
+    from caelum.sky import overlay_geometry
+
+    build = overlay_geometry.grid_payload if kind == "grid" else overlay_geometry.map_payload
+    return build(params, c.width / c.height)
+
+
 def _draw_sky_grid(c: _Canvas, p: dict[str, Any]) -> None:
     """Altitude rings / cardinal lines (`lines`: runs of [x, y] fractions) and
     the compass letters (`labels`)."""
+    p = _expand_sky(c, p, "grid")
     layer = Image.new("RGBA", c.image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     line = _hex_to_rgba(_str(p, "color"), _CYAN, 0.45)
@@ -274,6 +287,7 @@ _BODY_STYLE = {
 def _draw_sky_map(c: _Canvas, p: dict[str, Any]) -> None:
     """Stars as dots sized by magnitude (`stars`: [x, y, mag]), the Sun/Moon/
     planets as rings (`bodies`) and names beside the brightest (`labels`)."""
+    p = _expand_sky(c, p, "map")
     layer = Image.new("RGBA", c.image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     color = _hex_to_rgba(_str(p, "color"), _INK)

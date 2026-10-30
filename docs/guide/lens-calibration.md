@@ -72,8 +72,9 @@ It is recomputed for every frame from the clock, so it stays correct all
 night, and it goes wherever overlays go (live view, thumbnails, the remote
 archive, timelapses). Settings (Plugins page): `max_magnitude` (default 3.5),
 `label_magnitude`, `show_stars`, `show_planets`, `show_grid`, `show_compass`
-and the colours. Every star is stored in the frame's sidecar and uploaded with
-it, so each extra magnitude about doubles that.
+and the colours. The frame's sidecar stores only the parameters (time, place,
+lens, options — about a kilobyte), not the star positions: the overlay image
+is drawn from them on the camera, and viewers show that image.
 
 ### Names on hover
 
