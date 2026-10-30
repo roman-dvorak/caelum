@@ -42,6 +42,10 @@ class ObservationDays:
             calculator = SkyStateCalculator(lat=loc.lat, lon=loc.lon, elevation_m=loc.elevation_m)
         return cls(calculator, ZoneInfo(cfg.location.timezone), start)
 
+    @property
+    def tz(self) -> ZoneInfo:
+        return self._tz
+
     def _start_of(self, day: date) -> datetime:
         if self._fixed is None:
             assert self._calculator is not None

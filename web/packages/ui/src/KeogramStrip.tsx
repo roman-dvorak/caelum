@@ -23,12 +23,16 @@ export function KeogramStrip({ src, date, caption, className }: KeogramStripProp
           No keogram available for {date}
         </div>
       ) : (
-        <img
-          src={src}
-          alt={`Keogram for ${date}`}
-          className="w-full border border-border-subtle bg-surface-0 rounded-md"
-          onError={() => setFailed(true)}
-        />
+        // Full resolution is thousands of pixels each way: shown squeezed to a
+        // strip, and the link opens the image itself to zoom into.
+        <a href={src} target="_blank" rel="noreferrer" title="Open the full-resolution keogram">
+          <img
+            src={src}
+            alt={`Keogram for ${date}`}
+            className="h-48 w-full border border-border-subtle bg-surface-0 object-fill rounded-md sm:h-64"
+            onError={() => setFailed(true)}
+          />
+        </a>
       )}
       <figcaption className="font-mono text-xs text-ink-muted">{caption ?? `Keogram · ${date}`}</figcaption>
     </figure>

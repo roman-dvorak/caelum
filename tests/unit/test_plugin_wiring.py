@@ -46,15 +46,15 @@ def test_order_governs_load_sequence(loader):
 
 def test_settings_reach_the_worker(loader):
     config = AppConfig(
-        plugins={"keogram": PluginConfig(settings={"column_width": 7, "strip_height": 64})}
+        plugins={"keogram": PluginConfig(settings={"seconds_per_pixel": 60, "max_height": 64})}
     )
     keogram = next(lp.plugin for lp in loader.load(config) if lp.id == "keogram")
-    assert keogram._column_width == 7
-    assert keogram._strip_height == 64
+    assert keogram._seconds_per_pixel == 60
+    assert keogram._max_height == 64
 
 
 def test_invalid_settings_skip_the_plugin_rather_than_crashing(loader):
-    config = AppConfig(plugins={"keogram": PluginConfig(settings={"column_width": -5})})
+    config = AppConfig(plugins={"keogram": PluginConfig(settings={"seconds_per_pixel": -5})})
     assert loader.load(config) == []
 
 

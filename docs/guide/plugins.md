@@ -205,19 +205,32 @@ your own plugin today you need to register its class in `main.py` before
 
 ## Worked example: the keogram worker
 
-A keogram is a single image of a whole night: take the centre column of every
-frame, stand them side by side, and you get time on the x-axis and sky altitude
-on the y-axis.
+A keogram is a single image of a whole night: take one line of the sky from
+every frame and lay them side by side, and you get time on the x-axis and
+position along that line on the y-axis.
 
-`KeogramWorker` (id `keogram`) does exactly that.
+`KeogramWorker` (id `keogram`) takes the **north-south meridian** — the line
+through the zenith, north on top, south at the bottom — at the sensor's full
+resolution (one sample per pixel along the image circle's diameter). The line
+comes from the lens calibration (`camera.lens`: centre, radius,
+`azimuth_offset_deg`, `mirror`), so it runs north-south however the camera is
+turned; calibrate the lens first, see
+[Lens calibration](/guide/lens-calibration).
+
+The image is as wide as the *whole observation day* divided by
+`seconds_per_pixel` (default 30 s: 2880 px for 24 h), allocated up front.
+Each frame paints the columns of its own moment, so the night fills in from
+left to right; where the camera was not capturing the image stays black. A
+band under the image carries the time axis, with hour ticks and local-time
+labels.
 
 - **`on_frame`** works out which *observation day* the frame belongs to —
   from one `observation_day.start` (sunrise, or a fixed local time) to the
-  next, named after the local date it started on — extracts the frame's
-  centre column, resizes it to a 2 px wide, 240 px tall strip and appends it
-  to the day's buffer. When a frame belongs to a new day, the old day's
-  buffer becomes the finished keogram, and the new day starts from whatever
-  is already on disk for it.
+  next, named after the local date it started on — samples the meridian and
+  paints it at the frame's time. A column is repeated over the gap since the
+  previous frame, up to `max_fill_s`, so a 60 s cadence at 30 s per pixel has
+  no stripes. When a frame belongs to a new day, the old day's image is the
+  finished keogram.
 - **`create_derivative`** returns the finished keogram of a day that just
   ended, if there is one; otherwise, once `live_flush_interval_s` (five
   minutes by default) has passed, the current day's keogram so far. Both are
@@ -225,15 +238,23 @@ on the y-axis.
   `derivatives/YYYY/MM/DD/keogram/<day-start>_keogram_keogram.png`, rewritten
   in place (atomically) each time.
 
-One file per night that grows as the night goes on is what makes the keogram
-useful *during* the night, and that file is also the worker's memory: after a
-restart, a web update or a settings change, the first frame of the day loads
-it back and keeps appending.
+One file per night that fills in as the night goes on is what makes the
+keogram useful *during* the night, and that file is also the worker's memory:
+after a restart, a web update or a settings change, the first frame of the day
+loads it back and keeps painting. A file with another layout (a different
+`seconds_per_pixel`, a recalibrated lens, a keogram from before 0.5.14)
+is not carried over — that day starts again.
 
-Settings: `column_width`, `strip_height`, `live_flush_interval_s`, and
-`day_start` — `"sunrise"` or `"HH:MM"` to give the keogram its own day
-boundary; unset, it follows the global `observation_day.start` that
-Recordings are grouped by too.
+Settings: `seconds_per_pixel`, `max_fill_s`, `max_height` (cap the resolution;
+unset is full), `live_flush_interval_s`, and `day_start` — `"sunrise"` or
+`"HH:MM"` to give the keogram its own day boundary; unset, it follows the
+global `observation_day.start` that Recordings are grouped by too.
+
+::: tip Size
+A full-resolution day is large — 3000 px high and 2880 wide is a PNG of tens
+of MB, and it is rewritten (and uploaded) every `live_flush_interval_s`. On a
+slow uplink raise the interval or set `max_height`.
+:::
 
 ## Worked example: the meteor detector
 
