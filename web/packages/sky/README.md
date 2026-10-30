@@ -25,7 +25,7 @@ Two entry points, ESM only, with TypeScript types:
 | Export | What it does |
 | --- | --- |
 | `<SkyCanvas lens latDeg lonDeg when … />` | A canvas that fills its positioned parent (put it over an `<img>` of the same aspect ratio), redraws on resize, loads the data on first mount. With `interactive` it shows a popup naming the star/planet under the pointer, or the altitude/azimuth of the point; `onPick` gives clicks as frame fractions; `extraDraw` draws more on top. Styled with inline styles only — no Tailwind or CSS needed; the popup follows `--sky-tooltip-bg/-fg/-border` if set. |
-| `useSkySettings()` | Which layers are off and how faint a star is drawn, kept in `localStorage` (`caelum.skyView`). |
+| `useSkySettings(defaultOn = true)` | Whether the sky is drawn, which layers are off and how faint a star is drawn, kept in `localStorage` (`caelum.skyView`); returns `[settings, update]`. |
 
 What it contains as data (loaded as separate chunks, only when `loadSkyData()` runs):
 the Yale Bright Star Catalogue, 5080 stars brighter than magnitude 6 (~210 kB, ~80 kB gzipped),

@@ -10,6 +10,7 @@ export interface SkyView {
   lon: number
   hidden: ReadonlySet<string>
   maxMagnitude: number
+  opacity: number
 }
 
 export interface GalleryItemProps {
@@ -43,7 +44,8 @@ export function GalleryItem({ slug, time, thumbnailPath, overlayPath, showOverla
         alt={`Frame at ${time}`}
       >
         {sky && !Number.isNaN(when.getTime()) ? (
-          <SkyCanvas lens={sky.lens} latDeg={sky.lat} lonDeg={sky.lon} when={when} hidden={sky.hidden} maxMagnitude={sky.maxMagnitude} />
+          <SkyCanvas lens={sky.lens} latDeg={sky.lat} lonDeg={sky.lon} when={when} hidden={sky.hidden} maxMagnitude={sky.maxMagnitude}
+            opacity={sky.opacity} />
         ) : null}
       </ImageViewer>
       <figcaption className="border-t border-border-subtle px-2 py-1 text-center font-mono text-xs text-ink-muted">

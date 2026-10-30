@@ -92,15 +92,15 @@ function Gallery({ slug, dateIndex, manifest }: { slug: string; dateIndex: DateI
   const hasOverlays = dateIndex.images.some((image) => image.overlay)
   // The sky can be drawn here only when the camera published where it is.
   const sky: SkyView | undefined =
-    manifest.sky && manifest.location
-      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden: skyView.hidden, maxMagnitude: skyView.maxMagnitude }
+    manifest.sky && manifest.location && skyView.on
+      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden: skyView.hidden, maxMagnitude: skyView.maxMagnitude, opacity: skyView.opacity }
       : undefined
 
   return (
     <div className="flex flex-col gap-2">
-      {hasOverlays || sky ? (
+      {hasOverlays || (manifest.sky && manifest.location) ? (
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          {sky ? <SkySettingsMenu settings={skyView} onChange={updateSkyView} /> : null}
+          {manifest.sky && manifest.location ? <SkySettingsMenu settings={skyView} onChange={updateSkyView} /> : null}
           {hasOverlays ? <OverlayToggle checked={showOverlay} onChange={setShowOverlay} /> : null}
         </div>
       ) : null}

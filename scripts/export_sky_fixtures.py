@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from caelum.config.schema import LensConfig  # noqa: E402
 from caelum.derivatives.projection import project_altaz_to_pixel  # noqa: E402
-from caelum.sky.positions import body_positions, star_positions  # noqa: E402
+from caelum.sky.positions import body_positions, ecliptic_altaz, star_positions  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[1] / "web" / "packages" / "sky" / "test" / "fixtures.json"
 
@@ -41,7 +41,9 @@ def build() -> dict:
     for iso, lat, lon, elevation in MOMENTS:
         when = datetime.fromisoformat(iso).astimezone(UTC)
         stars = star_positions(when, lat, lon, max_mag=3.5)
+        eclip_alt, eclip_az = ecliptic_altaz(when, lat, lon, 15.0)
         cases.append({
+            "ecliptic": [[round(float(a), 5), round(float(z), 5)] for a, z in zip(eclip_alt, eclip_az, strict=True)],
             "when": iso, "lat": lat, "lon": lon, "elevation_m": elevation,
             "stars": {str(int(hr)): [round(float(a), 5), round(float(z), 5)]
                       for hr, a, z in zip(stars.hr, stars.alt_deg, stars.az_deg, strict=True)},

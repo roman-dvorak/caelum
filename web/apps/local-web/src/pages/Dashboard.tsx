@@ -63,7 +63,7 @@ export function Dashboard() {
             overlaySrc={overlaySrc}
             alt="Live camera feed"
           >
-            {skySetup ? (
+            {skySetup && skyView.on ? (
               <SkyCanvas
                 lens={skySetup.lens}
                 latDeg={skySetup.lat}
@@ -72,6 +72,7 @@ export function Dashboard() {
                 when={new Date(frame.metadata.captured_at)}
                 hidden={skyView.hidden}
                 maxMagnitude={skyView.maxMagnitude}
+                opacity={skyView.opacity}
                 interactive
               />
             ) : null}

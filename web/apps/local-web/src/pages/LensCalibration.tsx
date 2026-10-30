@@ -182,7 +182,7 @@ export function LensCalibration() {
         {frame ? (
           <div className="relative leading-none">
             <img src={frame.imageBlobUrl} alt="Latest frame" className="block h-auto w-full" />
-            {skySetup ? (
+            {skySetup && skyView.on ? (
               <SkyCanvas
                 lens={lens}
                 latDeg={skySetup.lat}
@@ -191,6 +191,7 @@ export function LensCalibration() {
                 when={new Date(frame.metadata.captured_at)}
                 hidden={skyView.hidden}
                 maxMagnitude={skyView.maxMagnitude}
+                opacity={skyView.opacity}
                 interactive
                 onPick={pickCenter ? onPick : undefined}
                 extraDraw={drawMatches}

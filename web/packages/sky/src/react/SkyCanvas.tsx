@@ -22,6 +22,8 @@ export interface SkyCanvasProps {
   hidden?: ReadonlySet<string>
   /** Dimmest star drawn. */
   maxMagnitude?: number
+  /** How opaque the sky is over the picture, 0 – 1 (default 1). */
+  opacity?: number
   /** Show a popup with the name or sky position under the pointer. */
   interactive?: boolean
   /** Click handler, in frame fractions (the lens page uses it to pick the centre). */
@@ -77,6 +79,7 @@ export function SkyCanvas({
   when,
   hidden,
   maxMagnitude,
+  opacity = 1,
   interactive = false,
   onPick,
   extraDraw,
@@ -178,7 +181,7 @@ export function SkyCanvas({
       <canvas
         ref={canvasRef}
         aria-hidden
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity }}
       />
       {tip ? (
         <div role="tooltip" style={{ ...TOOLTIP_STYLE, left: tip.x, top: tip.y + 14 }}>

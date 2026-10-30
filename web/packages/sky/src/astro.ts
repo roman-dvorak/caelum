@@ -83,3 +83,21 @@ export function starPositions(
   }
   return out
 }
+
+/**
+ * Alt/az of points along the ecliptic (ecliptic latitude 0, longitudes every
+ * `stepDeg`; mean obliquity of the date) — the line the Sun and the planets keep to.
+ */
+export function eclipticPath(when: Date, latDeg: number, lonDeg: number, stepDeg = 5): [number, number][] {
+  const jd = julianDate(when)
+  const t = (jd - J2000_JD) / 36525
+  const eps = rad(23.439291 - 0.0130042 * t)
+  const out: [number, number][] = []
+  for (let lambda = 0; lambda <= 360 + stepDeg / 2; lambda += stepDeg) {
+    const l = rad(lambda)
+    const ra = Math.atan2(Math.sin(l) * Math.cos(eps), Math.cos(l))
+    const dec = Math.asin(Math.sin(l) * Math.sin(eps))
+    out.push(horizontal(ra, dec, jd, latDeg, lonDeg))
+  }
+  return out
+}

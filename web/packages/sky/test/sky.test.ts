@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { altAzToFraction, fractionToAltAz, starPositions, type LensConfig, type StarCatalog } from '../src/index.ts'
+import { altAzToFraction, eclipticPath, fractionToAltAz, starPositions, type LensConfig, type StarCatalog } from '../src/index.ts'
 import { bodyPositions } from '../src/bodies.ts'
 
 // What the Python backend computes (scripts/export_sky_fixtures.py): the reference.
@@ -12,6 +12,7 @@ interface Fixtures {
     elevation_m: number
     stars: Record<string, [number, number]>
     bodies: Record<string, [number, number]>
+    ecliptic: [number, number][]
   }[]
   projections: { lens: LensConfig; aspect: number; alt: number; az: number; point: [number, number] | null }[]
 }
@@ -36,6 +37,12 @@ describe.each(fixtures.cases)('sky at $when ($lat, $lon)', (c) => {
       expect(expected, `HR ${catalog.hr[i]}`).toBeDefined()
       expect(separation([p.alt[k], p.az[k]], expected)).toBeLessThan(0.001)
     })
+  })
+
+  it('runs the ecliptic where the backend does (under 0.001°)', () => {
+    const path = eclipticPath(new Date(c.when), c.lat, c.lon, 15)
+    expect(path.length).toBe(c.ecliptic.length)
+    path.forEach((point, i) => expect(separation(point, c.ecliptic[i])).toBeLessThan(0.001))
   })
 
   it('puts the Sun, Moon and planets where astropy does (under 0.05°)', () => {

@@ -1,10 +1,10 @@
 import type { LensConfig } from './types.ts'
-import { starPositions } from './astro.ts'
+import { eclipticPath, starPositions } from './astro.ts'
 import type { SkyData } from './catalog.ts'
 import { altAzToFraction } from './lens.ts'
 
 /** The toggleable parts of the sky overlay. */
-export const SKY_LAYERS = ['outline', 'grid', 'constellations', 'stars', 'planets', 'compass'] as const
+export const SKY_LAYERS = ['outline', 'grid', 'ecliptic', 'constellations', 'stars', 'planets', 'compass'] as const
 export type SkyLayer = (typeof SKY_LAYERS)[number]
 
 export const DEFAULT_MAX_MAGNITUDE = 3.5
@@ -37,6 +37,7 @@ export interface SkyHit {
 
 const OUTLINE_COLOR = '#f6be64'
 const GRID_COLOR = '#50c8dc'
+const ECLIPTIC_COLOR = '#f0d060'
 const STAR_COLOR = '#e8f1ff'
 const FIGURE_COLOR = '#8caaff'
 const BODY_COLOR = { sun: '#ffd65a', moon: '#dce0e8', planet: '#e8a13a' } as const
@@ -121,6 +122,42 @@ export function drawSky(
       line(Array.from({ length: 19 }, (_, i) => project(Math.min(90, minAlt + i * 5), az)))
     }
     ctx.globalAlpha = 1
+  }
+
+  if (show('ecliptic')) {
+    // The Sun's path: dashed, with its name where it is highest in the picture.
+    ctx.strokeStyle = ECLIPTIC_COLOR
+    ctx.globalAlpha = 0.75
+    ctx.lineWidth = Math.max(1, 1.5 * k)
+    ctx.setLineDash([6 * k, 5 * k])
+    let pen = false
+    let top: [number, number] | null = null
+    let topAlt = -90
+    ctx.beginPath()
+    for (const [alt, az] of eclipticPath(o.when, o.latDeg, o.lonDeg, 2)) {
+      const p = alt >= minAlt ? project(alt, az) : null
+      if (!inFrame(p)) {
+        pen = false
+        continue
+      }
+      if (pen) ctx.lineTo(p[0], p[1])
+      else ctx.moveTo(p[0], p[1])
+      pen = true
+      if (alt > topAlt) {
+        topAlt = alt
+        top = p
+      }
+    }
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.globalAlpha = 1
+    if (top) {
+      ctx.font = `${Math.max(9, Math.round(11 * k))}px ${MONO}`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'bottom'
+      ctx.fillStyle = ECLIPTIC_COLOR
+      ctx.fillText('ecliptic', top[0] + 6 * k, top[1] - 4 * k)
+    }
   }
 
   const positions = show('stars') || show('constellations') ? starPositions(sky.stars, o.when, o.latDeg, o.lonDeg) : null

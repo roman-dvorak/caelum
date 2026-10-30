@@ -109,6 +109,20 @@ def star_positions(
     )
 
 
+def ecliptic_altaz(
+    when: datetime, lat_deg: float, lon_deg: float, step_deg: float = 5.0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Alt/az of points along the ecliptic (ecliptic latitude 0, longitudes every
+    `step_deg`, mean obliquity of the date) — the line the Sun and the planets keep to."""
+    jd = julian_date(when)
+    t = (jd - _J2000_JD) / 36525.0
+    eps = math.radians(23.439291 - 0.0130042 * t)
+    lam = np.radians(np.arange(0.0, 360.0 + step_deg / 2, step_deg))
+    ra = np.arctan2(np.sin(lam) * math.cos(eps), np.cos(lam))
+    dec = np.arcsin(np.sin(lam) * math.sin(eps))
+    return _horizontal(ra, dec, jd, lat_deg, lon_deg)
+
+
 def body_positions(when: datetime, lat_deg: float, lon_deg: float, elevation_m: float = 0.0) -> list[SkyObject]:
     """Sun, Moon and the naked-eye planets (astropy, builtin ephemeris — no download)."""
     import astropy.units as u
