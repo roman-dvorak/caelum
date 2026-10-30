@@ -6,19 +6,22 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from caelum.update import releases
 from caelum.update.job import Updater
-from caelum.update.manifest import latest_newer, parse_manifest
+from caelum.update.manifest import ManifestError, latest_newer, parse_manifest
 
+_SHA = "a" * 64
 _LAUNCH = Path(releases.__file__).resolve().parents[1] / "deploy" / "caelum-launch"
 
 
 def test_manifest_picks_newest_newer_release_and_resolves_wheel_url():
     data = {
         "releases": [
-            {"version": "0.2.0", "wheel": "caelum-0.2.0-py3-none-any.whl"},
-            {"version": "0.10.0", "wheel": "caelum-0.10.0-py3-none-any.whl", "sha256": "ab"},
-            {"version": "0.3.0", "wheel": "https://cdn.example/caelum-0.3.0-py3-none-any.whl"},
+            {"version": "0.2.0", "wheel": "caelum-0.2.0-py3-none-any.whl", "sha256": _SHA},
+            {"version": "0.10.0", "wheel": "caelum-0.10.0-py3-none-any.whl", "sha256": _SHA},
+            {"version": "0.3.0", "wheel": "https://cdn.example/caelum-0.3.0-py3-none-any.whl", "sha256": _SHA},
         ]
     }
     found = parse_manifest(data, "https://example.org/caelum/stable/manifest.json")
@@ -26,6 +29,20 @@ def test_manifest_picks_newest_newer_release_and_resolves_wheel_url():
     assert newest is not None and newest.version == "0.10.0"
     assert newest.wheel_url == "https://example.org/caelum/stable/caelum-0.10.0-py3-none-any.whl"
     assert latest_newer(found, "0.10.0") is None
+
+
+def test_manifest_refuses_unverifiable_or_insecure_releases():
+    url = "https://example.org/manifest.json"
+    with pytest.raises(ManifestError, match="sha256"):
+        parse_manifest({"releases": [{"version": "1.0.0", "wheel": "caelum-1.0.0-py3-none-any.whl"}]}, url)
+    with pytest.raises(ManifestError, match="https"):
+        parse_manifest(
+            {"releases": [{"version": "1.0.0", "wheel": "http://evil.example/c.whl", "sha256": _SHA}]}, url
+        )
+    with pytest.raises(ManifestError, match="https"):
+        parse_manifest(
+            {"releases": [{"version": "1.0.0", "wheel": "file:///tmp/c.whl", "sha256": _SHA}]}, url
+        )
 
 
 def _fake_release(root: Path, version: str, exit_code: int) -> None:

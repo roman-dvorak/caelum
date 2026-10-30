@@ -166,16 +166,24 @@ class UserStore:
         Unknown usernames still pay the cost of a hash verification so that
         response timing does not reveal which accounts exist.
         """
+        # The scrypt work (~100 ms, ~16 MiB) runs outside the lock: every
+        # authorized request takes it in `get()`, so holding it here would let
+        # a handful of login attempts stall the whole API.
         with self._lock:
             user = self._users.get(username)
             reference = user.password_hash if user else _DUMMY_HASH
-            ok = verify_password(password, reference)
-            if not ok or user is None:
-                return None
+        ok = verify_password(password, reference)
+        if not ok or user is None:
+            return None
+        upgraded = hash_password(password) if needs_rehash(reference) else None
 
+        with self._lock:
+            # A password change or deletion while we were hashing wins.
+            if self._users.get(username) is not user or user.password_hash != reference:
+                return None
             user.last_login_at = _now()
-            if needs_rehash(user.password_hash):
-                user.password_hash = hash_password(password)
+            if upgraded is not None:
+                user.password_hash = upgraded
             self._write_locked()
             return user
 

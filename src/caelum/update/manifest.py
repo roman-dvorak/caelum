@@ -11,21 +11,23 @@ too), so publishing a channel anywhere means copying the files
 from __future__ import annotations
 
 import json
+import re
 import urllib.request
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from packaging.version import InvalidVersion, Version
 
 _TIMEOUT_S = 15
 _MAX_MANIFEST_BYTES = 1024 * 1024
+_SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 @dataclass(frozen=True)
 class Release:
     version: str
     wheel_url: str
-    sha256: str | None
+    sha256: str
     notes: str
 
 
@@ -33,16 +35,31 @@ class ManifestError(Exception):
     pass
 
 
+def require_https(url: str) -> None:
+    """Updates are code that gets installed; they only travel over TLS (plain
+    http is accepted for loopback, for local testing). Also rules out
+    `file://` and friends, which `urlopen` would otherwise happily open."""
+    parsed = urlparse(url)
+    if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1", "::1")):
+        return
+    raise ManifestError(f"{url} must be an https:// URL")
+
+
 def parse_manifest(data: dict, manifest_url: str) -> list[Release]:
     releases = []
     for item in data.get("releases", []):
         try:
             Version(item["version"])
+            wheel_url = urljoin(manifest_url, item["wheel"])
+            require_https(wheel_url)
+            sha256 = item.get("sha256")
+            if not isinstance(sha256, str) or not _SHA256.match(sha256):
+                raise ManifestError(f"release {item['version']} has no valid sha256 — refusing to offer it")
             releases.append(
                 Release(
                     version=item["version"],
-                    wheel_url=urljoin(manifest_url, item["wheel"]),
-                    sha256=item.get("sha256"),
+                    wheel_url=wheel_url,
+                    sha256=sha256,
                     notes=item.get("notes", ""),
                 )
             )
@@ -52,6 +69,7 @@ def parse_manifest(data: dict, manifest_url: str) -> list[Release]:
 
 
 def fetch_manifest(url: str) -> list[Release]:
+    require_https(url)
     try:
         with urllib.request.urlopen(url, timeout=_TIMEOUT_S) as response:
             body = response.read(_MAX_MANIFEST_BYTES + 1)

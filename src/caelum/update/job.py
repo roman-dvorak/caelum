@@ -98,6 +98,7 @@ class Updater:
 
     def _download(self, release: manifest.Release) -> Path:
         wheel = self.incoming_path(release.wheel_url.rsplit("/", 1)[-1])
+        manifest.require_https(release.wheel_url)
         logger.info("Downloading %s", release.wheel_url)
         digest = hashlib.sha256()
         size = 0
@@ -108,7 +109,7 @@ class Updater:
                     raise UpdateError("Download exceeds the size limit for a wheel")
                 digest.update(chunk)
                 f.write(chunk)
-        if release.sha256 and digest.hexdigest() != release.sha256.lower():
+        if digest.hexdigest() != release.sha256.lower():
             raise UpdateError(f"Checksum mismatch for {wheel.name} — refusing to install it")
         logger.info("Downloaded %s (%.1f MB)", wheel.name, size / 1e6)
         return wheel
