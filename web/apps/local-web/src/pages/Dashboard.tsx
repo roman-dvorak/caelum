@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   Button,
   ImageViewer,
-  LayerToggles,
   LiveFrame,
   Message,
   MetricGrid,
@@ -12,9 +11,9 @@ import {
   SkyStateBadge,
   StatusBadge,
   StatusTile,
-  useHiddenLayers,
+  SkySettingsMenu,
+  useSkySettings,
 } from '@caelum/ui'
-import { SKY_LAYERS } from '@caelum/sky'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
 import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
 import { useSkySetup } from '../hooks/useSkySetup.ts'
@@ -27,7 +26,7 @@ export function Dashboard() {
   const { frame, status: streamStatus } = useFrameStream()
   const overlaySrc = useLiveOverlay(frame?.metadata)
   const skySetup = useSkySetup()
-  const [hiddenLayers, setLayerVisible] = useHiddenLayers('caelum.hiddenLayers')
+  const [skyView, updateSkyView] = useSkySettings()
   const [showJson, setShowJson] = useState(false)
 
   const diag = status?.exposure_diagnostics ?? null
@@ -52,8 +51,8 @@ export function Dashboard() {
       </div>
 
       {skySetup ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <LayerToggles layers={[...SKY_LAYERS]} hidden={hiddenLayers} onChange={setLayerVisible} />
+        <div className="flex justify-end">
+          <SkySettingsMenu settings={skyView} onChange={updateSkyView} />
         </div>
       ) : null}
 
@@ -71,7 +70,9 @@ export function Dashboard() {
                 lonDeg={skySetup.lon}
                 elevationM={skySetup.elevation_m}
                 when={new Date(frame.metadata.captured_at)}
-                hidden={hiddenLayers}
+                hidden={skyView.hidden}
+                maxMagnitude={skyView.maxMagnitude}
+                interactive
               />
             ) : null}
           </ImageViewer>

@@ -4,8 +4,12 @@ import type { SkyData } from './catalog.ts'
 import { altAzToFraction } from './lens.ts'
 
 /** The toggleable parts of the sky overlay. */
-export const SKY_LAYERS = ['grid', 'constellations', 'stars', 'planets', 'compass'] as const
+export const SKY_LAYERS = ['outline', 'grid', 'constellations', 'stars', 'planets', 'compass'] as const
 export type SkyLayer = (typeof SKY_LAYERS)[number]
+
+export const DEFAULT_MAX_MAGNITUDE = 3.5
+/** Stars up to this magnitude also get their name. */
+export const LABEL_MAGNITUDE = 1.6
 
 export interface SkyDrawOptions {
   lens: LensConfig
@@ -16,31 +20,49 @@ export interface SkyDrawOptions {
   when: Date
   /** Layers switched off. */
   hidden?: ReadonlySet<string>
-  /** Dimmest star drawn / named. */
+  /** Dimmest star drawn. */
   maxMagnitude?: number
-  labelMagnitude?: number
 }
 
-const REFERENCE_WIDTH = 1024
-const STAR_COLOR = '232, 241, 255'
-const GRID_COLOR = '80, 200, 220'
-const FIGURE_COLOR = '140, 170, 255'
-const BODY_STYLE = {
-  sun: { color: '255, 214, 90', radius: 7 },
-  moon: { color: '220, 224, 232', radius: 6 },
-  planet: { color: '232, 161, 58', radius: 4 },
-} as const
+/** A star or body that was drawn, with its place on the canvas (CSS pixels). */
+export interface SkyHit {
+  kind: 'star' | 'sun' | 'moon' | 'planet'
+  name: string
+  mag: number
+  alt: number
+  az: number
+  x: number
+  y: number
+}
+
+const OUTLINE_COLOR = '#f6be64'
+const GRID_COLOR = '#50c8dc'
+const STAR_COLOR = '#e8f1ff'
+const FIGURE_COLOR = '#8caaff'
+const BODY_COLOR = { sun: '#ffd65a', moon: '#dce0e8', planet: '#e8a13a' } as const
+const MONO = 'ui-monospace, "DejaVu Sans Mono", monospace'
 
 /**
- * Draws the sky over the camera into `ctx` (cleared first): the same layers as
- * the backend's `sky_overlay` plugin, but worked out here from the lens, the
- * observer's position and the moment — so it follows the clock without any
- * image being rendered or sent. Sizes are relative to a 1024 px wide canvas.
+ * Draws the sky over the camera into `ctx`, in CSS pixels (the caller sets
+ * the device-pixel transform): the image circle and optical centre, altitude
+ * rings and meridians, constellation figures, stars, Sun/Moon/planets and the
+ * compass — worked out here from the lens, the observer's position and the
+ * moment, so it follows the clock without any image being rendered or sent.
+ * The lens calibration page draws with this same function. Returns what it
+ * drew, for pointer hit-testing.
  */
-export function drawSky(ctx: CanvasRenderingContext2D, width: number, height: number, sky: SkyData, o: SkyDrawOptions) {
+export function drawSky(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  sky: SkyData,
+  o: SkyDrawOptions,
+): SkyHit[] {
   ctx.clearRect(0, 0, width, height)
-  if (width <= 0 || height <= 0) return
-  const scale = width / REFERENCE_WIDTH
+  const hits: SkyHit[] = []
+  if (width <= 0 || height <= 0) return hits
+  // Sizes were designed for a ~800 px wide view; small thumbnails shrink them.
+  const k = Math.min(1, Math.max(0.45, width / 800))
   const aspect = width / height
   const horizon = 90 - o.lens.fov_deg / 2
   const minAlt = Math.max(0, horizon)
@@ -55,47 +77,64 @@ export function drawSky(ctx: CanvasRenderingContext2D, width: number, height: nu
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
+  if (show('outline')) {
+    // The image circle and the optical centre.
+    const cx = o.lens.center_x * width
+    const cy = o.lens.center_y * height
+    ctx.lineWidth = 1.5 * k
+    ctx.strokeStyle = OUTLINE_COLOR
+    ctx.beginPath()
+    ctx.arc(cx, cy, o.lens.radius * Math.min(width, height), 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(cx - 10 * k, cy)
+    ctx.lineTo(cx + 10 * k, cy)
+    ctx.moveTo(cx, cy - 10 * k)
+    ctx.lineTo(cx, cy + 10 * k)
+    ctx.stroke()
+  }
+
   if (show('grid')) {
-    ctx.strokeStyle = `rgba(${GRID_COLOR}, 0.45)`
-    ctx.lineWidth = Math.max(1, scale)
-    const run = (points: ([number, number] | null)[]) => {
-      let open = false
+    ctx.strokeStyle = GRID_COLOR
+    ctx.globalAlpha = 0.6
+    ctx.lineWidth = Math.max(1, k)
+    const line = (points: ([number, number] | null)[]) => {
       ctx.beginPath()
+      let pen = false
       for (const p of points) {
-        if (p === null) {
-          open = false
+        if (!p) {
+          pen = false
           continue
         }
-        if (open) ctx.lineTo(p[0], p[1])
+        if (pen) ctx.lineTo(p[0], p[1])
         else ctx.moveTo(p[0], p[1])
-        open = true
+        pen = true
       }
       ctx.stroke()
     }
+    // 0° is the horizon; with a lens that sees less than 180° it is off the image.
     for (const alt of [0, 30, 60]) {
       if (alt < horizon) continue
-      const points: ([number, number] | null)[] = []
-      for (let az = 0; az <= 360; az += 5) points.push(project(alt, az))
-      run(points)
+      line(Array.from({ length: 73 }, (_, i) => project(alt, i * 5)))
     }
     for (const az of [0, 90, 180, 270]) {
-      const points: ([number, number] | null)[] = []
-      for (let alt = minAlt; alt <= 90; alt += 5) points.push(project(alt, az))
-      run(points)
+      line(Array.from({ length: 19 }, (_, i) => project(Math.min(90, minAlt + i * 5), az)))
     }
+    ctx.globalAlpha = 1
   }
 
   const positions = show('stars') || show('constellations') ? starPositions(sky.stars, o.when, o.latDeg, o.lonDeg) : null
 
   if (positions && show('constellations')) {
     const byIndex = new Map<number, [number, number]>()
-    positions.index.forEach((starIndex, k) => {
-      if (positions.alt[k] < minAlt) return
-      const p = project(positions.alt[k], positions.az[k])
+    positions.index.forEach((starIndex, i) => {
+      if (positions.alt[i] < minAlt) return
+      const p = project(positions.alt[i], positions.az[i])
       if (inFrame(p)) byIndex.set(starIndex, p)
     })
-    ctx.strokeStyle = `rgba(${FIGURE_COLOR}, 0.55)`
-    ctx.lineWidth = Math.max(1, scale)
+    ctx.strokeStyle = FIGURE_COLOR
+    ctx.globalAlpha = 0.55
+    ctx.lineWidth = Math.max(1, k)
     ctx.beginPath()
     for (const [a, b] of sky.figures) {
       const ia = sky.indexOfHr.get(a)
@@ -107,73 +146,68 @@ export function drawSky(ctx: CanvasRenderingContext2D, width: number, height: nu
       ctx.lineTo(pb[0], pb[1])
     }
     ctx.stroke()
+    ctx.globalAlpha = 1
   }
 
-  const labelFont = `${Math.max(9, Math.round(10 * scale))}px ui-monospace, "DejaVu Sans Mono", monospace`
-  if (positions && show('stars')) {
-    const maxMag = o.maxMagnitude ?? 4.5
-    const labelMag = o.labelMagnitude ?? 2.0
-    ctx.lineWidth = Math.max(1, scale)
-    ctx.font = labelFont
+  const label = (text: string, x: number, y: number, color: string) => {
+    ctx.fillStyle = color
+    ctx.font = `${Math.max(9, Math.round(11 * k))}px ${MONO}`
+    ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    positions.index.forEach((starIndex, k) => {
+    ctx.fillText(text, x, y)
+  }
+
+  if (positions && show('stars')) {
+    const maxMag = o.maxMagnitude ?? DEFAULT_MAX_MAGNITUDE
+    ctx.strokeStyle = STAR_COLOR
+    ctx.lineWidth = Math.max(1, k)
+    positions.index.forEach((starIndex, i) => {
       const mag = sky.stars.mag[starIndex]
-      if (mag > maxMag || positions.alt[k] < minAlt) return
-      const p = project(positions.alt[k], positions.az[k])
+      if (mag > maxMag || positions.alt[i] < minAlt) return
+      const p = project(positions.alt[i], positions.az[i])
       if (!inFrame(p)) return
-      // An outline ring rather than a filled dot: it marks the star without
-      // hiding it, so it can be compared with the real one underneath.
-      const r = Math.max(1, (1.2 + (5 - mag) * 0.55) * scale) + 2 * scale
-      ctx.strokeStyle = `rgba(${STAR_COLOR}, 0.67)`
+      // A ring rather than a dot: it marks the star without hiding it, so it
+      // can be compared with the real one underneath.
+      const size = Math.max(3, 3 + (4.5 - mag) * 1.6) * k
+      ctx.globalAlpha = 0.85
       ctx.beginPath()
-      ctx.arc(p[0], p[1], r, 0, Math.PI * 2)
+      ctx.arc(p[0], p[1], size, 0, Math.PI * 2)
       ctx.stroke()
+      ctx.globalAlpha = 1
       const name = sky.stars.name[starIndex]
-      if (mag <= labelMag && name) {
-        ctx.fillStyle = `rgba(${STAR_COLOR}, 0.92)`
-        ctx.fillText(name, p[0] + 9 * scale, p[1])
-      }
+      if (mag <= LABEL_MAGNITUDE && name) label(name, p[0] + size + 3 * k, p[1], 'rgba(232,241,255,0.95)')
+      hits.push({ kind: 'star', name: name || `HR ${sky.stars.hr[starIndex]}`, mag, alt: positions.alt[i], az: positions.az[i], x: p[0], y: p[1] })
     })
   }
 
   if (show('planets')) {
-    ctx.font = labelFont
-    ctx.textBaseline = 'middle'
     for (const body of sky.bodyPositions(o.when, o.latDeg, o.lonDeg, o.elevationM ?? 0)) {
       if (body.alt < minAlt) continue
       const p = project(body.alt, body.az)
       if (!inFrame(p)) continue
-      const style = BODY_STYLE[body.kind]
-      const r = style.radius * scale
-      ctx.fillStyle = `rgba(${style.color}, 0.27)`
-      ctx.strokeStyle = `rgb(${style.color})`
-      ctx.lineWidth = Math.max(1, 2 * scale)
+      ctx.strokeStyle = BODY_COLOR[body.kind]
+      ctx.lineWidth = 2 * k
       ctx.beginPath()
-      ctx.arc(p[0], p[1], r, 0, Math.PI * 2)
-      ctx.fill()
+      ctx.arc(p[0], p[1], (body.kind === 'planet' ? 5 : 8) * k, 0, Math.PI * 2)
       ctx.stroke()
-      ctx.fillStyle = `rgb(${style.color})`
-      ctx.fillText(body.name, p[0] + r + 3 * scale, p[1])
+      label(body.name, p[0] + 12 * k, p[1], BODY_COLOR[body.kind])
+      hits.push({ kind: body.kind, name: body.name, mag: body.kind === 'planet' ? 0 : -10, alt: body.alt, az: body.az, x: p[0], y: p[1] })
     }
   }
 
   if (show('compass')) {
-    ctx.font = `bold ${Math.max(9, Math.round(16 * scale))}px ui-monospace, "DejaVu Sans Mono", monospace`
+    ctx.font = `bold ${Math.max(10, Math.round(15 * k))}px ${MONO}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
+    const half = 10 * k
     for (const [letter, az] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]] as const) {
-      const p = project(minAlt + 6, az)
-      if (p === null) continue
-      const pad = 3 * scale
-      const w = ctx.measureText(letter).width + 2 * pad
-      const h = Math.max(9, Math.round(16 * scale)) + 2 * pad
-      ctx.fillStyle = 'rgba(8, 10, 14, 0.7)'
-      ctx.beginPath()
-      ctx.roundRect(p[0] - w / 2, p[1] - h / 2, w, h, 3 * scale)
-      ctx.fill()
-      ctx.fillStyle = letter === 'N' ? 'rgb(255, 110, 100)' : 'rgb(229, 229, 229)'
-      ctx.fillText(letter, p[0], p[1] + scale)
+      const p = project(minAlt + 7, az)
+      if (!p) continue
+      ctx.fillStyle = 'rgba(8,10,14,0.7)'
+      ctx.fillRect(p[0] - half, p[1] - half, 2 * half, 2 * half)
+      ctx.fillStyle = letter === 'N' ? '#ff6e64' : '#e5e5e5'
+      ctx.fillText(letter, p[0], p[1])
     }
-    ctx.textAlign = 'start'
   }
+  return hits
 }

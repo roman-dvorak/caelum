@@ -1,5 +1,6 @@
 export * from './ImageViewer.js'
-export * from './useHiddenLayers.js'
+export * from './useSkySettings.js'
+export * from './SkySettingsMenu.js'
 export * from './SkyCanvas.js'
 export * from './StatusTile.js'
 export * from './SkyStateBadge.js'

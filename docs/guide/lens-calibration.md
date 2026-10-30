@@ -61,17 +61,24 @@ again.
 
 ## The sky on the Dashboard
 
-Once the lens is saved, the **Dashboard** draws the sky over the live picture
-— live, in the browser, nothing is rendered or sent per frame:
+Once the lens is saved, the **Dashboard** draws the sky over the live picture,
+exactly as the Lens page does — live, in the browser, nothing is rendered or
+sent per frame:
 
-- stars as rings sized by magnitude, with names for the bright ones,
+- the lens outline (the orange image circle and its centre),
+- the horizon and the 30° / 60° altitude rings, with the meridians,
 - constellation lines (stick figures of the 88 constellations),
+- stars as rings sized by magnitude, with names for the bright ones,
 - the Sun, Moon and naked-eye planets,
-- the N/E/S/W letters and the 0°/30°/60° altitude rings.
+- the N/E/S/W letters.
 
-Checkboxes above the picture switch each of these (*Grid*, *Constellations*,
-*Stars*, *Planets*, *Compass*) on and off; the choice is remembered in the
-browser. The browser works the positions out from the lens (`GET
+Hover the picture for a popup with the name, magnitude and sky position of the
+star or planet under the pointer, or the altitude and azimuth of any point.
+Which parts are drawn, and how faint a star, is set in the small **Sky ▾** menu
+above the picture (the same menu is on the Lens page); the choice is saved in
+the browser and applies on every page that shows the sky.
+
+The browser works the positions out from the lens (`GET
 /api/sky/setup`), the camera's position and the time of the frame it shows, with
 the same maths as the backend (checked against it to under 0.001° for stars).
 The star catalog and the planetary ephemeris are loaded on first use.

@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { CameraManifest, DateIndex } from '@caelum/api-client'
-import { SKY_LAYERS } from '@caelum/sky'
-import { DateStrip, KeogramStrip, LayerToggles, Message, OverlayToggle, useHiddenLayers } from '@caelum/ui'
+import { DateStrip, KeogramStrip, Message, OverlayToggle, SkySettingsMenu, useSkySettings } from '@caelum/ui'
 import { GalleryItem, type SkyView } from '../components/GalleryItem.tsx'
 import { useCameraManifest } from '../hooks/useCameraManifest.ts'
 import { useDateIndex } from '../hooks/useDateIndex.ts'
@@ -89,19 +88,19 @@ function DateGallery({ slug, date, manifest }: { slug: string; date: string; man
 
 function Gallery({ slug, dateIndex, manifest }: { slug: string; dateIndex: DateIndex; manifest: CameraManifest }) {
   const [showOverlay, setShowOverlay] = useState(true)
-  const [hidden, setLayerVisible] = useHiddenLayers('caelum.hiddenLayers')
+  const [skyView, updateSkyView] = useSkySettings()
   const hasOverlays = dateIndex.images.some((image) => image.overlay)
   // The sky can be drawn here only when the camera published where it is.
   const sky: SkyView | undefined =
     manifest.sky && manifest.location
-      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden }
+      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden: skyView.hidden, maxMagnitude: skyView.maxMagnitude }
       : undefined
 
   return (
     <div className="flex flex-col gap-2">
       {hasOverlays || sky ? (
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          {sky ? <LayerToggles layers={[...SKY_LAYERS]} hidden={hidden} onChange={setLayerVisible} /> : null}
+          {sky ? <SkySettingsMenu settings={skyView} onChange={updateSkyView} /> : null}
           {hasOverlays ? <OverlayToggle checked={showOverlay} onChange={setShowOverlay} /> : null}
         </div>
       ) : null}

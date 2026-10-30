@@ -69,41 +69,6 @@ export function ImageViewer({
   )
 }
 
-const LAYER_LABELS: Record<string, string> = {
-  grid: 'Grid',
-  constellations: 'Constellations',
-  stars: 'Stars',
-  planets: 'Planets',
-  compass: 'Compass',
-}
-
-/** One checkbox per toggleable overlay layer (stars, constellations, ...). */
-export function LayerToggles({
-  layers,
-  hidden,
-  onChange,
-}: {
-  layers: string[]
-  hidden: ReadonlySet<string>
-  onChange: (layer: string, visible: boolean) => void
-}) {
-  return (
-    <>
-      {layers.map((layer) => (
-        <label key={layer} className="flex items-center gap-2 text-label-md text-ink-muted select-none">
-          <input
-            type="checkbox"
-            checked={!hidden.has(layer)}
-            onChange={(e) => onChange(layer, e.target.checked)}
-            className="accent-amber"
-          />
-          {LAYER_LABELS[layer] ?? layer}
-        </label>
-      ))}
-    </>
-  )
-}
-
 /** The "Overlay" on/off switch shown next to an `ImageViewer`. */
 export function OverlayToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (

@@ -1,9 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Field, Message, PageHeader, Panel, Readout, StatusBadge, inputClass } from '@caelum/ui'
-import type { LensCircleDetection, LensConfig, LensProjection, LensStarFit, SkyObject } from '@caelum/api-client'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Button,
+  Field,
+  Message,
+  PageHeader,
+  Panel,
+  Readout,
+  SkyCanvas,
+  SkySettingsMenu,
+  StatusBadge,
+  inputClass,
+  useSkySettings,
+} from '@caelum/ui'
+import type { LensCircleDetection, LensConfig, LensProjection, LensStarFit } from '@caelum/api-client'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
-import { useSkyObjects } from '../hooks/useSkyObjects.ts'
-import { altAzToFraction, compassPoint, fractionToAltAz } from '@caelum/sky'
+import { useSkySetup } from '../hooks/useSkySetup.ts'
 import { localApiClient } from '../services/client.ts'
 
 const PROJECTIONS: { value: LensProjection; label: string }[] = [
@@ -23,42 +34,26 @@ const FALLBACK_LENS: LensConfig = {
   mirror: false,
 }
 
-const STAR_RING_COLOR = '#e8f1ff'
-const GRID_COLOR = '#50c8dc'
-const HIT_RADIUS_PX = 14
 
 function round(value: number, digits: number): number {
   const k = 10 ** digits
   return Math.round(value * k) / k
 }
 
-interface Hover {
-  x: number
-  y: number
-  text: string
-}
-
 export function LensCalibration() {
   const { frame, status: streamStatus } = useFrameStream()
-  const sky = useSkyObjects(5.0)
 
   const [saved, setSaved] = useState<LensConfig | null>(null)
   const [lens, setLens] = useState<LensConfig>(FALLBACK_LENS)
-  const [maxMag, setMaxMag] = useState(3.5)
-  const [showGrid, setShowGrid] = useState(true)
-  const [showStars, setShowStars] = useState(true)
   const [pickCenter, setPickCenter] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'info' | 'error' | 'success'; text: string } | null>(null)
   const [circle, setCircle] = useState<LensCircleDetection | null>(null)
   const [fit, setFit] = useState<LensStarFit | null>(null)
-  const [hover, setHover] = useState<Hover | null>(null)
+  const skySetup = useSkySetup()
+  const [skyView, updateSkyView] = useSkySettings()
   const [overlayEnabled, setOverlayEnabled] = useState<boolean | null>(null)
 
-  const stage = useRef<HTMLDivElement>(null)
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const [naturalAspect, setNaturalAspect] = useState<number | null>(null)
-  const aspect = sky?.aspect ?? naturalAspect ?? 4 / 3
 
   useEffect(() => {
     let cancelled = false
@@ -81,191 +76,22 @@ export function LensCalibration() {
   const change = useCallback((patch: Partial<LensConfig>) => setLens((current) => ({ ...current, ...patch })), [])
   const dirty = useMemo(() => saved !== null && JSON.stringify(saved) !== JSON.stringify(lens), [saved, lens])
 
-  // The candidate lens applied to the sky — recomputed on every change, in the browser.
-  const projected = useMemo(() => {
-    const out: (SkyObject & { px: number; py: number })[] = []
-    for (const object of sky?.objects ?? []) {
-      if (object.kind === 'star' && (!showStars || object.mag > maxMag)) continue
-      const point = altAzToFraction(lens, aspect, object.alt_deg, object.az_deg)
-      if (point && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1) out.push({ ...object, px: point.x, py: point.y })
-    }
-    return out
-  }, [sky, lens, aspect, maxMag, showStars])
-
-  // ---- drawing ------------------------------------------------------------
-  useEffect(() => {
-    const el = canvas.current
-    const box = stage.current
-    if (!el || !box) return
-    const ratio = window.devicePixelRatio || 1
-    const w = box.clientWidth
-    const h = box.clientHeight
-    el.width = Math.round(w * ratio)
-    el.height = Math.round(h * ratio)
-    el.style.width = `${w}px`
-    el.style.height = `${h}px`
-    const ctx = el.getContext('2d')
-    if (!ctx) return
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    ctx.clearRect(0, 0, w, h)
-
-    // The image circle and the optical centre.
-    const cx = lens.center_x * w
-    const cy = lens.center_y * h
-    const r = lens.radius * Math.min(w, h)
-    ctx.lineWidth = 1.5
-    ctx.strokeStyle = '#f6be64'
-    ctx.beginPath()
-    ctx.arc(cx, cy, r, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.moveTo(cx - 10, cy)
-    ctx.lineTo(cx + 10, cy)
-    ctx.moveTo(cx, cy - 10)
-    ctx.lineTo(cx, cy + 10)
-    ctx.stroke()
-
-    const toPx = (alt: number, az: number): [number, number] | null => {
-      const p = altAzToFraction(lens, aspect, alt, az)
-      return p ? [p.x * w, p.y * h] : null
-    }
-
-    if (showGrid) {
-      ctx.strokeStyle = GRID_COLOR
-      ctx.globalAlpha = 0.6
-      ctx.lineWidth = 1
-      const horizon = Math.max(0, 90 - lens.fov_deg / 2)
-      const line = (points: ([number, number] | null)[]) => {
-        ctx.beginPath()
-        let pen = false
-        for (const p of points) {
-          if (!p) {
-            pen = false
-            continue
-          }
-          if (pen) ctx.lineTo(p[0], p[1])
-          else ctx.moveTo(p[0], p[1])
-          pen = true
-        }
-        ctx.stroke()
-      }
-      for (const alt of [0, 30, 60]) {
-        if (alt < horizon) continue
-        line(Array.from({ length: 73 }, (_, i) => toPx(alt, i * 5)))
-      }
-      for (const az of [0, 90, 180, 270]) {
-        line(Array.from({ length: 19 }, (_, i) => toPx(Math.min(90, horizon + i * 5), az)))
-      }
-      ctx.globalAlpha = 1
-      ctx.font = 'bold 15px ui-monospace, monospace'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      for (const [letter, az] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]] as const) {
-        const p = toPx(horizon + 7, az)
-        if (!p) continue
-        ctx.fillStyle = 'rgba(8,10,14,0.7)'
-        ctx.fillRect(p[0] - 10, p[1] - 10, 20, 20)
-        ctx.fillStyle = letter === 'N' ? '#ff6e64' : '#e5e5e5'
-        ctx.fillText(letter, p[0], p[1])
-      }
-    }
-
-    // Matched stars from the last fit: where the camera saw them, as small crosses.
-    if (fit) {
+  // The matched stars of the last fit, drawn by the sky canvas after the sky: where the camera saw them.
+  const drawMatches = useCallback(
+    (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+      if (!fit) return
       ctx.strokeStyle = '#7CFC9A'
       ctx.lineWidth = 1
       for (const m of fit.matches) {
-        const x = (m.x / fit.image_width) * w
-        const y = (m.y / fit.image_height) * h
-        ctx.strokeRect(x - 3, y - 3, 6, 6)
+        ctx.strokeRect((m.x / fit.image_width) * w - 3, (m.y / fit.image_height) * h - 3, 6, 6)
       }
-    }
+    },
+    [fit],
+  )
 
-    for (const o of projected) {
-      const x = o.px * w
-      const y = o.py * h
-      if (o.kind === 'star') {
-        const size = Math.max(3, 3 + (4.5 - o.mag) * 1.6)
-        ctx.strokeStyle = STAR_RING_COLOR
-        ctx.globalAlpha = 0.85
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.arc(x, y, size, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.globalAlpha = 1
-        if (o.mag <= 1.6) {
-          ctx.fillStyle = 'rgba(232,241,255,0.95)'
-          ctx.font = '11px ui-monospace, monospace'
-          ctx.textAlign = 'left'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(o.name, x + size + 3, y)
-        }
-      } else {
-        ctx.strokeStyle = o.kind === 'sun' ? '#ffd65a' : o.kind === 'moon' ? '#dce0e8' : '#e8a13a'
-        ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.arc(x, y, o.kind === 'planet' ? 5 : 8, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.fillStyle = ctx.strokeStyle
-        ctx.font = '11px ui-monospace, monospace'
-        ctx.textAlign = 'left'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(o.name, x + 12, y)
-      }
-    }
-  }, [lens, projected, showGrid, aspect, fit, frame?.imageBlobUrl])
-
-  // Redraw when the box is resized (window, sidebar).
-  const [, setResizeTick] = useState(0)
-  useEffect(() => {
-    const box = stage.current
-    if (!box) return
-    const observer = new ResizeObserver(() => setResizeTick((n) => n + 1))
-    observer.observe(box)
-    return () => observer.disconnect()
-  }, [])
-
-  // ---- pointer ------------------------------------------------------------
-  function fractions(event: React.PointerEvent<HTMLDivElement>): { x: number; y: number; w: number; h: number } | null {
-    const rect = stage.current?.getBoundingClientRect()
-    if (!rect || rect.width === 0) return null
-    return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height, w: rect.width, h: rect.height }
-  }
-
-  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    const f = fractions(event)
-    if (!f) return
-    let best: (typeof projected)[number] | null = null
-    let bestDistance = HIT_RADIUS_PX
-    for (const o of projected) {
-      const d = Math.hypot(o.px * f.w - f.x * f.w, o.py * f.h - f.y * f.h) + o.mag * 0.4
-      if (d < bestDistance) {
-        best = o
-        bestDistance = d
-      }
-    }
-    if (best) {
-      const where = `alt ${best.alt_deg.toFixed(1)}° · az ${best.az_deg.toFixed(0)}° ${compassPoint(best.az_deg)}`
-      setHover({
-        x: best.px * f.w,
-        y: best.py * f.h,
-        text: best.kind === 'star' ? `${best.name} · mag ${best.mag.toFixed(1)} · ${where}` : `${best.name} · ${where}`,
-      })
-      return
-    }
-    const altaz = fractionToAltAz(lens, aspect, f.x, f.y)
-    setHover(
-      altaz
-        ? { x: f.x * f.w, y: f.y * f.h, text: `alt ${altaz.alt.toFixed(1)}° · az ${altaz.az.toFixed(1)}° ${compassPoint(altaz.az)}` }
-        : null,
-    )
-  }
-
-  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+  function onPick(x: number, y: number) {
     if (!pickCenter) return
-    const f = fractions(event)
-    if (!f) return
-    change({ center_x: round(f.x, 4), center_y: round(f.y, 4) })
+    change({ center_x: round(x, 4), center_y: round(y, 4) })
     setPickCenter(false)
   }
 
@@ -352,45 +178,23 @@ export function LensCalibration() {
 
       {message ? <Message kind={message.kind}>{message.text}</Message> : null}
 
-      <Panel
-        title="Frame"
-        actions={
-          <div className="flex items-center gap-4 text-label-md text-ink-muted">
-            <label className="flex items-center gap-2 select-none">
-              <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} className="accent-amber" />
-              Grid &amp; compass
-            </label>
-            <label className="flex items-center gap-2 select-none">
-              <input type="checkbox" checked={showStars} onChange={(e) => setShowStars(e.target.checked)} className="accent-amber" />
-              Stars
-            </label>
-          </div>
-        }
-        bodyClassName="p-0"
-      >
+      <Panel title="Frame" actions={<SkySettingsMenu settings={skyView} onChange={updateSkyView} />} bodyClassName="p-0">
         {frame ? (
-          <div
-            ref={stage}
-            className={['relative leading-none', pickCenter ? 'cursor-crosshair' : ''].join(' ')}
-            onPointerMove={onPointerMove}
-            onPointerLeave={() => setHover(null)}
-            onPointerDown={onPointerDown}
-          >
-            <img
-              src={frame.imageBlobUrl}
-              alt="Latest frame"
-              className="block h-auto w-full"
-              onLoad={(e) => setNaturalAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
-            />
-            <canvas ref={canvas} className="pointer-events-none absolute inset-0" />
-            {hover ? (
-              <div
-                role="tooltip"
-                className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1 text-xs text-ink shadow-md"
-                style={{ left: hover.x, top: hover.y + 14 }}
-              >
-                {hover.text}
-              </div>
+          <div className="relative leading-none">
+            <img src={frame.imageBlobUrl} alt="Latest frame" className="block h-auto w-full" />
+            {skySetup ? (
+              <SkyCanvas
+                lens={lens}
+                latDeg={skySetup.lat}
+                lonDeg={skySetup.lon}
+                elevationM={skySetup.elevation_m}
+                when={new Date(frame.metadata.captured_at)}
+                hidden={skyView.hidden}
+                maxMagnitude={skyView.maxMagnitude}
+                interactive
+                onPick={pickCenter ? onPick : undefined}
+                extraDraw={drawMatches}
+              />
             ) : null}
           </div>
         ) : (
@@ -481,9 +285,6 @@ export function LensCalibration() {
                 <span className="block text-xs text-ink-muted">A camera looking up with north at the top sees east on the left; that needs this ticked. “Fit from stars” decides it for you.</span>
               </span>
             </label>
-            <Field label={`Faintest star shown: mag ${maxMag.toFixed(1)}`}>
-              <input type="range" min={0} max={5} step={0.5} value={maxMag} onChange={(e) => setMaxMag(Number(e.target.value))} className="accent-amber" />
-            </Field>
             <Button variant={pickCenter ? 'primary' : 'secondary'} onClick={() => setPickCenter((v) => !v)} disabled={!frame}>
               {pickCenter ? 'Click the centre on the image…' : 'Pick centre on image'}
             </Button>
