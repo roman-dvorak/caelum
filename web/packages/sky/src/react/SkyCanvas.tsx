@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { LensConfig } from '@caelum/api-client'
-import { compassPoint, drawSky, fractionToAltAz, loadSkyData, type SkyData, type SkyHit } from '@caelum/sky'
+import {
+  compassPoint,
+  drawSky,
+  fractionToAltAz,
+  loadSkyData,
+  type LensConfig,
+  type SkyData,
+  type SkyHit,
+} from '../index.ts'
 
 const HIT_RADIUS_PX = 14
 

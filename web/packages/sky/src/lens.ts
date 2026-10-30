@@ -1,4 +1,4 @@
-import type { LensConfig } from '@caelum/api-client'
+import type { LensConfig } from './types.ts'
 
 /**
  * The lens model, in the browser — the same maths as the backend's

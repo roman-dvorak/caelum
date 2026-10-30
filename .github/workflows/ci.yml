@@ -35,3 +35,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r lint
       - run: pnpm -r build
+      - run: pnpm -r --if-present test

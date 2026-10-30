@@ -11,7 +11,8 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "dev:local": "pnpm --filter local-web dev",
-    "dev:remote": "pnpm --filter remote-web dev"
+    "dev:remote": "pnpm --filter remote-web dev",
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

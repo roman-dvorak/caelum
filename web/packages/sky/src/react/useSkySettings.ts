@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { DEFAULT_MAX_MAGNITUDE } from '@caelum/sky'
+import { DEFAULT_MAX_MAGNITUDE } from '../index.ts'
 
 /** What the viewer chose to see of the sky overlay, kept in this browser. */
 export interface SkySettings {

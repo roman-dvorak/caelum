@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -27,6 +28,9 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
+          # Where the web package below is published; reads NODE_AUTH_TOKEN.
+          registry-url: https://npm.pkg.github.com
+          scope: "@roman-dvorak"
 
       - name: Tag matches the package version
         run: |
@@ -47,6 +51,25 @@ jobs:
           # holds the release notes shown in the camera's update dialog.
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           scripts/build-release.sh --notes "$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
+
+      # The sky drawing code as an npm package on GitHub Packages, for other
+      # web apps (the Caelum Viewer) — same version as the release. Skipped if
+      # this version is already there, so a re-run of the workflow is safe.
+      - name: Publish the web sky package
+        working-directory: web/packages/sky
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="$(node -p "require('./package.json').name")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already published"
+            exit 0
+          fi
+          npm pkg set version="$version"
+          pnpm test
+          pnpm build
+          pnpm publish --no-git-checks
 
       - name: Publish
         env:

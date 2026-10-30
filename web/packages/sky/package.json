@@ -1,29 +1,71 @@
 {
-  "name": "@caelum/sky",
-  "private": true,
-  "version": "0.1.0",
+  "name": "@roman-dvorak/caelum-sky",
+  "version": "0.5.15",
+  "description": "Draws the night sky over a fisheye allsky camera image: star catalog, planets, constellations, lens model and a React canvas. Used by the caelum web UIs and the Caelum Viewer.",
+  "private": false,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roman-dvorak/caelum.git",
+    "directory": "web/packages/sky"
+  },
+  "sideEffects": false,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./react": {
+      "types": "./src/react.ts",
+      "default": "./src/react.ts"
     }
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./react": {
+        "types": "./dist/react.d.ts",
+        "import": "./dist/react.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc --noEmit && tsup",
+    "test": "vitest run",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@caelum/api-client": "workspace:*",
     "astronomy-engine": "2.1.19"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.70.0"
+    "typescript-eslint": "^8.70.0",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0",
+    "tsup": "^8.5.0",
+    "vitest": "^3.2.0"
   }
 }

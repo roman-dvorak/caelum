@@ -1,4 +1,4 @@
-import type { LensConfig } from '@caelum/api-client'
+import type { LensConfig } from './types.ts'
 import { starPositions } from './astro.ts'
 import type { SkyData } from './catalog.ts'
 import { altAzToFraction } from './lens.ts'

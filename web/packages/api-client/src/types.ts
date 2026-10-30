@@ -138,24 +138,8 @@ export type OverlayMode = 'file' | 'burn' | 'off'
 
 // ---- AppConfig ------------------------------------------------------------
 
-export type LensProjection =
-  | 'equidistant_fisheye'
-  | 'equisolid_fisheye'
-  | 'stereographic_fisheye'
-  | 'orthographic_fisheye'
-
-export interface LensConfig {
-  projection: LensProjection
-  /** Fractions of the frame width / height. */
-  center_x: number
-  center_y: number
-  /** Image circle's edge, as a fraction of the frame's shorter side. */
-  radius: number
-  /** Field of view across the image circle (180: its edge is the horizon). */
-  fov_deg: number
-  azimuth_offset_deg: number
-  mirror: boolean
-}
+export type { LensConfig, LensProjection } from '@roman-dvorak/caelum-sky'
+import type { LensConfig } from '@roman-dvorak/caelum-sky'
 
 /** One star/planet/Sun/Moon over the camera, projected with the configured lens. */
 export interface SkyObject {

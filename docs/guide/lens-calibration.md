@@ -86,6 +86,11 @@ The star catalog and the planetary ephemeris are loaded on first use.
 The remote viewer does the same for cameras that publish their position
 (`camera.identity.publish_location`, see [Upload](/guide/upload)).
 
+The drawing code is the npm package **`@roman-dvorak/caelum-sky`**, published to
+GitHub Packages with every release, so other web apps — the Caelum Viewer —
+can draw the same sky with `<SkyCanvas>` (see the package's README for the
+`.npmrc` and an example). Its numbers are tested against this backend.
+
 ### Sky in the stored pictures
 
 The optional **`sky_overlay`** plugin (a button on the Lens page, or on the

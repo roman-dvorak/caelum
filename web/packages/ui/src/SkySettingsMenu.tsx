@@ -1,5 +1,5 @@
-import { SKY_LAYERS } from '@caelum/sky'
-import type { SkySettings } from './useSkySettings.ts'
+import { SKY_LAYERS } from '@roman-dvorak/caelum-sky'
+import type { SkySettings } from '@roman-dvorak/caelum-sky/react'
 
 const LABELS: Record<string, string> = {
   outline: 'Lens outline & centre',

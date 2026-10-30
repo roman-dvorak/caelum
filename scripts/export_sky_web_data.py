@@ -18,7 +18,7 @@ from caelum.sky.catalog import load_catalog, load_constellations  # noqa: E402
 OUT = Path(__file__).resolve().parents[1] / "web" / "packages" / "sky" / "src" / "data"
 
 
-def main() -> None:
+def build() -> tuple[dict, list]:
     catalog = load_catalog()
     stars = {
         "hr": [int(v) for v in catalog.hr],
@@ -29,10 +29,15 @@ def main() -> None:
         "pmDec": [round(float(v) * 1000) for v in catalog.pm_dec_arcsec],
         "name": catalog.names,
     }
+    return stars, [list(pair) for pair in load_constellations()]
+
+
+def main() -> None:
+    stars, figures = build()
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "stars.json").write_text(json.dumps(stars, separators=(",", ":"), ensure_ascii=False) + "\n")
-    (OUT / "constellations.json").write_text(json.dumps(load_constellations(), separators=(",", ":")) + "\n")
-    print(f"{len(stars['hr'])} stars, {len(load_constellations())} figure segments -> {OUT}")
+    (OUT / "constellations.json").write_text(json.dumps(figures, separators=(",", ":")) + "\n")
+    print(f"{len(stars['hr'])} stars, {len(figures)} figure segments -> {OUT}")
 
 
 if __name__ == "__main__":

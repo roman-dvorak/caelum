@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@caelum/api-client": "workspace:*",
-    "@caelum/sky": "workspace:*",
+    "@roman-dvorak/caelum-sky": "workspace:*",
     "@caelum/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@xterm/addon-fit": "^0.10.0",
