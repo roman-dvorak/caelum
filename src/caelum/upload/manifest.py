@@ -14,6 +14,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from caelum.config.schema import AppConfig
+from caelum.sky.layers import LAYER_IDS, sky_overlay_layers
+
 _YEAR_RE = re.compile(r"^\d{4}$")
 _MONTH_DAY_RE = re.compile(r"^\d{2}$")
 
@@ -45,25 +48,48 @@ def _dated_files(data_dir: Path, subdir: str) -> dict[str, list[Path]]:
     return by_date
 
 
-def camera_identity(
-    camera_slug: str, camera_name: str, location: dict[str, Any], *,
-    observatory_name: str = "", camera_type: str = "", owner: str = "",
-) -> dict[str, Any]:
+def _layer_files(overlays_dir: Path, date_path: str, stem: str) -> dict[str, Any]:
+    layers = {
+        layer: f"overlays/{date_path}/{stem}.{layer}.png"
+        for layer in LAYER_IDS
+        if (overlays_dir / date_path / f"{stem}.{layer}.png").is_file()
+    }
+    return {"layers": layers} if layers else {}
+
+
+def camera_identity(config: AppConfig) -> dict[str, Any]:
     """What this camera *is* — static catalog metadata, shared by the camera's
     manifest and its `cameras.json` entry. Nothing here may change with a
     frame (no "latest" anything): it is rewritten only when the operator
-    edits the configuration."""
-    return {
-        "slug": camera_slug,
-        "name": camera_name,
-        "observatory_name": observatory_name,
-        "camera_type": camera_type,
-        "owner": owner,
-        "location": location,
+    edits the configuration. The location is published only when
+    `camera.identity.publish_location` says so."""
+    identity = config.camera.identity
+    result: dict[str, Any] = {
+        "slug": identity.slug,
+        "name": identity.name,
+        "observatory_name": identity.observatory_name,
+        "camera_type": identity.camera_type,
+        "owner": identity.owner,
     }
+    if identity.publish_location:
+        result["location"] = {"lat": config.location.lat, "lon": config.location.lon}
+    return result
 
 
-def write_local_manifests(data_dir: Path, identity: dict[str, Any]) -> dict[str, Any]:
+def sky_info(config: AppConfig) -> dict[str, Any] | None:
+    """What a viewer needs to present the sky overlay — the lens and the
+    layers the camera renders — and no coordinates: the layers are rendered
+    on the camera, so the viewer only stacks and toggles them. None when the
+    sky overlay plugin is off."""
+    plugin = config.plugins.get("sky_overlay")
+    if plugin is None or not plugin.enabled:
+        return None
+    return {"lens": config.camera.lens.model_dump(), "layers": sky_overlay_layers(plugin.settings)}
+
+
+def write_local_manifests(
+    data_dir: Path, identity: dict[str, Any], sky: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Regenerate `<data_dir>/manifest.json` and every date's
     `thumbnails/<YYYY>/<MM>/<DD>/index.json`. Returns the built camera
     manifest dict.
@@ -101,13 +127,15 @@ def write_local_manifests(data_dir: Path, identity: dict[str, Any]) -> dict[str,
                     # it is a separate file (not burned in, not switched off).
                     **({"overlay": f"overlays/{date_path}/{path.stem}.png"}
                        if (overlays_dir / date_path / f"{path.stem}.png").is_file() else {}),
+                    # Toggleable layers (sky overlay): one transparent PNG each.
+                    **_layer_files(overlays_dir, date_path, path.stem),
                 }
                 for path in thumb_files
             ],
         }
         (data_dir / "thumbnails" / date_path / "index.json").write_text(json.dumps(index, indent=2))
 
-    camera_manifest = {"version": 1, **identity, "dates": dates}
+    camera_manifest = {"version": 1, **identity, **({"sky": sky} if sky else {}), "dates": dates}
     (data_dir / "manifest.json").write_text(json.dumps(camera_manifest, indent=2))
     return camera_manifest
 

@@ -59,8 +59,8 @@ command also re-labels a camera that is already installed:
 
 | Option | What it does |
 |---|---|
-| `--name TEXT` | Camera name, shown on images (`upload.camera_name`). |
-| `--slug ID` | The camera's directory on the upload target (`upload.camera_slug`). Two cameras with the same slug overwrite each other's uploads. |
+| `--name TEXT` | Camera name, shown on images (`camera.identity.name`). |
+| `--slug ID` | The camera's directory on the upload target (`camera.identity.slug`). Two cameras with the same slug overwrite each other's uploads. |
 | `--lat DEG`, `--lon DEG`, `--elevation M` | Observing site; north and east positive. |
 | `--hostname NAME` | The system's host name, so the camera is `NAME.local` on the network. |
 | `--new-identity` | For an SD card cloned from another camera: a new SSH key, a new admin password, a new session key (everyone is signed out) and a new TLS certificate. The new password is printed at the end. |

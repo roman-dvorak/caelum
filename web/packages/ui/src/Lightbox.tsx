@@ -6,6 +6,8 @@ export interface LightboxItem {
   src: string
   /** A camera-rendered overlay (same aspect ratio) stacked over `src`. */
   overlaySrc?: string | null
+  /** Toggleable overlay layers, already filtered to the visible ones. */
+  layerSrcs?: string[]
   caption?: ReactNode
 }
 
@@ -88,6 +90,15 @@ export function Lightbox({ items, index, onIndexChange, onClose }: LightboxProps
               aria-hidden
               className="pointer-events-none absolute inset-0 h-full w-full object-contain"
             />
+            {(item.layerSrcs ?? []).map((layerSrc) => (
+              <img
+                key={layerSrc}
+                src={layerSrc}
+                alt=""
+                aria-hidden
+                className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+              />
+            ))}
           </div>
         ) : (
           <img

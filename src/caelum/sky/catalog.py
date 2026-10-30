@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import functools
 import gzip
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,3 +48,11 @@ def load_catalog() -> StarCatalog:
         pm_dec_arcsec=np.array([float(r["pm_dec_mas"]) / 1000.0 for r in rows]),
         names=[r["name"] for r in rows],
     )
+
+
+@functools.lru_cache(maxsize=1)
+def load_constellations() -> list[tuple[int, int]]:
+    """Constellation stick figures as pairs of catalog `hr` numbers
+    (`data/constellations.json`, built by `scripts/build_constellations.py`)."""
+    figures = json.loads((_DATA.parent / "constellations.json").read_text(encoding="utf-8"))
+    return [(a, b) for pairs in figures.values() for a, b in pairs]

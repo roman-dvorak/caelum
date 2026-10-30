@@ -8,6 +8,9 @@ export interface ImageViewerProps {
    * image of the same size, stacked on top. Omit when there is none (not
    * rendered yet, burned into `src`, or overlays switched off). */
   overlaySrc?: string | null
+  /** Toggleable overlay layers (the sky overlay's), already filtered to the
+   * visible ones, stacked above `overlaySrc` in the order given. */
+  layerSrcs?: string[]
   /** Hide the overlay without dropping it, e.g. from an on/off toggle. */
   showOverlay?: boolean
   alt?: string
@@ -24,7 +27,15 @@ export interface ImageViewerProps {
  * overlay has the frame's aspect ratio and is fitted the same way, so it
  * lines up at any display size — no overlay is ever drawn in the browser.
  */
-export function ImageViewer({ src, overlaySrc, showOverlay = true, alt, className, fit = 'contain' }: ImageViewerProps) {
+export function ImageViewer({
+  src,
+  overlaySrc,
+  layerSrcs = [],
+  showOverlay = true,
+  alt,
+  className,
+  fit = 'contain',
+}: ImageViewerProps) {
   const [failed, setFailed] = useState(false)
   const [overlayFailed, setOverlayFailed] = useState<string | null>(null)
   const fitClass = fit === 'cover' ? 'h-full object-cover' : 'h-auto object-contain'
@@ -53,7 +64,53 @@ export function ImageViewer({ src, overlaySrc, showOverlay = true, alt, classNam
           onError={() => setOverlayFailed(overlaySrc)}
         />
       ) : null}
+      {!failed && showOverlay
+        ? layerSrcs.map((layerSrc) => (
+            <img
+              key={layerSrc}
+              src={layerSrc}
+              alt=""
+              aria-hidden
+              className={['pointer-events-none absolute inset-0 h-full w-full', fit === 'cover' ? 'object-cover' : 'object-contain'].join(' ')}
+            />
+          ))
+        : null}
     </div>
+  )
+}
+
+const LAYER_LABELS: Record<string, string> = {
+  grid: 'Grid',
+  constellations: 'Constellations',
+  stars: 'Stars',
+  planets: 'Planets',
+  compass: 'Compass',
+}
+
+/** One checkbox per toggleable overlay layer (stars, constellations, ...). */
+export function LayerToggles({
+  layers,
+  hidden,
+  onChange,
+}: {
+  layers: string[]
+  hidden: ReadonlySet<string>
+  onChange: (layer: string, visible: boolean) => void
+}) {
+  return (
+    <>
+      {layers.map((layer) => (
+        <label key={layer} className="flex items-center gap-2 text-label-md text-ink-muted select-none">
+          <input
+            type="checkbox"
+            checked={!hidden.has(layer)}
+            onChange={(e) => onChange(layer, e.target.checked)}
+            className="accent-amber"
+          />
+          {LAYER_LABELS[layer] ?? layer}
+        </label>
+      ))}
+    </>
   )
 }
 

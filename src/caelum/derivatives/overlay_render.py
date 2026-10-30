@@ -246,7 +246,11 @@ def _expand_sky(c: _Canvas, p: dict[str, Any], kind: str) -> dict[str, Any]:
         return p
     from caelum.sky import overlay_geometry
 
-    build = overlay_geometry.grid_payload if kind == "grid" else overlay_geometry.map_payload
+    build = {
+        "grid": overlay_geometry.grid_payload,
+        "lines": overlay_geometry.lines_payload,
+        "map": overlay_geometry.map_payload,
+    }[kind]
     return build(params, c.width / c.height)
 
 
@@ -274,6 +278,19 @@ def _draw_sky_grid(c: _Canvas, p: dict[str, Any]) -> None:
             [cx - (right - left) / 2 - pad, cy - (bottom - top) / 2 - pad, cx + (right - left) / 2 + pad,
              cy + (bottom - top) / 2 + pad], radius=c.px(3), fill=_CHIP_BG)
         draw.text((cx - (right + left) / 2, cy - (bottom + top) / 2), text, font=font, fill=color)
+    c.paste_layer(layer)
+
+
+def _draw_sky_lines(c: _Canvas, p: dict[str, Any]) -> None:
+    """Constellation figures (`lines`: runs of [x, y] fractions)."""
+    p = _expand_sky(c, p, "lines")
+    layer = Image.new("RGBA", c.image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    line = _hex_to_rgba(_str(p, "color"), (140, 170, 255, 255), 0.55)
+    for run in p.get("lines") or []:
+        points = _polyline_points(c, run)
+        if len(points) > 1:
+            draw.line(points, fill=line, width=c.px(1))
     c.paste_layer(layer)
 
 
@@ -336,6 +353,7 @@ _RENDERERS = {
     "telescope_marker": _draw_telescope_marker,
     "sky_grid": _draw_sky_grid,
     "sky_map": _draw_sky_map,
+    "sky_lines": _draw_sky_lines,
 }
 
 

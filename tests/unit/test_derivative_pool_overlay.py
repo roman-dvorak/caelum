@@ -146,3 +146,54 @@ def test_outputs_complete_is_published_only_once_the_overlay_is_on_disk(tmp_path
     pool.shutdown()
 
     assert seen == [True]
+
+
+class SkyLayers(DerivativeWorker):
+    id = "sky_layers"
+
+    def provide_overlay_elements(self, frame):
+        return [
+            OverlayElement(type="mask", source=self.id, payload={"layer": "stars", "x": 0.0, "y": 0.0, "w": 0.5,
+                                                                 "h": 1.0, "color": "#00ff00"}),
+            OverlayElement(type="mask", source=self.id, payload={"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0,
+                                                                 "color": "#ff0000"}),
+        ]
+
+
+def _run_layers(tmp_path, mode: str):
+    config = SimpleNamespace(current=SimpleNamespace(storage_policy=StoragePolicyConfig(overlay_mode=mode)))
+    store = FrameStore()
+    pool = DerivativePool(EventBus(), store, tmp_path, max_process_workers=1, config_manager=config)
+    pool.register_all([SkyLayers()])
+    image = make_image(width=200, height=100, fill=0)
+    frame = make_processed_frame(captured_at=CAPTURED_AT, image=image)
+    thumb = paths.thumbnail_path(tmp_path, CAPTURED_AT)
+    thumb.parent.mkdir(parents=True)
+    thumb.write_bytes(encode_webp(image))
+    paths.sidecar_path(thumb).write_text(frame.metadata.model_dump_json())
+    store.update(replace(frame, thumbnail_path=thumb))
+    pool._dispatch(replace(frame, thumbnail_path=thumb))
+    pool.shutdown()
+    return thumb, store
+
+
+def test_file_mode_stores_each_layer_in_its_own_png(tmp_path):
+    thumb, store = _run_layers(tmp_path, "file")
+
+    folder = tmp_path / "overlays" / "2026" / "10" / "16"
+    base = cv2.imread(str(folder / "20261016-210000.png"), cv2.IMREAD_UNCHANGED)
+    stars = cv2.imread(str(folder / "20261016-210000.stars.png"), cv2.IMREAD_UNCHANGED)
+    assert base[50, 40, 3] == 0 and base[50, 150, 3] == 255  # the unlayered mask only
+    assert stars[50, 40, 3] == 255 and stars[50, 150, 3] == 0  # the layer only
+    assert _sidecar(thumb).overlay_layers == ["stars"]
+    assert list(store.get_latest().overlay_layer_pngs) == ["stars"]
+    assert store.get_latest().metadata.overlay_layers == ["stars"]
+
+
+def test_burn_mode_burns_the_layers_in_and_stores_none(tmp_path):
+    thumb, _store = _run_layers(tmp_path, "burn")
+
+    burned = cv2.imread(str(thumb))
+    assert burned[50, 40][1] > 200 and burned[50, 150][2] > 200  # green layer and red mask both there
+    assert _sidecar(thumb).overlay_layers == []
+    assert not list((tmp_path / "overlays").glob("**/*")) if (tmp_path / "overlays").exists() else True

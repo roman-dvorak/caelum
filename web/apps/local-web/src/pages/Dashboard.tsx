@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   Button,
   ImageViewer,
+  LayerToggles,
   LiveFrame,
   Message,
   MetricGrid,
@@ -10,9 +11,10 @@ import {
   SkyStateBadge,
   StatusBadge,
   StatusTile,
+  useHiddenLayers,
 } from '@caelum/ui'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
-import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
+import { useLiveOverlay, useLiveOverlayLayers } from '../hooks/useLiveOverlay.ts'
 import { useSkyState } from '../hooks/useSkyState.ts'
 import { useStatus } from '../hooks/useStatus.ts'
 
@@ -21,6 +23,8 @@ export function Dashboard() {
   const { skyState, error: skyError } = useSkyState()
   const { frame, status: streamStatus } = useFrameStream()
   const overlaySrc = useLiveOverlay(frame?.metadata)
+  const layerUrls = useLiveOverlayLayers(frame?.metadata)
+  const [hiddenLayers, setLayerVisible] = useHiddenLayers('caelum.hiddenLayers')
   const [showJson, setShowJson] = useState(false)
 
   const diag = status?.exposure_diagnostics ?? null
@@ -44,11 +48,20 @@ export function Dashboard() {
         {statusError || skyError ? <Message kind="error">{statusError ?? skyError}</Message> : null}
       </div>
 
+      {Object.keys(layerUrls).length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <LayerToggles layers={Object.keys(layerUrls)} hidden={hiddenLayers} onChange={setLayerVisible} />
+        </div>
+      ) : null}
+
       <LiveFrame live={!!status?.capturing && !!frame}>
         {frame ? (
           <ImageViewer
             src={frame.imageBlobUrl}
             overlaySrc={overlaySrc}
+            layerSrcs={Object.entries(layerUrls)
+              .filter(([layer]) => !hiddenLayers.has(layer))
+              .map(([, url]) => url)}
             alt="Live camera feed"
           />
         ) : (

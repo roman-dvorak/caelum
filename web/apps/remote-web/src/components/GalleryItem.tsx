@@ -8,17 +8,20 @@ export interface GalleryItemProps {
   /** The camera-rendered overlay PNG, when it is a separate file — absent
    * when it is burned into the thumbnail or overlays are switched off. */
   overlayPath?: string
+  /** Paths of the toggleable overlay layers to stack, already filtered to the visible ones. */
+  layerPaths?: string[]
   showOverlay?: boolean
 }
 
 /** One gallery tile: the thumbnail with the overlay the camera rendered for
  * it stacked on top — the same pixels the camera's own live view shows. */
-export function GalleryItem({ slug, time, thumbnailPath, overlayPath, showOverlay = true }: GalleryItemProps) {
+export function GalleryItem({ slug, time, thumbnailPath, overlayPath, layerPaths = [], showOverlay = true }: GalleryItemProps) {
   return (
     <figure className="overflow-hidden border border-border bg-surface-0 rounded-md">
       <ImageViewer
         src={remoteApiClient.resolveCameraUrl(slug, thumbnailPath)}
         overlaySrc={overlayPath ? remoteApiClient.resolveCameraUrl(slug, overlayPath) : null}
+        layerSrcs={layerPaths.map((path) => remoteApiClient.resolveCameraUrl(slug, path))}
         showOverlay={showOverlay}
         alt={`Frame at ${time}`}
       />

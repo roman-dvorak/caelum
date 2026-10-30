@@ -44,9 +44,9 @@ Installation:
                         services) — the same one every run ends with
 
 This camera (written into an existing config.json too):
-  --name TEXT           camera name (upload.camera_name), shown on images
+  --name TEXT           camera name (camera.identity.name), shown on images
   --slug ID             camera's directory on the upload target
-                        (upload.camera_slug) — unique per camera
+                        (camera.identity.slug) — unique per camera
   --lat DEG             latitude, north positive
   --lon DEG             longitude, east positive
   --elevation M         elevation in metres
@@ -97,17 +97,17 @@ import sys
 from pathlib import Path
 from caelum.config import store_disk
 cfg = store_disk.read(Path(sys.argv[1]))
-u, loc = cfg.upload, cfg.location
+u, loc, ident = cfg.upload, cfg.location, cfg.camera.identity
 row = lambda key, value: print(f"{key:<14}{value}")
-row("Camera", f'"{u.camera_name}", slug {u.camera_slug}, backend {cfg.camera.backend}')
+row("Camera", f'"{ident.name}", slug {ident.slug}, backend {cfg.camera.backend}')
 row("Location", f"lat {loc.lat}, lon {loc.lon}, {loc.elevation_m:g} m, {loc.timezone}")
 if u.transport == "s3":
     target = f"s3://{u.s3_bucket}/{u.s3_prefix}" + (f" at {u.s3_endpoint_url}" if u.s3_endpoint_url else "")
 elif u.remote_host:
-    target = f"{u.remote_user + '@' if u.remote_user else ''}{u.remote_host}:{u.remote_base_path}/{u.camera_slug}"
+    target = f"{u.remote_user + '@' if u.remote_user else ''}{u.remote_host}:{u.remote_base_path}/{ident.slug}"
     target += f" (port {u.ssh_port}, key {u.ssh_key_path})"
 else:
-    target = f"{u.remote_base_path}/{u.camera_slug}"
+    target = f"{u.remote_base_path}/{ident.slug}"
 row("Upload", f"{'on' if u.enabled else 'off'}, {u.transport} -> {target}")
 EOF
   fi
@@ -369,12 +369,13 @@ from caelum.config import store_disk
 from caelum.config.schema import AppConfig
 path, name, slug, lat, lon, elevation = Path(sys.argv[1]), *sys.argv[2:]
 data = store_disk.read(path).model_dump()
-for section, key, value in [("upload", "camera_name", name), ("upload", "camera_slug", slug),
+for section, key, value in [("identity", "name", name), ("identity", "slug", slug),
                             ("location", "lat", lat), ("location", "lon", lon),
                             ("location", "elevation_m", elevation)]:
     if value:
-        data[section][key] = value
-        print(f"    {section}.{key} = {value}")
+        target = data["camera"]["identity"] if section == "identity" else data[section]
+        target[key] = value
+        print(f"    {'camera.identity' if section == 'identity' else section}.{key} = {value}")
 store_disk.write(path, AppConfig.model_validate(data))
 EOF
   chown "$SVC_USER:$SVC_USER" "$CONFIG_DIR/config.json"

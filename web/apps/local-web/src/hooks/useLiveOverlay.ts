@@ -14,3 +14,24 @@ export function useLiveOverlay(metadata: FrameMetadata | undefined): string | nu
   if (current && current !== last) setLast(current)
   return current ?? last
 }
+
+/** URLs of the live frame's toggleable overlay layers (the sky overlay's),
+ * by name. Like `useLiveOverlay`, the previous set stays up until the next
+ * frame's layers have been rendered. */
+export function useLiveOverlayLayers(metadata: FrameMetadata | undefined): Record<string, string> {
+  const layers = metadata?.overlay_layers ?? []
+  const current: Record<string, string> | null =
+    metadata && layers.length > 0
+      ? Object.fromEntries(
+          layers.map((layer) => [
+            layer,
+            localApiClient.latestOverlayLayerUrl(layer, `${metadata.captured_at}:${metadata.overlay_elements.length}`),
+          ]),
+        )
+      : null
+  const [last, setLast] = useState<Record<string, string>>({})
+  const currentKey = current ? Object.values(current).join('|') : ''
+  const lastKey = Object.values(last).join('|')
+  if (current && currentKey !== lastKey) setLast(current)
+  return current ?? last
+}

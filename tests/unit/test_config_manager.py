@@ -214,3 +214,17 @@ async def test_updates_still_refuse_unknown_settings(tmp_path):
             await mgr.update({"location": {"future_key": 1}})
     finally:
         await mgr.stop()
+
+
+def test_camera_identity_is_moved_out_of_the_upload_block_of_older_configs():
+    from caelum.config.schema import AppConfig, load_stored
+
+    legacy = json.dumps({"upload": {"camera_name": "Old", "camera_slug": "old0", "owner": "Me", "remote_host": "h"}})
+    config = load_stored(legacy)
+    assert (config.camera.identity.name, config.camera.identity.slug, config.camera.identity.owner) == (
+        "Old", "old0", "Me")
+    assert config.upload.remote_host == "h" and not hasattr(config.upload, "camera_name")
+
+    # the new block wins when both are present
+    both = AppConfig.model_validate({"upload": {"camera_name": "Old"}, "camera": {"identity": {"name": "New"}}})
+    assert both.camera.identity.name == "New"

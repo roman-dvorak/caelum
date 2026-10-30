@@ -35,7 +35,8 @@ from caelum.plugins.base import Plugin
 #:   A bare `{captured_at}` keeps rendering as ISO 8601.
 #:
 #: `exposure` is the exposure already formatted for people ("15.00s",
-#: "2.5ms"); `software`, `camera_model` and `camera_name` come from the
+#: "2.5ms"); `software`, `camera_model` and the camera identity
+#: (`camera_name`, `observatory_name`, `camera_type`, `owner`) come from the
 #: frame's provenance (empty for frames recorded without it).
 LABEL_PLACEHOLDERS: tuple[str, ...] = (
     "exposure",
@@ -52,6 +53,9 @@ LABEL_PLACEHOLDERS: tuple[str, ...] = (
     "captured_at",
     "captured_at_local",
     "camera_name",
+    "observatory_name",
+    "camera_type",
+    "owner",
     "camera_model",
     "software",
 )
@@ -214,6 +218,9 @@ def _render_label_text(template: str, metadata: FrameMetadata) -> str:
             captured_at=metadata.captured_at,
             captured_at_local=metadata.captured_at.astimezone(),
             camera_name=provenance.get("camera_name") or "",
+            observatory_name=provenance.get("observatory_name") or "",
+            camera_type=provenance.get("camera_type") or "",
+            owner=provenance.get("owner") or "",
             camera_model=provenance.get("camera_model") or provenance.get("camera_backend") or "",
             software=f"caelum {version}" if version else "caelum",
         )

@@ -1,4 +1,5 @@
 export * from './ImageViewer.js'
+export * from './useHiddenLayers.js'
 export * from './StatusTile.js'
 export * from './SkyStateBadge.js'
 export * from './CameraCard.js'

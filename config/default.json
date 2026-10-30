@@ -3,6 +3,14 @@
   "camera": {
     "backend": "mock",
     "sensor_id": "cam0",
+    "identity": {
+      "name": "Caelum Camera",
+      "slug": "cam0",
+      "observatory_name": "",
+      "camera_type": "",
+      "owner": "",
+      "publish_location": false
+    },
     "resolution": [
       4056,
       3040
@@ -141,11 +149,6 @@
     "s3_prefix": "",
     "s3_profile": "",
     "s3_acl": "",
-    "camera_slug": "cam0",
-    "camera_name": "Caelum Camera",
-    "observatory_name": "",
-    "camera_type": "",
-    "owner": "",
     "thumbnail_interval_s": 60.0,
     "reconcile_interval_s": 1800.0
   },

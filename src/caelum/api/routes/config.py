@@ -41,7 +41,7 @@ def export_config(config_manager: ConfigManager = Depends(get_config_manager)) -
     here or on another camera."""
     cfg = config_manager.current
     data = cfg.model_dump(mode="json", exclude=set(_NOT_PORTABLE))
-    camera = re.sub(r"[^A-Za-z0-9_-]+", "-", cfg.upload.camera_name).strip("-") or "camera"
+    camera = re.sub(r"[^A-Za-z0-9_-]+", "-", cfg.camera.identity.name).strip("-") or "camera"
     name = f"caelum-config-{camera}-{datetime.now(UTC):%Y%m%d-%H%M%S}.json"
     return Response(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",

@@ -215,10 +215,9 @@ See [Exposure control](/guide/exposure) for what each value does.
     "transport": "rsync",
     "remote_host": "archive.example.org",
     "remote_user": "allsky",
-    "remote_base_path": "/var/www/allsky-data",
-    "camera_slug": "brno-1",
-    "camera_name": "Brno 1"
-  }
+    "remote_base_path": "/var/www/allsky-data"
+  },
+  "camera": { "identity": { "slug": "brno-1", "name": "Brno 1" } }
 }
 ```
 
@@ -258,7 +257,7 @@ changed the same way. See [Plugins](/guide/plugins) for the options.
 ```json
 {
   "location": { "lat": 49.1951, "lon": 16.6068, "elevation_m": 237 },
-  "upload": { "camera_slug": "brno-1", "camera_name": "Brno 1" },
+  "camera": { "identity": { "slug": "brno-1", "name": "Brno 1" } },
   "retention": { "max_age_days": 7 }
 }
 ```
@@ -271,8 +270,7 @@ To make a second camera behave like the first:
 2. Cut the file down to what should be shared — typically `exposure_policy`,
    `storage_policy`, `capture`, `processing`, `plugins` and the shared parts
    of `upload`. Leave out `location` if the cameras stand elsewhere, and
-   anything that identifies a camera (`upload.camera_slug`,
-   `upload.camera_name`).
+   anything that identifies a camera (`camera.identity`).
 3. On the new camera, **Settings → Import…** with that file; read the list
    of changes, **Apply**.
 4. Then a second, small file — or the Settings tree — for what is specific to

@@ -162,6 +162,10 @@ class UploadWorker(threading.Thread):
             logger.info("Upload %s pass: %d file(s), %.1f MB in %.1fs", kind, stats.files, stats.bytes / 1e6,
                         record["duration_s"])
 
+    @property
+    def _slug(self) -> str:
+        return self._config_manager.current.camera.identity.slug
+
     def _incremental_push(self, cfg: UploadConfig) -> None:
         stats, started, started_at = self._begin("incremental")
         ok = False
@@ -174,7 +178,7 @@ class UploadWorker(threading.Thread):
             for subdir in paths.MANAGED_SUBDIRS:
                 local = self._data_dir / subdir / today_path
                 if local.exists():
-                    target = f"{cfg.camera_slug}/{subdir}/{today_path}"
+                    target = f"{self._slug}/{subdir}/{today_path}"
                     ok = _transport(cfg).push_tree(cfg, local, target, stats=stats) and ok
             ok = self._push_manifests(cfg, stats) and ok
         except Exception as exc:
@@ -192,7 +196,7 @@ class UploadWorker(threading.Thread):
             # (capture-program sources, program test runs, overlay assets, darks).
             ok = True
             for subdir in paths.MANAGED_SUBDIRS:
-                target = f"{cfg.camera_slug}/{subdir}"
+                target = f"{self._slug}/{subdir}"
                 ok = _transport(cfg).push_tree(cfg, self._data_dir / subdir, target, stats=stats) and ok
             ok = self._push_manifests(cfg, stats) and ok
             if ok and not stats.errors:
@@ -204,14 +208,11 @@ class UploadWorker(threading.Thread):
             self._finish("reconcile", stats, started, started_at, ok)
 
     def _push_manifests(self, cfg: UploadConfig, stats: TransferStats | None = None) -> bool:
-        location = self._config_manager.current.location
-        identity = manifest.camera_identity(
-            cfg.camera_slug, cfg.camera_name, {"lat": location.lat, "lon": location.lon},
-            observatory_name=cfg.observatory_name, camera_type=cfg.camera_type, owner=cfg.owner,
-        )
-        manifest.write_local_manifests(self._data_dir, identity)
+        app_config = self._config_manager.current
+        identity = manifest.camera_identity(app_config)
+        manifest.write_local_manifests(self._data_dir, identity, manifest.sky_info(app_config))
         ok = _transport(cfg).push_file(
-            cfg, self._data_dir / "manifest.json", f"{cfg.camera_slug}/manifest.json", stats=stats
+            cfg, self._data_dir / "manifest.json", f"{self._slug}/manifest.json", stats=stats
         )
         return self._update_cameras_index(cfg, identity, stats) and ok
 

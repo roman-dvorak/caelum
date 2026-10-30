@@ -66,12 +66,19 @@ page, or on the Plugins page). It draws, into every frame's overlay:
 
 - stars as rings sized by magnitude, with names for the bright ones,
 - the Sun, Moon and naked-eye planets,
+- constellation lines (stick figures of the 88 constellations),
 - the N/E/S/W letters and the 0°/30°/60° altitude rings.
+
+Each of these is a separate *layer* — `grid`, `constellations`, `stars`,
+`planets`, `compass`. With `storage_policy.overlay_mode = "file"` every layer is
+stored as its own PNG next to the overlay, and the Dashboard (and the remote
+viewer, from the uploaded files) shows an on/off checkbox for each. With
+`"burn"` the layers are burned into the thumbnail and cannot be toggled.
 
 It is recomputed for every frame from the clock, so it stays correct all
 night, and it goes wherever overlays go (live view, thumbnails, the remote
 archive, timelapses). Settings (Plugins page): `max_magnitude` (default 3.5),
-`label_magnitude`, `show_stars`, `show_planets`, `show_grid`, `show_compass`
+`label_magnitude`, `show_stars`, `show_constellations`, `show_planets`, `show_grid`, `show_compass`
 and the colours. The frame's sidecar stores only the parameters (time, place,
 lens, options — about a kilobyte), not the star positions: the overlay image
 is drawn from them on the camera, and viewers show that image.

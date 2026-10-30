@@ -260,6 +260,11 @@ export class LocalApiClient {
     return this.apiUrl(`/frame/overlay.png?k=${encodeURIComponent(key)}`)
   }
 
+  /** One toggleable layer of the live overlay (`FrameMetadata.overlay_layers`). */
+  latestOverlayLayerUrl(layer: string, key: string): string {
+    return this.apiUrl(`/frame/overlay/${encodeURIComponent(layer)}.png?k=${encodeURIComponent(key)}`)
+  }
+
   // ---- auth --------------------------------------------------------------
 
   /** Unauthenticated: what this deployment requires, and who we already are. */

@@ -17,7 +17,8 @@ import numpy as np
 
 from caelum.config.schema import LensConfig
 from caelum.derivatives.projection import project_altaz_to_pixel
-from caelum.sky.positions import sky_objects
+from caelum.sky.catalog import load_constellations
+from caelum.sky.positions import sky_objects, star_positions
 
 
 def _polyline(points: list[tuple[float, float] | None]) -> list[list[list[float]]]:
@@ -94,3 +95,28 @@ def map_payload(params: dict[str, Any], aspect: float) -> dict[str, Any]:
         else:
             bodies.append({"kind": obj.kind, "name": obj.name, "x": x, "y": y})
     return {"stars": stars, "bodies": bodies, "labels": labels, "color": params.get("star_color")}
+
+
+def lines_payload(params: dict[str, Any], aspect: float) -> dict[str, Any]:
+    """Constellation figures: a run of [x, y] fractions per segment whose two
+    stars are both above the horizon and inside the frame."""
+    where = _Projector(params, aspect)
+    stars = star_positions(
+        datetime.fromisoformat(params["captured_at"]), params["lat"], params["lon"], max_mag=6.0
+    )
+    index = {int(hr): i for i, hr in enumerate(stars.hr)}
+    lines: list[list[list[float]]] = []
+    for a, b in load_constellations():
+        ia, ib = index.get(a), index.get(b)
+        if ia is None or ib is None:
+            continue
+        ends = []
+        for i in (ia, ib):
+            alt = float(stars.alt_deg[i])
+            point = where(alt, float(stars.az_deg[i])) if alt >= max(0.0, where.horizon) else None
+            if point is None or not (0.0 <= point[0] <= 1.0 and 0.0 <= point[1] <= 1.0):
+                break
+            ends.append([round(point[0], 4), round(point[1], 4)])
+        else:
+            lines.append(ends)
+    return {"color": params.get("constellation_color"), "lines": lines}

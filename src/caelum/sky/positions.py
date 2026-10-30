@@ -81,6 +81,7 @@ def _precess_from_j2000(ra_rad: np.ndarray, dec_rad: np.ndarray, t: float):
 
 @dataclass(frozen=True)
 class StarPositions:
+    hr: np.ndarray
     names: list[str]
     mag: np.ndarray
     alt_deg: np.ndarray
@@ -103,7 +104,9 @@ def star_positions(
     ra = ra0 + catalog.pm_ra_arcsec[keep] * years * _ARCSEC / np.maximum(np.cos(dec0), 1e-6)
     ra, dec = _precess_from_j2000(ra, dec, years / 100.0)
     alt, az = _horizontal(ra, dec, jd, lat_deg, lon_deg)
-    return StarPositions(names=[catalog.names[i] for i in keep], mag=catalog.vmag[keep], alt_deg=alt, az_deg=az)
+    return StarPositions(
+        hr=catalog.hr[keep], names=[catalog.names[i] for i in keep], mag=catalog.vmag[keep], alt_deg=alt, az_deg=az
+    )
 
 
 def body_positions(when: datetime, lat_deg: float, lon_deg: float, elevation_m: float = 0.0) -> list[SkyObject]:

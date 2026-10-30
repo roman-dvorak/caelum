@@ -301,7 +301,8 @@ against the frame's metadata (`{exposure_us}`, `{sky_state.period}`, etc.) —
 an unknown placeholder falls back to showing the raw template rather than
 dropping the element or crashing the pipeline. `{exposure}` is the exposure
 formatted for people ("15.00s"), and `{software}`, `{camera_model}` and
-`{camera_name}` (`upload.camera_name`) come from the frame's provenance.
+the camera identity — `{camera_name}`, `{observatory_name}`, `{camera_type}`,
+`{owner}` (`camera.identity`) — come from the frame's provenance.
 Labels anchor by any edge (`align` left/center/right, `valign`
 top/middle/bottom), so they can sit in a corner however many lines they
 have, and can have a `background` box to stay legible on a bright sky.
@@ -311,7 +312,7 @@ It is enabled out of the box with a default template:
 | Corner | Shows |
 |---|---|
 | top left | capture time (UTC), exposure and gain |
-| top right | camera / observatory name (`upload.camera_name`) |
+| top right | camera / observatory name (`camera.identity.name`) |
 | bottom left | AstroMeters logo and the capture software |
 | bottom right | camera model |
 
@@ -331,7 +332,8 @@ remote-web. It redacts the stored thumbnail only with
 
 `SkyOverlayWorker` (id `sky_overlay`) draws the stars, planets, Sun, Moon, a
 compass and altitude rings for the moment of each frame through `camera.lens`,
-as `sky_map` and `sky_grid` overlay elements. It needs a calibrated lens and
+as `sky_map`, `sky_lines` (constellation figures) and `sky_grid` overlay
+elements, one per toggleable layer. It needs a calibrated lens and
 ships disabled — see [Lens calibration and the sky overlay](/guide/lens-calibration).
 
 ## Worked example: the telescope-position widget

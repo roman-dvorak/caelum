@@ -128,6 +128,9 @@ export interface FrameMetadata {
    * transparent PNG in `overlays/` (live: `/api/frame/overlay.png`);
    * "burned" — inside the stored thumbnail. Absent/null until rendered. */
   overlay?: OverlayLocation | null
+  /** Toggleable overlay layers stored beside the main overlay (live:
+   * `/api/frame/overlay/<layer>.png`) — the sky overlay's. */
+  overlay_layers?: string[]
 }
 
 export type OverlayLocation = 'file' | 'burned'
@@ -211,9 +214,22 @@ export interface LensStarFit {
   image_height: number
 }
 
+/** What the camera is — catalog metadata, published in its manifest. */
+export interface CameraIdentityConfig {
+  name: string
+  /** Directory name on the upload target. */
+  slug: string
+  observatory_name: string
+  camera_type: string
+  owner: string
+  /** Put the exact location into the published manifest. */
+  publish_location: boolean
+}
+
 export interface CameraConfig {
   backend: 'mock' | 'picamera2' | string
   sensor_id: string
+  identity: CameraIdentityConfig
   resolution: [number, number]
   lens: LensConfig
 }
@@ -268,11 +284,6 @@ export interface UploadConfig {
   remote_user: string
   remote_base_path: string
   ssh_key_path: string
-  camera_slug: string
-  camera_name: string
-  observatory_name: string
-  camera_type: string
-  owner: string
   thumbnail_interval_s: number
   reconcile_interval_s: number
 }
@@ -603,9 +614,16 @@ export interface CameraManifest {
   observatory_name?: string
   camera_type?: string
   owner?: string
-  location: {
+  /** Only present when the operator chose to publish the location. */
+  location?: {
     lat: number
     lon: number
+  }
+  /** What a viewer needs to present the sky overlay — no coordinates: the
+   * camera renders each layer itself (see `DateIndexImageEntry.layers`). */
+  sky?: {
+    lens: LensConfig
+    layers: string[]
   }
   dates: CameraManifestDateEntry[]
 }
@@ -619,6 +637,9 @@ export interface DateIndexImageEntry {
   /** The rendered overlay PNG to stack over `thumbnail` (relative to the
    * camera's prefix) — absent when it is burned in or switched off. */
   overlay?: string
+  /** Toggleable overlay layers by name (stars, constellations, ...): one
+   * transparent PNG each, relative to the camera's prefix. */
+  layers?: Record<string, string>
 }
 
 /** `<baseUrl>/<slug>/thumbnails/<date>/index.json` */

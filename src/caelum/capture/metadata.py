@@ -59,6 +59,9 @@ class FrameMetadata(BaseModel):
     #: stored thumbnail itself. None until the overlay has been rendered
     #: (and for frames from before overlays were stored).
     overlay: Literal["file", "burned"] | None = None
+    #: Toggleable layers stored beside the main overlay as
+    #: `overlays/…/<stem>.<layer>.png` (only with `overlay == "file"`).
+    overlay_layers: list[str] = Field(default_factory=list)
     #: The exposure regulator's cycle on this frame — its measurement of it
     #: and what it set for the next one (see `exposure_control_snapshot`).
     #: None for frames from before this was recorded.

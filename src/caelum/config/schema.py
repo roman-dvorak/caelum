@@ -64,11 +64,31 @@ class LensConfig(StrictModel):
     mirror: bool = False
 
 
+class CameraIdentityConfig(StrictModel):
+    """What this camera *is* — static catalog metadata, published in the
+    camera's `manifest.json` / `cameras.json` entry and available to overlay
+    text templates (`{camera_name}`, `{observatory_name}`, ...). Nothing here
+    describes what the camera last did."""
+
+    name: str = "Caelum Camera"
+    #: Directory name of this camera on the upload target
+    #: (`<remote_base_path>/<slug>/...`); changing it starts a new remote tree.
+    slug: str = "cam0"
+    observatory_name: str = ""
+    camera_type: str = ""
+    owner: str = ""
+    #: Put the exact `location` (lat/lon) into the published manifest. Off by
+    #: default: the sky overlay is rendered on the camera and needs no
+    #: coordinates on the viewer's side.
+    publish_location: bool = False
+
+
 class CameraConfig(StrictModel):
     backend: Literal["mock", "picamera2", "opencv"] = "mock"
     # For "opencv": doubles as the V4L2 device selector — a bare index like
     # "0" opens /dev/video0, anything else is an explicit device path.
     sensor_id: str = "cam0"
+    identity: CameraIdentityConfig = Field(default_factory=CameraIdentityConfig)
     resolution: tuple[int, int] = (4056, 3040)
     lens: LensConfig = Field(default_factory=LensConfig)
     #: White balance — auto (camera-driven AWB) or fixed manual gains.
@@ -317,13 +337,6 @@ class UploadConfig(StrictModel):
     #: Canned ACL for every uploaded object, e.g. "public-read" when the
     #: remote-web app reads straight from the bucket. Empty: bucket default.
     s3_acl: str = ""
-    camera_slug: str = "cam0"
-    camera_name: str = "Caelum Camera"
-    #: Catalog metadata published in the camera's static manifest entry
-    #: (cameras.json) — what the camera *is*, never what it last did.
-    observatory_name: str = ""
-    camera_type: str = ""
-    owner: str = ""
     thumbnail_interval_s: float = 60.0
     reconcile_interval_s: float = 1800.0
 
@@ -438,7 +451,32 @@ class AppConfig(StrictModel):
         instead of rejecting the whole document."""
         if isinstance(data, dict) and "docs" in data:
             data = {k: v for k, v in data.items() if k != "docs"}
+        return _move_identity_out_of_upload(data)
+
+
+_LEGACY_IDENTITY_KEYS = {
+    "camera_name": "name",
+    "camera_slug": "slug",
+    "observatory_name": "observatory_name",
+    "camera_type": "camera_type",
+    "owner": "owner",
+}
+
+
+def _move_identity_out_of_upload(data: Any) -> Any:
+    """The camera's name, slug, observatory, type and owner used to live in
+    `upload`; they are `camera.identity` now. Move them from older config
+    files (and Redis) so those still load — unless the new block already has
+    the value."""
+    if not isinstance(data, dict) or not isinstance(data.get("upload"), dict):
         return data
+    upload = dict(data["upload"])
+    legacy = {new: upload.pop(old) for old, new in _LEGACY_IDENTITY_KEYS.items() if old in upload}
+    if not legacy:
+        return data
+    camera = dict(data.get("camera") or {})
+    identity = {**legacy, **(camera.get("identity") or {})}
+    return {**data, "upload": upload, "camera": {**camera, "identity": identity}}
 
 
 def load_stored(raw: str) -> AppConfig:

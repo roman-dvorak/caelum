@@ -19,21 +19,39 @@ manifests that Apache (or any other static server) hands out directly.
     "remote_user": "caelum",
     "remote_base_path": "/var/www/allsky-data",
     "ssh_key_path": "/etc/caelum/upload_key",
-    "camera_slug": "brno-north",
-    "camera_name": "Brno North Allsky",
-    "observatory_name": "Brno Observatory",
-    "camera_type": "Allsky, RPi HQ + fisheye",
-    "owner": "Example Astronomical Society",
     "thumbnail_interval_s": 60.0,
     "reconcile_interval_s": 1800.0
   }
 }
 ```
 
-`camera_slug` is the directory name this camera owns on the remote and the key
-it is indexed under; `camera_name` is the human-readable label the viewer
-shows. `observatory_name`, `camera_type` and `owner` are optional catalog
-metadata published with the camera (see `cameras.json` below). Upload is
+The `upload` block holds only what the transfer needs — the target and its
+credentials. Who the camera is lives in `camera.identity`:
+
+```json
+{
+  "camera": {
+    "identity": {
+      "name": "Brno North Allsky",
+      "slug": "brno-north",
+      "observatory_name": "Brno Observatory",
+      "camera_type": "Allsky, RPi HQ + fisheye",
+      "owner": "Example Astronomical Society",
+      "publish_location": false
+    }
+  }
+}
+```
+
+`slug` is the directory name this camera owns on the remote
+(`<remote_base_path>/<slug>/`) and the key it is indexed under; `name` is the
+human-readable label the viewer shows. `observatory_name`, `camera_type` and
+`owner` are optional catalog metadata published with the camera (see
+`cameras.json` below), and also usable in overlay labels as `{camera_name}`,
+`{observatory_name}`, `{camera_type}` and `{owner}`. The exact `lat`/`lon` go
+into the published manifests only with `publish_location: true`; the sky
+overlay does not need them (see "Sky layers" below). Older configs with these
+fields under `upload` are converted when they are loaded. Upload is
 disabled by default. Pushes start when a frame's derivatives, overlay and
 sidecar are all written, not when the frame is merely captured, so a push
 never misses the outputs of the frame that triggered it.
@@ -200,7 +218,6 @@ The shared top-level index across every camera writing to this host:
       "observatory_name": "Brno Observatory",
       "camera_type": "Allsky, RPi HQ + fisheye",
       "owner": "Example Astronomical Society",
-      "location": { "lat": 49.2, "lon": 16.6 },
       "manifest": "brno-north/manifest.json"
     }
   ]
@@ -263,3 +280,21 @@ One per thumbnail date directory, listing that night's frames:
 A date appears in the manifest only if it has at least one thumbnail. Raw
 counts are reported per date but raw files are not individually indexed — the
 viewer works from thumbnails and their sidecars.
+
+## Sky layers
+
+With the `sky_overlay` plugin on and `storage_policy.overlay_mode = "file"`,
+each layer of the sky overlay — grid, constellations, stars, planets, compass —
+is rendered by the camera into its own transparent PNG,
+`overlays/YYYY/MM/DD/<stem>.<layer>.png`, and uploaded like the rest of
+`overlays/`. A date's `index.json` lists them per image:
+
+```json
+{ "time": "20261030-210000", "overlay": "overlays/2026/10/30/20261030-210000.png",
+  "layers": { "stars": "overlays/2026/10/30/20261030-210000.stars.png",
+              "constellations": "overlays/2026/10/30/20261030-210000.constellations.png" } }
+```
+
+and the camera's `manifest.json` gets a `sky` block with the lens and the
+layer names, which is what the viewer needs to offer an on/off switch for each.
+The coordinates are not part of it: the positions are already in the pixels.

@@ -28,11 +28,10 @@ async def _make_config_manager(tmp_path, redis_url, key_prefix, remote_dir):
                 "enabled": True,
                 "remote_host": "",  # local-filesystem mode — no SSH/network involved
                 "remote_base_path": str(remote_dir),
-                "camera_slug": "cam0",
-                "camera_name": "Test Cam",
                 "thumbnail_interval_s": 9999,
                 "reconcile_interval_s": 9999,
-            }
+            },
+            "camera": {"identity": {"slug": "cam0", "name": "Test Cam"}},
         }
     )
     return config_manager
@@ -88,7 +87,7 @@ async def test_second_camera_does_not_clobber_first_cameras_entry(tmp_path, redi
 
     cm_a = await _make_config_manager(tmp_path, redis_url, "uploadtest2a", remote_dir)
     cm_b = await _make_config_manager(tmp_path, redis_url, "uploadtest2b", remote_dir)
-    await cm_b.update({"upload": {"camera_slug": "cam1", "camera_name": "Cam One"}})
+    await cm_b.update({"camera": {"identity": {"slug": "cam1", "name": "Cam One"}}})
     try:
         worker_a = UploadWorker(cm_a, EventBus(), local_dir_a)
         worker_b = UploadWorker(cm_b, EventBus(), local_dir_b)
