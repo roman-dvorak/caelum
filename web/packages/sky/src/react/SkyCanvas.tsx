@@ -30,6 +30,25 @@ export interface SkyCanvasProps {
   extraDraw?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void
 }
 
+// Inline styles, so the component looks right in any app — with or without
+// Tailwind or the caelum design system. Colours follow `--sky-tooltip-*` custom
+// properties when the host app defines them.
+const TOOLTIP_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  zIndex: 10,
+  transform: 'translateX(-50%)',
+  whiteSpace: 'nowrap',
+  pointerEvents: 'none',
+  padding: '4px 8px',
+  borderRadius: 6,
+  fontSize: 12,
+  lineHeight: 1.4,
+  background: 'var(--sky-tooltip-bg, #141a24)',
+  color: 'var(--sky-tooltip-fg, #e5e5e5)',
+  border: '1px solid var(--sky-tooltip-border, #2b3446)',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
+}
+
 interface Tip {
   x: number
   y: number
@@ -146,18 +165,23 @@ export function SkyCanvas({
   return (
     <div
       ref={rootRef}
-      className={['absolute inset-0', interactive ? '' : 'pointer-events-none', onPick ? 'cursor-crosshair' : ''].join(' ')}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: interactive ? 'auto' : 'none',
+        cursor: onPick ? 'crosshair' : undefined,
+      }}
       onPointerMove={interactive ? onMove : undefined}
       onPointerLeave={interactive ? () => setTip(null) : undefined}
       onPointerDown={interactive ? onDown : undefined}
     >
-      <canvas ref={canvasRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        aria-hidden
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+      />
       {tip ? (
-        <div
-          role="tooltip"
-          className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1 text-xs text-ink shadow-md"
-          style={{ left: tip.x, top: tip.y + 14 }}
-        >
+        <div role="tooltip" style={{ ...TOOLTIP_STYLE, left: tip.x, top: tip.y + 14 }}>
           {tip.text}
         </div>
       ) : null}
