@@ -2,13 +2,16 @@ import { useState } from 'react'
 import { Button, Field, ImageViewer, LiveFrame, Message, PageHeader, Panel, StatusBadge, inputClass } from '@caelum/ui'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
 import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
+import { useSkyObjects } from '../hooks/useSkyObjects.ts'
 import { useStatus } from '../hooks/useStatus.ts'
+import { SkyHover } from '../components/SkyHover.tsx'
 import { localApiClient } from '../services/client.ts'
 
 export function LiveStream() {
   const { frame, status: streamStatus } = useFrameStream()
   const overlaySrc = useLiveOverlay(frame?.metadata)
   const { status } = useStatus()
+  const sky = useSkyObjects(4.5)
 
   const [exposureUs, setExposureUs] = useState('')
   const [analogueGain, setAnalogueGain] = useState('')
@@ -77,7 +80,9 @@ export function LiveStream() {
 
       <LiveFrame live={!!status?.capturing && !!frame}>
         {frame ? (
-          <ImageViewer src={frame.imageBlobUrl} overlaySrc={overlaySrc} alt="Live camera feed" />
+          <SkyHover objects={sky?.objects ?? []}>
+            <ImageViewer src={frame.imageBlobUrl} overlaySrc={overlaySrc} alt="Live camera feed" />
+          </SkyHover>
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-muted">
             {streamStatus === 'connecting' ? 'Connecting to live stream…' : 'Waiting for first frame…'}

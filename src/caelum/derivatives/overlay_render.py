@@ -234,6 +234,77 @@ def _draw_telescope_marker(c: _Canvas, p: dict[str, Any]) -> None:
     c.paste_layer(layer)
 
 
+def _polyline_points(c: _Canvas, run: list) -> list[tuple[float, float]]:
+    return [(p[0] * c.width, p[1] * c.height) for p in run if isinstance(p, list) and len(p) >= 2]
+
+
+def _draw_sky_grid(c: _Canvas, p: dict[str, Any]) -> None:
+    """Altitude rings / cardinal lines (`lines`: runs of [x, y] fractions) and
+    the compass letters (`labels`)."""
+    layer = Image.new("RGBA", c.image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    line = _hex_to_rgba(_str(p, "color"), _CYAN, 0.45)
+    for run in p.get("lines") or []:
+        points = _polyline_points(c, run)
+        if len(points) > 1:
+            draw.line(points, fill=line, width=c.px(1))
+    font = _font(c.text_px(16), bold=True)
+    for label in p.get("labels") or []:
+        text, x, y = _str(label, "text"), _num(label, "x"), _num(label, "y")
+        if text is None or x is None or y is None:
+            continue
+        color = (255, 110, 100, 255) if label.get("north") else _INK
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        pad = c.px(3)
+        cx, cy = x * c.width, y * c.height
+        draw.rounded_rectangle(
+            [cx - (right - left) / 2 - pad, cy - (bottom - top) / 2 - pad, cx + (right - left) / 2 + pad,
+             cy + (bottom - top) / 2 + pad], radius=c.px(3), fill=_CHIP_BG)
+        draw.text((cx - (right + left) / 2, cy - (bottom + top) / 2), text, font=font, fill=color)
+    c.paste_layer(layer)
+
+
+_BODY_STYLE = {
+    "sun": ((255, 214, 90, 255), 7),
+    "moon": ((220, 224, 232, 255), 6),
+    "planet": (_AMBER, 4),
+}
+
+
+def _draw_sky_map(c: _Canvas, p: dict[str, Any]) -> None:
+    """Stars as dots sized by magnitude (`stars`: [x, y, mag]), the Sun/Moon/
+    planets as rings (`bodies`) and names beside the brightest (`labels`)."""
+    layer = Image.new("RGBA", c.image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    color = _hex_to_rgba(_str(p, "color"), _INK)
+    for star in p.get("stars") or []:
+        if not (isinstance(star, list) and len(star) >= 3):
+            continue
+        x, y, mag = star[0] * c.width, star[1] * c.height, float(star[2])
+        r = max(1.0, (1.2 + (5.0 - mag) * 0.55) * c.scale)
+        # An outline ring rather than a filled dot: it marks the star without
+        # hiding it, so it can be compared with the real one underneath.
+        draw.ellipse([x - r - c.px(2), y - r - c.px(2), x + r + c.px(2), y + r + c.px(2)],
+                     outline=(*color[:3], 170), width=max(1, c.px(1)))
+    font = _font(c.text_px(10))
+    for body in p.get("bodies") or []:
+        x, y = _num(body, "x"), _num(body, "y")
+        if x is None or y is None:
+            continue
+        rgba, size = _BODY_STYLE.get(str(body.get("kind")), _BODY_STYLE["planet"])
+        r = c.px(size)
+        px, py = x * c.width, y * c.height
+        draw.ellipse([px - r, py - r, px + r, py + r], fill=(*rgba[:3], 70), outline=rgba, width=c.px(2))
+        name = _str(body, "name")
+        if name:
+            draw.text((px + r + c.px(3), py - c.px(6)), name, font=font, fill=rgba)
+    for label in p.get("labels") or []:
+        text, x, y = _str(label, "text"), _num(label, "x"), _num(label, "y")
+        if text is not None and x is not None and y is not None:
+            draw.text((x * c.width + c.px(9), y * c.height - c.px(6)), text, font=font, fill=(*color[:3], 235))
+    c.paste_layer(layer)
+
+
 def _draw_unknown(c: _Canvas, element: OverlayElement) -> None:
     """A plugin's own element type: a dashed-looking cyan box if its payload
     is shaped like one, otherwise nothing — never an exception."""
@@ -249,6 +320,8 @@ _RENDERERS = {
     "custom_image": _draw_custom_image,
     "detection_box": _draw_detection_box,
     "telescope_marker": _draw_telescope_marker,
+    "sky_grid": _draw_sky_grid,
+    "sky_map": _draw_sky_map,
 }
 
 

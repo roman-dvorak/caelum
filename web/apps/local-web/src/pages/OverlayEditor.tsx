@@ -55,6 +55,7 @@ const DEFAULT_LENS_CONFIG: LensConfig = {
   center_x: 0.5,
   center_y: 0.5,
   radius: 0.48,
+  fov_deg: 180,
   azimuth_offset_deg: 0,
   mirror: false,
 }

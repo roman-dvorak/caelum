@@ -33,6 +33,8 @@ import type {
   PluginUpdateRequest,
   PluginsResponse,
   Role,
+  SkyObjectsRequest,
+  SkyObjectsResponse,
   SkyStateResponse,
   StatusResponse,
   OverlayAssetInfo,
@@ -43,6 +45,8 @@ import type {
   UpdateStatusResponse,
   UsageResponse,
   UserSummary,
+  LensCircleDetection,
+  LensStarFit,
   LiveWhiteBalanceFrame,
   LiveWhiteBalanceInfo,
   WhiteBalanceRequest,
@@ -208,6 +212,26 @@ export class LocalApiClient {
     }
     if (loaded !== total) throw new LocalApiClientError(`Incomplete frame: ${loaded} of ${total} bytes`, 200, path)
     return { info, pixels: new Uint16Array(bytes.buffer) }
+  }
+
+  /** The sky projected with the configured lens (preview level). */
+  getSkyObjects(maxMag = 4.5): Promise<SkyObjectsResponse> {
+    return this.request<SkyObjectsResponse>(`/sky/objects?max_mag=${maxMag}`)
+  }
+
+  /** The same for a lens that is not saved yet (admin). */
+  projectSkyObjects(body: SkyObjectsRequest): Promise<SkyObjectsResponse> {
+    return this.postJson<SkyObjectsResponse>('/sky/objects', body)
+  }
+
+  /** Find the lit fisheye disc in the latest frame (admin). */
+  detectLensCircle(): Promise<LensCircleDetection> {
+    return this.postJson<LensCircleDetection>('/camera/lens/detect-circle', {})
+  }
+
+  /** Fit centre / north / field of view / projection to the stars of the latest frame (admin). */
+  fitLensFromStars(body: { fit_fov?: boolean; from_config?: boolean } = {}): Promise<LensStarFit> {
+    return this.postJson<LensStarFit>('/camera/lens/fit-stars', body)
   }
 
   getPlugins(): Promise<PluginsResponse> {

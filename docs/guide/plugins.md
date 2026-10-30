@@ -257,14 +257,32 @@ detection pipeline, but not an astrometric one.
 The detection itself is a module-level function:
 
 ```python
-def detect_streak(prev_gray, curr_gray, threshold) -> BoundingBox | None:
+def detect_streak(prev_gray, curr_gray, threshold, min_elongation, min_area,
+                  min_length, noise_sigmas, max_changed_fraction) -> BoundingBox | None:
 ```
 
-It absolute-differences the two frames, thresholds at `diff_threshold`
-(default 40), finds external contours, and keeps the most elongated one with
-an aspect ratio of at least 3:1 and an area of at least 4 px. Being
-module-level and taking only numpy arrays and a float makes it picklable, which
-is what lets it run on a second core.
+It looks for something that *appeared* between two frames and is long and
+thin:
+
+- the difference is signed (`curr - prev`, positive only), so a trail that was
+  in the previous frame and is gone now is not reported a second time;
+- `prev` is shifted to `curr`'s median brightness and both frames are lightly
+  blurred, so an auto-exposure step, a faint glow or a hot pixel does not
+  count;
+- the threshold is at least `diff_threshold` *and* `noise_sigmas` times the
+  noise of the difference itself, so a noisy sensor raises its own bar;
+- if more than `max_changed_fraction` of the frame brightened (measured after
+  eroding, so a thin trail does not count) it is a cloud or a light switched
+  on and nothing is reported;
+- elongation is measured on the rotated minimum-area rectangle, so a diagonal
+  streak is found as readily as a horizontal one, and a streak must be at
+  least `min_length` long.
+
+Detections are kept per frame (`captured_at`), because frames are dispatched on
+a thread pool and a neighbouring frame must not overwrite a detection before
+its overlay and derivative have read it. Being module-level and taking only
+numpy arrays and numbers makes `detect_streak` picklable, which is what lets
+it run on a second core.
 
 That split is the pattern to copy: **stateful accumulation stays in the worker
 on a thread; a heavy stateless computation goes to the process pool.**
@@ -309,13 +327,20 @@ note above) only an overlay element reaches the live view, the Dashboard and
 remote-web. It redacts the stored thumbnail only with
 `storage_policy.overlay_mode = "burn"`, and never the raw file.
 
+## Worked example: the sky overlay
+
+`SkyOverlayWorker` (id `sky_overlay`) draws the stars, planets, Sun, Moon, a
+compass and altitude rings for the moment of each frame through `camera.lens`,
+as `sky_map` and `sky_grid` overlay elements. It needs a calibrated lens and
+ships disabled — see [Lens calibration and the sky overlay](/guide/lens-calibration).
+
 ## Worked example: the telescope-position widget
 
 `TelescopePositionWorker` (id `telescope_position`) is a small demo proving
 the same interface can back a "widget", not just static annotations: it
 contributes a `telescope_marker` overlay element showing where a telescope is
 pointed, projected onto the allsky image with the standard equidistant-fisheye
-formula (`r = radius * (90 - altitude) / 90`). `source: "simulated"` — the only
+formula (`r = radius * (90 - altitude) / 90`, with `radius` a fraction of the frame's shorter side). `source: "simulated"` — the only
 mode implemented today — sweeps a fake alt/az over a few minutes rather than
 querying real hardware; swapping in a query against an INDI/ASCOM server is a
 drop-in replacement for that one function, everything else about the plugin

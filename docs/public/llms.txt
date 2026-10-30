@@ -28,6 +28,7 @@
 - [Configuration files](https://caelum.astrometers.eu/guide/config-files.html): Export, and changing part of the configuration with a partial JSON file — merge rules, preview, examples, API.
 - [Updates](https://caelum.astrometers.eu/guide/updates.html): Updating from the web UI step by step, settings across updates, offline wheel upload, automatic rollback and release channels.
 - [Plugins](https://caelum.astrometers.eu/guide/plugins.html): Hooks, configuration, keograms, meteor detection and overlay elements.
+- [Lens & sky overlay](https://caelum.astrometers.eu/guide/lens-calibration.html): Calibrating the fisheye lens from the image circle and the stars, and drawing the live sky, compass and altitude rings.
 
 ## Cameras
 

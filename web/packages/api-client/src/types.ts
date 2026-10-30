@@ -138,13 +138,77 @@ export type OverlayMode = 'file' | 'burn' | 'off'
 
 // ---- AppConfig ------------------------------------------------------------
 
+export type LensProjection =
+  | 'equidistant_fisheye'
+  | 'equisolid_fisheye'
+  | 'stereographic_fisheye'
+  | 'orthographic_fisheye'
+
 export interface LensConfig {
-  projection: 'equidistant_fisheye'
+  projection: LensProjection
+  /** Fractions of the frame width / height. */
+  center_x: number
+  center_y: number
+  /** Image circle's edge, as a fraction of the frame's shorter side. */
+  radius: number
+  /** Field of view across the image circle (180: its edge is the horizon). */
+  fov_deg: number
+  azimuth_offset_deg: number
+  mirror: boolean
+}
+
+/** One star/planet/Sun/Moon over the camera, projected with the configured lens. */
+export interface SkyObject {
+  kind: 'star' | 'sun' | 'moon' | 'planet'
+  name: string
+  mag: number
+  alt_deg: number
+  az_deg: number
+  /** Fractions of the frame width / height. */
+  x: number
+  y: number
+}
+
+export interface SkyObjectsResponse {
+  time: string
+  /** Frame width / height. */
+  aspect: number
+  lens: LensConfig
+  objects: SkyObject[]
+}
+
+export interface SkyObjectsRequest {
+  lens: LensConfig
+  max_mag?: number
+  bodies?: boolean
+  at?: string
+}
+
+export interface LensCircleDetection {
   center_x: number
   center_y: number
   radius: number
-  azimuth_offset_deg: number
-  mirror: boolean
+  radius_px: number
+  /** 0..1; below ~0.8 the disc is not clean. */
+  confidence: number
+  cropped: boolean
+  image_width: number
+  image_height: number
+}
+
+export interface LensStarFit {
+  lens: LensConfig
+  rms_px: number
+  matched: number
+  candidates: number
+  detected: number
+  confidence: number
+  matches: { name: string; x: number; y: number; error_px: number }[]
+  /** RMS (px) of every projection that was tried. */
+  by_projection: Record<string, number>
+  frame_time: string
+  image_width: number
+  image_height: number
 }
 
 export interface CameraConfig {
@@ -206,6 +270,9 @@ export interface UploadConfig {
   ssh_key_path: string
   camera_slug: string
   camera_name: string
+  observatory_name: string
+  camera_type: string
+  owner: string
   thumbnail_interval_s: number
   reconcile_interval_s: number
 }
@@ -505,8 +572,11 @@ export interface CameraSummary {
   name: string
   /** Path relative to the data root, e.g. "<slug>/manifest.json". */
   manifest: string
-  /** Path relative to the data root, e.g. "<slug>/thumbnails/<date>/<HHMMSS>.jpg". */
-  latest_thumbnail: string | null
+  /** Static catalog metadata — empty strings when the operator left them blank. */
+  observatory_name?: string
+  camera_type?: string
+  owner?: string
+  location?: { lat: number; lon: number }
 }
 
 /** `<baseUrl>/cameras.json` */
@@ -530,6 +600,9 @@ export interface CameraManifest {
   version: number
   slug: string
   name: string
+  observatory_name?: string
+  camera_type?: string
+  owner?: string
   location: {
     lat: number
     lon: number

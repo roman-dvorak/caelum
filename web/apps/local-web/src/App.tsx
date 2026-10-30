@@ -9,6 +9,7 @@ import {
   GaugeIcon,
   ImagesIcon,
   LayersIcon,
+  LensIcon,
   LiveIcon,
   Loading,
   LogoutIcon,
@@ -47,6 +48,9 @@ const OverlayEditor = lazy(() =>
 const CapturePrograms = lazy(() =>
   import('./pages/CapturePrograms.tsx').then((m) => ({ default: m.CapturePrograms })),
 )
+const LensCalibration = lazy(() =>
+  import('./pages/LensCalibration.tsx').then((m) => ({ default: m.LensCalibration })),
+)
 const WhiteBalance = lazy(() =>
   import('./pages/WhiteBalance.tsx').then((m) => ({ default: m.WhiteBalance })),
 )
@@ -68,6 +72,7 @@ const ADMIN_SECTION: NavSection = {
     { to: '/programs', label: 'Capture programs', icon: ProgramIcon },
     { to: '/plugins', label: 'Plugins', icon: PuzzleIcon },
     { to: '/overlay', label: 'Overlay', icon: LayersIcon },
+    { to: '/lens', label: 'Lens', icon: LensIcon },
     { to: '/white-balance', label: 'White balance', icon: DropletIcon },
     { to: '/terminal', label: 'Terminal', icon: TerminalIcon },
     { to: '/logs', label: 'Logs', icon: LogsIcon },
@@ -162,6 +167,7 @@ export default function App() {
                 path="/white-balance"
                 element={isAdmin ? <WhiteBalance /> : <Navigate to="/" replace />}
               />
+              <Route path="/lens" element={isAdmin ? <LensCalibration /> : <Navigate to="/" replace />} />
               <Route
                 path="/terminal"
                 element={isAdmin ? <TerminalPage /> : <Navigate to="/" replace />}

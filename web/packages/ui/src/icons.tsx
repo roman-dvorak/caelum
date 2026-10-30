@@ -9,6 +9,7 @@
 
 import {
   Aperture,
+  Crosshair,
   ArrowClockwise,
   BookOpen,
   Camera,
@@ -69,6 +70,7 @@ export const LogsIcon = icon(Scroll)
 export const CpuIcon = icon(Cpu)
 export const LayersIcon = icon(Stack)
 export const DropletIcon = icon(Drop)
+export const LensIcon = icon(Crosshair)
 export const SettingsIcon = icon(Gear)
 export const CameraIcon = icon(Camera)
 export const ProgramIcon = icon(Aperture)

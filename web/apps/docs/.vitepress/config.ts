@@ -181,6 +181,7 @@ export default withMermaid(defineConfig({
             { text: 'Deployment', link: '/guide/deployment' },
             { text: 'Updates', link: '/guide/updates' },
             { text: 'Plugins', link: '/guide/plugins' },
+            { text: 'Lens & sky overlay', link: '/guide/lens-calibration' },
           ],
         },
         {

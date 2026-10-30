@@ -19,6 +19,7 @@ from .routes import (
     overlay,
     plugins,
     raw_white_balance,
+    sky,
     status,
     stream,
     system,
@@ -62,6 +63,8 @@ def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = (
     app.include_router(status.router, prefix="/api", dependencies=preview_only)
     app.include_router(config.router, prefix="/api", dependencies=admin_only)
     app.include_router(camera.router, prefix="/api", dependencies=admin_only)
+    app.include_router(sky.lens_router, prefix="/api", dependencies=admin_only)
+    app.include_router(sky.router, prefix="/api", dependencies=preview_only)
     app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
     app.include_router(system.router, prefix="/api", dependencies=admin_only)
     app.include_router(update.router, prefix="/api", dependencies=admin_only)

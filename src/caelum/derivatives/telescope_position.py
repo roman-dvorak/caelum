@@ -33,7 +33,7 @@ class TelescopePositionSettings(BaseModel):
     #: Fractional (0..1) zenith pixel — where straight up lands in the frame.
     center_x: float = Field(default=0.5, ge=0.0, le=1.0)
     center_y: float = Field(default=0.5, ge=0.0, le=1.0)
-    #: Fractional (0..1) radius from zenith to the horizon.
+    #: Horizon radius as a fraction of the frame's shorter side.
     radius: float = Field(default=0.48, ge=0.0, le=1.0)
     #: Corrects for the camera's rotation relative to true north.
     azimuth_offset_deg: float = 0.0
@@ -51,7 +51,9 @@ def _simulated_position(t: float) -> tuple[float, float]:
     return altitude_deg, azimuth_deg
 
 
-def project_altaz_to_fraction(alt_deg: float, az_deg: float, settings: TelescopePositionSettings) -> Point | None:
+def project_altaz_to_fraction(
+    alt_deg: float, az_deg: float, settings: TelescopePositionSettings, aspect: float = 1.0
+) -> Point | None:
     """Standard allsky equidistant-fisheye projection — see
     `caelum.derivatives.projection` for the shared math."""
     return altaz_to_fraction(
@@ -62,6 +64,7 @@ def project_altaz_to_fraction(alt_deg: float, az_deg: float, settings: Telescope
         radius=settings.radius,
         azimuth_offset_deg=settings.azimuth_offset_deg,
         mirror=settings.mirror,
+        aspect=aspect,
     )
 
 
@@ -80,7 +83,8 @@ class TelescopePositionWorker(Plugin):
 
     def provide_overlay_elements(self, frame: ProcessedFrame) -> list[OverlayElement]:
         alt_deg, az_deg = _simulated_position(time.time())
-        point = project_altaz_to_fraction(alt_deg, az_deg, self._settings)
+        height, width = frame.image.shape[:2]
+        point = project_altaz_to_fraction(alt_deg, az_deg, self._settings, aspect=width / height)
         if point is None:
             return []
         return [

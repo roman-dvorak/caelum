@@ -31,6 +31,7 @@ from caelum.derivatives.keogram import KeogramWorker
 from caelum.derivatives.meteor_detection import MeteorDetectionWorker
 from caelum.derivatives.overlay import OverlayWorker
 from caelum.derivatives.pool import DerivativePool
+from caelum.derivatives.sky_overlay import SkyOverlayWorker
 from caelum.derivatives.telescope_position import TelescopePositionWorker
 from caelum.derivatives.timelapse import TimelapseWorker
 from caelum.events import EventBus
@@ -140,7 +141,14 @@ async def _async_main(settings: Settings) -> None:
     # `enabled`, `order` and `settings` in AppConfig.plugins govern them —
     # they are the proof that the extension point works, not exceptions to it.
     plugin_loader = PluginLoader(
-        [KeogramWorker, MeteorDetectionWorker, OverlayWorker, TelescopePositionWorker, TimelapseWorker]
+        [
+            KeogramWorker,
+            MeteorDetectionWorker,
+            OverlayWorker,
+            SkyOverlayWorker,
+            TelescopePositionWorker,
+            TimelapseWorker,
+        ]
     )
 
     def reload_plugins(new_config: AppConfig) -> None:
