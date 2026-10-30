@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import type { DateIndex } from '@caelum/api-client'
+import type { CameraManifest, DateIndex } from '@caelum/api-client'
+import { SKY_LAYERS } from '@caelum/sky'
 import { DateStrip, KeogramStrip, LayerToggles, Message, OverlayToggle, useHiddenLayers } from '@caelum/ui'
-import { GalleryItem } from '../components/GalleryItem.tsx'
+import { GalleryItem, type SkyView } from '../components/GalleryItem.tsx'
 import { useCameraManifest } from '../hooks/useCameraManifest.ts'
 import { useDateIndex } from '../hooks/useDateIndex.ts'
 import { remoteApiClient } from '../services/client.ts'
@@ -63,7 +64,7 @@ function CameraDetailView({ slug }: { slug: string }) {
             // Keyed by date: switching dates remounts this whole subtree,
             // so its data-fetching hook always starts fresh with no extra
             // reset effect needed.
-            <DateGallery key={selectedDate} slug={slug} date={selectedDate} layers={manifest.sky?.layers ?? []} />
+            <DateGallery key={selectedDate} slug={slug} date={selectedDate} manifest={manifest} />
           ) : null}
         </>
       )}
@@ -71,7 +72,7 @@ function CameraDetailView({ slug }: { slug: string }) {
   )
 }
 
-function DateGallery({ slug, date, layers }: { slug: string; date: string; layers: string[] }) {
+function DateGallery({ slug, date, manifest }: { slug: string; date: string; manifest: CameraManifest }) {
   const { dateIndex, error, loading } = useDateIndex(slug, date)
 
   return (
@@ -81,23 +82,27 @@ function DateGallery({ slug, date, layers }: { slug: string; date: string; layer
       {loading && <p className="text-sm text-ink-muted">Loading frames…</p>}
       {error && <Message kind="error">{error}</Message>}
 
-      {dateIndex ? <Gallery slug={slug} dateIndex={dateIndex} layers={layers} /> : null}
+      {dateIndex ? <Gallery slug={slug} dateIndex={dateIndex} manifest={manifest} /> : null}
     </div>
   )
 }
 
-function Gallery({ slug, dateIndex, layers }: { slug: string; dateIndex: DateIndex; layers: string[] }) {
+function Gallery({ slug, dateIndex, manifest }: { slug: string; dateIndex: DateIndex; manifest: CameraManifest }) {
   const [showOverlay, setShowOverlay] = useState(true)
   const [hidden, setLayerVisible] = useHiddenLayers('caelum.hiddenLayers')
-  const present = layers.filter((layer) => dateIndex.images.some((image) => image.layers?.[layer]))
-  const hasOverlays = dateIndex.images.some((image) => image.overlay) || present.length > 0
+  const hasOverlays = dateIndex.images.some((image) => image.overlay)
+  // The sky can be drawn here only when the camera published where it is.
+  const sky: SkyView | undefined =
+    manifest.sky && manifest.location
+      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden }
+      : undefined
 
   return (
     <div className="flex flex-col gap-2">
-      {hasOverlays ? (
+      {hasOverlays || sky ? (
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          <LayerToggles layers={present} hidden={hidden} onChange={setLayerVisible} />
-          <OverlayToggle checked={showOverlay} onChange={setShowOverlay} />
+          {sky ? <LayerToggles layers={[...SKY_LAYERS]} hidden={hidden} onChange={setLayerVisible} /> : null}
+          {hasOverlays ? <OverlayToggle checked={showOverlay} onChange={setShowOverlay} /> : null}
         </div>
       ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -108,8 +113,8 @@ function Gallery({ slug, dateIndex, layers }: { slug: string; dateIndex: DateInd
             time={image.time}
             thumbnailPath={image.thumbnail}
             overlayPath={image.overlay}
-            layerPaths={present.filter((layer) => !hidden.has(layer)).flatMap((layer) => image.layers?.[layer] ?? [])}
             showOverlay={showOverlay}
+            sky={sky}
           />
         ))}
       </div>

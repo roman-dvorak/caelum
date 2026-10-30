@@ -8,13 +8,16 @@ import {
   MetricGrid,
   PageHeader,
   SectionHeading,
+  SkyCanvas,
   SkyStateBadge,
   StatusBadge,
   StatusTile,
   useHiddenLayers,
 } from '@caelum/ui'
+import { SKY_LAYERS } from '@caelum/sky'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
-import { useLiveOverlay, useLiveOverlayLayers } from '../hooks/useLiveOverlay.ts'
+import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
+import { useSkySetup } from '../hooks/useSkySetup.ts'
 import { useSkyState } from '../hooks/useSkyState.ts'
 import { useStatus } from '../hooks/useStatus.ts'
 
@@ -23,7 +26,7 @@ export function Dashboard() {
   const { skyState, error: skyError } = useSkyState()
   const { frame, status: streamStatus } = useFrameStream()
   const overlaySrc = useLiveOverlay(frame?.metadata)
-  const layerUrls = useLiveOverlayLayers(frame?.metadata)
+  const skySetup = useSkySetup()
   const [hiddenLayers, setLayerVisible] = useHiddenLayers('caelum.hiddenLayers')
   const [showJson, setShowJson] = useState(false)
 
@@ -48,9 +51,9 @@ export function Dashboard() {
         {statusError || skyError ? <Message kind="error">{statusError ?? skyError}</Message> : null}
       </div>
 
-      {Object.keys(layerUrls).length > 0 ? (
+      {skySetup ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <LayerToggles layers={Object.keys(layerUrls)} hidden={hiddenLayers} onChange={setLayerVisible} />
+          <LayerToggles layers={[...SKY_LAYERS]} hidden={hiddenLayers} onChange={setLayerVisible} />
         </div>
       ) : null}
 
@@ -59,11 +62,19 @@ export function Dashboard() {
           <ImageViewer
             src={frame.imageBlobUrl}
             overlaySrc={overlaySrc}
-            layerSrcs={Object.entries(layerUrls)
-              .filter(([layer]) => !hiddenLayers.has(layer))
-              .map(([, url]) => url)}
             alt="Live camera feed"
-          />
+          >
+            {skySetup ? (
+              <SkyCanvas
+                lens={skySetup.lens}
+                latDeg={skySetup.lat}
+                lonDeg={skySetup.lon}
+                elevationM={skySetup.elevation_m}
+                when={new Date(frame.metadata.captured_at)}
+                hidden={hiddenLayers}
+              />
+            ) : null}
+          </ImageViewer>
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-muted">
             {streamStatus === 'connecting' ? 'Connecting to live stream…' : 'Waiting for first frame…'}

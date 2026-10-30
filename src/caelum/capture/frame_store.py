@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections import deque
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -37,8 +37,6 @@ class ProcessedFrame:
     #: The rendered overlay layer (transparent PNG) for the live view, once
     #: every plugin has contributed — see `FrameStore.set_overlay`.
     overlay_png: bytes | None = None
-    #: Toggleable overlay layers by name (see `FrameMetadata.overlay_layers`).
-    overlay_layer_pngs: dict[str, bytes] = field(default_factory=dict)
 
 
 class FrameStore:
@@ -87,7 +85,6 @@ class FrameStore:
         elements: list[OverlayElement],
         overlay: str | None,
         overlay_png: bytes | None,
-        layer_pngs: dict[str, bytes] | None = None,
     ) -> ProcessedFrame | None:
         """Attach a frame's final overlay — the complete element list, after
         every plugin contributed, and its rendered layer — and re-broadcast
@@ -98,11 +95,9 @@ class FrameStore:
             if self._latest is None or self._latest.metadata.captured_at != captured_at:
                 return None
             updated_metadata = self._latest.metadata.model_copy(
-                update={"overlay_elements": elements, "overlay": overlay, "overlay_layers": list(layer_pngs or {})}
+                update={"overlay_elements": elements, "overlay": overlay}
             )
-            self._latest = replace(
-                self._latest, metadata=updated_metadata, overlay_png=overlay_png, overlay_layer_pngs=layer_pngs or {}
-            )
+            self._latest = replace(self._latest, metadata=updated_metadata, overlay_png=overlay_png)
             updated = self._latest
             queues = list(self._queues)
         if self._loop is not None:

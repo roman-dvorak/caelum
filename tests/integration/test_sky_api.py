@@ -70,3 +70,16 @@ async def test_lens_tools_need_a_frame_and_an_admin(tmp_path, redis_url):
             assert fit.status_code == 422 and "stars" in fit.json()["detail"]
     finally:
         await harness.config_manager.stop()
+
+
+async def test_sky_setup_gives_the_browser_the_lens_and_the_observers_position(tmp_path, redis_url):
+    harness = await _build_harness(tmp_path, redis_url, "sky_setup")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            body = (await client.get("/api/sky/setup")).json()
+            config = harness.config_manager.current
+            assert body["lens"] == config.camera.lens.model_dump()
+            assert (body["lat"], body["lon"]) == (config.location.lat, config.location.lon)
+    finally:
+        await harness.config_manager.stop()

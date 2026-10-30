@@ -59,29 +59,36 @@ every conversion was off. If you typed a lens in by hand, run the calibration
 again.
 :::
 
-## The sky overlay
+## The sky on the Dashboard
 
-With the lens saved, enable the **`sky_overlay`** plugin (a button on the Lens
-page, or on the Plugins page). It draws, into every frame's overlay:
+Once the lens is saved, the **Dashboard** draws the sky over the live picture
+— live, in the browser, nothing is rendered or sent per frame:
 
 - stars as rings sized by magnitude, with names for the bright ones,
-- the Sun, Moon and naked-eye planets,
 - constellation lines (stick figures of the 88 constellations),
+- the Sun, Moon and naked-eye planets,
 - the N/E/S/W letters and the 0°/30°/60° altitude rings.
 
-Each of these is a separate *layer* — `grid`, `constellations`, `stars`,
-`planets`, `compass`. With `storage_policy.overlay_mode = "file"` every layer is
-stored as its own PNG next to the overlay, and the Dashboard (and the remote
-viewer, from the uploaded files) shows an on/off checkbox for each. With
-`"burn"` the layers are burned into the thumbnail and cannot be toggled.
+Checkboxes above the picture switch each of these (*Grid*, *Constellations*,
+*Stars*, *Planets*, *Compass*) on and off; the choice is remembered in the
+browser. The browser works the positions out from the lens (`GET
+/api/sky/setup`), the camera's position and the time of the frame it shows, with
+the same maths as the backend (checked against it to under 0.001° for stars).
+The star catalog and the planetary ephemeris are loaded on first use.
 
-It is recomputed for every frame from the clock, so it stays correct all
-night, and it goes wherever overlays go (live view, thumbnails, the remote
-archive, timelapses). Settings (Plugins page): `max_magnitude` (default 3.5),
-`label_magnitude`, `show_stars`, `show_constellations`, `show_planets`, `show_grid`, `show_compass`
-and the colours. The frame's sidecar stores only the parameters (time, place,
-lens, options — about a kilobyte), not the star positions: the overlay image
-is drawn from them on the camera, and viewers show that image.
+The remote viewer does the same for cameras that publish their position
+(`camera.identity.publish_location`, see [Upload](/guide/upload)).
+
+### Sky in the stored pictures
+
+The optional **`sky_overlay`** plugin (a button on the Lens page, or on the
+Plugins page; off by default) draws the same sky into every frame's overlay on
+the camera, so it is also in stored thumbnails, timelapses and the overlay PNG —
+for archives that should show it without a viewer that draws it. Settings
+(Plugins page): `max_magnitude` (default 3.5), `label_magnitude`, `show_stars`,
+`show_constellations`, `show_planets`, `show_grid`, `show_compass` and the
+colours. The frame's sidecar stores only the parameters (time, place, lens,
+options — about a kilobyte), not the star positions.
 
 ### Names on hover
 
@@ -96,10 +103,13 @@ Stars come from the **Yale Bright Star Catalogue** (5th revised edition,
 Hoffleit & Warren; public domain, via CDS/VizieR V/50): the 5080 stars brighter
 than magnitude 6.0, with proper motion, bundled as
 `src/caelum/sky/data/stars.csv.gz` and regenerated with
-`scripts/build_star_catalog.py`. Positions are brought to the date with proper
+`scripts/build_star_catalog.py` (the constellation figures, from d3-celestial,
+with `scripts/build_constellations.py`; both are exported for the web UI with
+`scripts/export_sky_web_data.py`). Positions are brought to the date with proper
 motion, precession and sidereal time — a few arcseconds, with no network or
 ephemeris file involved. The Sun, Moon and planets use astropy's builtin
-ephemeris, like the rest of caelum's sky state. Refraction is not modelled
+ephemeris, like the rest of caelum's sky state; the browser uses the
+`astronomy-engine` library for them. Refraction is not modelled
 (under a pixel on a fisheye image).
 
 ## API
@@ -111,5 +121,6 @@ through `PUT /api/config`).
 | --- | --- |
 | `POST /api/camera/lens/detect-circle` | Image circle of the latest frame. |
 | `POST /api/camera/lens/fit-stars` | `{fit_fov, from_config}` — fit to the stars of the latest frame. |
+| `GET /api/sky/setup` | Preview level. The lens and the observer's position the Dashboard draws the sky from. |
 | `GET /api/sky/objects` | Preview level. Sky objects projected with the configured lens. |
 | `POST /api/sky/objects` | The same with a lens given in the body. |

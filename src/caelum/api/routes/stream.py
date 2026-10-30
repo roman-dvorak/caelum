@@ -46,19 +46,6 @@ def get_latest_overlay(
     return Response(content=latest.overlay_png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
-@router.get("/api/frame/overlay/{layer}.png")
-def get_latest_overlay_layer(
-    layer: str, _: Principal = Depends(require_preview), frame_store: FrameStore = Depends(get_frame_store)
-) -> Response:
-    """One toggleable layer (`FrameMetadata.overlay_layers`) of the latest
-    frame's overlay, stacked over `overlay.png` by the viewer."""
-    latest = frame_store.get_latest()
-    png = latest.overlay_layer_pngs.get(layer) if latest is not None else None
-    if png is None:
-        raise HTTPException(status_code=404, detail=f"no overlay layer {layer!r} for the latest frame")
-    return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
-
-
 @router.get("/api/frame/raw")
 def get_frame_raw(
     captured_at: datetime | None = Query(

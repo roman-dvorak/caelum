@@ -1,5 +1,7 @@
 """The sky above the camera as the lens sees it, and the tool that calibrates the lens.
 
+* `GET  /sky/setup`          — the lens and the observer's position, for the
+  browser to draw the sky live (preview level);
 * `GET  /sky/objects`        — stars/Sun/Moon/planets projected onto the frame
   with the configured lens (preview level: it is what the live view's hover
   popups are built from);
@@ -99,6 +101,22 @@ def _project(lens: LensConfig, size: tuple[int, int], when: datetime, config: Co
 
 def _frame_time(frame: ProcessedFrame | None) -> datetime:
     return frame.metadata.captured_at if frame is not None else datetime.now(UTC)
+
+
+class SkySetupResponse(BaseModel):
+    """What the browser needs to draw the sky over the live view itself."""
+
+    lens: LensConfig
+    lat: float
+    lon: float
+    elevation_m: float
+
+
+@router.get("/sky/setup", response_model=SkySetupResponse)
+def get_sky_setup(config: ConfigManager = Depends(get_config_manager)) -> SkySetupResponse:
+    cfg = config.current
+    return SkySetupResponse(lens=cfg.camera.lens, lat=cfg.location.lat, lon=cfg.location.lon,
+                            elevation_m=cfg.location.elevation_m)
 
 
 @router.get("/sky/objects", response_model=SkyObjectsResponse)

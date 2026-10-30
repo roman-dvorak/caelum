@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@caelum/api-client": "workspace:*",
+    "@caelum/sky": "workspace:*",
     "@caelum/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "react": "^19.3.0",

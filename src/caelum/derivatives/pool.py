@@ -237,54 +237,24 @@ class DerivativePool:
                 logger.debug("Worker task for the overlay of %s did not finish", frame.metadata.captured_at)
         try:
             policy = self._config_manager.current.storage_policy if self._config_manager else StoragePolicyConfig()
-            overlay, png, layer_pngs = None, None, {}
+            overlay, png = None, None
             if policy.overlay_mode != "off":
                 small = thumbnail_module.resize(frame.image, policy.thumbnail_max_dim)
-                size = (small.shape[1], small.shape[0])
-                assets = self._data_dir / "overlay_assets"
-                # Layered elements (the sky overlay's) get a PNG each so a
-                # viewer can toggle them — unless they are burned into the
-                # thumbnail, where they cannot be separated again.
-                separate = policy.overlay_mode == "file"
-                main = [e for e in elements if not (separate and e.payload.get("layer"))]
-                layer = overlay_render.render_layer(main, size, assets)
+                layer = overlay_render.render_layer(
+                    elements, (small.shape[1], small.shape[0]), self._data_dir / "overlay_assets"
+                )
                 png = overlay_render.encode_png(layer)
-                if separate:
-                    layer_pngs = self._render_layers(elements, size, assets)
-                overlay = self._store_overlay(frame, policy, small, layer, png, layer_pngs)
-                if overlay != "file":
-                    layer_pngs = {}
-            self._rewrite_sidecar(frame, elements, overlay, list(layer_pngs))
+                overlay = self._store_overlay(frame, policy, small, layer, png)
+            self._rewrite_sidecar(frame, elements, overlay)
             if self._frame_store is not None:
-                self._frame_store.set_overlay(frame.metadata.captured_at, elements, overlay, png, layer_pngs)
+                self._frame_store.set_overlay(frame.metadata.captured_at, elements, overlay, png)
         except Exception:
             logger.exception("Overlay for the frame captured at %s failed", frame.metadata.captured_at)
         # Even when a step above failed: what did get written should go out.
         self._event_bus.publish(FRAME_OUTPUTS_COMPLETE, frame)
 
-    @staticmethod
-    def _render_layers(
-        elements: list[OverlayElement], size: tuple[int, int], assets: Path
-    ) -> dict[str, bytes]:
-        """One transparent PNG per `payload["layer"]`, in first-seen order."""
-        by_layer: dict[str, list[OverlayElement]] = {}
-        for element in elements:
-            name = element.payload.get("layer")
-            if isinstance(name, str) and name:
-                by_layer.setdefault(name, []).append(element)
-        return {
-            name: overlay_render.encode_png(overlay_render.render_layer(members, size, assets))
-            for name, members in by_layer.items()
-        }
-
     def _store_overlay(
-        self,
-        frame: ProcessedFrame,
-        policy: StoragePolicyConfig,
-        small: np.ndarray,
-        layer: Image.Image,
-        png: bytes,
-        layer_pngs: dict[str, bytes],
+        self, frame: ProcessedFrame, policy: StoragePolicyConfig, small: np.ndarray, layer: Image.Image, png: bytes
     ) -> str | None:
         thumb = frame.thumbnail_path
         if thumb is None or not thumb.is_file():
@@ -298,19 +268,13 @@ class DerivativePool:
         path = paths.overlay_path(self._data_dir, thumb)
         path.parent.mkdir(parents=True, exist_ok=True)
         _write_atomic(path, png)
-        for name, data in layer_pngs.items():
-            _write_atomic(paths.overlay_layer_path(self._data_dir, thumb, name), data)
         return "file"
 
-    def _rewrite_sidecar(
-        self, frame: ProcessedFrame, elements: list[OverlayElement], overlay: str | None, layers: list[str]
-    ) -> None:
+    def _rewrite_sidecar(self, frame: ProcessedFrame, elements: list[OverlayElement], overlay: str | None) -> None:
         thumb = frame.thumbnail_path
         if thumb is None or not thumb.is_file():
             return
-        metadata = frame.metadata.model_copy(
-            update={"overlay_elements": elements, "overlay": overlay, "overlay_layers": layers}
-        )
+        metadata = frame.metadata.model_copy(update={"overlay_elements": elements, "overlay": overlay})
         _write_atomic(paths.sidecar_path(thumb), metadata.model_dump_json(indent=2).encode())
 
     def shutdown(self) -> None:

@@ -35,6 +35,7 @@ import type {
   Role,
   SkyObjectsRequest,
   SkyObjectsResponse,
+  SkySetup,
   SkyStateResponse,
   StatusResponse,
   OverlayAssetInfo,
@@ -214,6 +215,11 @@ export class LocalApiClient {
     return { info, pixels: new Uint16Array(bytes.buffer) }
   }
 
+  /** The lens and the observer's position (preview level). */
+  getSkySetup(): Promise<SkySetup> {
+    return this.request<SkySetup>('/sky/setup')
+  }
+
   /** The sky projected with the configured lens (preview level). */
   getSkyObjects(maxMag = 4.5): Promise<SkyObjectsResponse> {
     return this.request<SkyObjectsResponse>(`/sky/objects?max_mag=${maxMag}`)
@@ -258,11 +264,6 @@ export class LocalApiClient {
    * with it, e.g. `captured_at` plus the element count. */
   latestOverlayUrl(key: string): string {
     return this.apiUrl(`/frame/overlay.png?k=${encodeURIComponent(key)}`)
-  }
-
-  /** One toggleable layer of the live overlay (`FrameMetadata.overlay_layers`). */
-  latestOverlayLayerUrl(layer: string, key: string): string {
-    return this.apiUrl(`/frame/overlay/${encodeURIComponent(layer)}.png?k=${encodeURIComponent(key)}`)
   }
 
   // ---- auth --------------------------------------------------------------

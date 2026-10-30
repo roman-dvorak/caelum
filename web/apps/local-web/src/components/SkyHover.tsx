@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SkyObject } from '@caelum/api-client'
-import { compassPoint } from '../lib/lensMath.ts'
+import { compassPoint } from '@caelum/sky'
 
 const HIT_RADIUS_PX = 14
 

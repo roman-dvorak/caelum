@@ -78,12 +78,6 @@ def member_path(data_dir: Path, subdir: str, when: datetime, index: int, suffix:
     return date_dir(data_dir, subdir, when) / set_dir_name(when) / f"{member_stem(when, index)}{suffix}"
 
 
-def overlay_layer_path(data_dir: Path, thumbnail: Path, layer: str) -> Path:
-    """`overlays/<…>/<stem>.<layer>.png` — one toggleable layer of the overlay."""
-    base = overlay_path(data_dir, thumbnail)
-    return base.with_name(f"{base.stem}.{layer}.png")
-
-
 def overlay_path(data_dir: Path, thumbnail: Path) -> Path:
     """`overlays/` mirrors `thumbnails/` with the same stems: the rendered
     overlay of `thumbnails/<…>/<stem>.webp` is `overlays/<…>/<stem>.png`."""

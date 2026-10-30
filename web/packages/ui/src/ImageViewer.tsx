@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 export interface ImageViewerProps {
   /** A live blob URL (from the WS binary frame, local-web) or a static URL
@@ -8,9 +8,9 @@ export interface ImageViewerProps {
    * image of the same size, stacked on top. Omit when there is none (not
    * rendered yet, burned into `src`, or overlays switched off). */
   overlaySrc?: string | null
-  /** Toggleable overlay layers (the sky overlay's), already filtered to the
-   * visible ones, stacked above `overlaySrc` in the order given. */
-  layerSrcs?: string[]
+  /** Drawn on top of the image and the overlay, filling the same box — e.g.
+   * the live `SkyCanvas`. */
+  children?: ReactNode
   /** Hide the overlay without dropping it, e.g. from an on/off toggle. */
   showOverlay?: boolean
   alt?: string
@@ -30,7 +30,7 @@ export interface ImageViewerProps {
 export function ImageViewer({
   src,
   overlaySrc,
-  layerSrcs = [],
+  children,
   showOverlay = true,
   alt,
   className,
@@ -64,17 +64,7 @@ export function ImageViewer({
           onError={() => setOverlayFailed(overlaySrc)}
         />
       ) : null}
-      {!failed && showOverlay
-        ? layerSrcs.map((layerSrc) => (
-            <img
-              key={layerSrc}
-              src={layerSrc}
-              alt=""
-              aria-hidden
-              className={['pointer-events-none absolute inset-0 h-full w-full', fit === 'cover' ? 'object-cover' : 'object-contain'].join(' ')}
-            />
-          ))
-        : null}
+      {!failed && showOverlay ? children : null}
     </div>
   )
 }

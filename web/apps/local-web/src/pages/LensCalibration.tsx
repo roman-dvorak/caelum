@@ -3,7 +3,7 @@ import { Button, Field, Message, PageHeader, Panel, Readout, StatusBadge, inputC
 import type { LensCircleDetection, LensConfig, LensProjection, LensStarFit, SkyObject } from '@caelum/api-client'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
 import { useSkyObjects } from '../hooks/useSkyObjects.ts'
-import { altAzToFraction, compassPoint, fractionToAltAz } from '../lib/lensMath.ts'
+import { altAzToFraction, compassPoint, fractionToAltAz } from '@caelum/sky'
 import { localApiClient } from '../services/client.ts'
 
 const PROJECTIONS: { value: LensProjection; label: string }[] = [

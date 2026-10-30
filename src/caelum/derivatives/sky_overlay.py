@@ -7,10 +7,11 @@ sits exactly where the real stars are once the lens is calibrated (web UI →
 Lens, which also fills in `camera.lens`). With a wrong or default lens the
 overlay is a plausible-looking sky in the wrong place: calibrate first.
 
-Each of its layers — grid, constellations, stars, planets, compass — is a
-separate element with its own `layer` tag, rendered by `overlay_render`
-(`sky_grid`, `sky_lines`, `sky_map`); with `overlay_mode = "file"` each layer
-is stored as its own PNG so viewers can toggle it.
+It contributes up to three elements, rendered by `overlay_render`: `sky_map`
+(stars with labels, planets), `sky_lines` (constellation figures) and
+`sky_grid` (altitude rings, the meridian/east-west lines, the N/E/S/W letters).
+The dashboard does not use these: it draws the same sky live in the browser.
+Enable this plugin to also have the sky in stored overlays and timelapses.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from pydantic import BaseModel, Field
 from caelum.capture.frame_store import ProcessedFrame
 from caelum.capture.metadata import OverlayElement
 from caelum.plugins.base import Plugin
-from caelum.sky.layers import sky_overlay_layers
 
 
 class SkyOverlaySettings(BaseModel):
@@ -53,40 +53,32 @@ class SkyOverlayWorker(Plugin):
         self._settings = SkyOverlaySettings.model_validate(self.settings)
 
     def provide_overlay_elements(self, frame: ProcessedFrame) -> list[OverlayElement]:
-        """One element per layer (`payload["layer"]`, see `caelum.sky.layers`),
-        so a viewer can switch each on or off. Elements carry parameters, not
-        coordinates (see `caelum.sky.overlay_geometry`): the sidecar stays a
-        few hundred bytes and the renderer works the positions out when it draws."""
+        """Elements carry parameters, not coordinates (see
+        `caelum.sky.overlay_geometry`): the sidecar stays a few hundred bytes
+        and the renderer works the positions out when it draws."""
         if self.config_manager is None:
             return []
         cfg = self.config_manager.current
         s = self._settings
-        lens = cfg.camera.lens.model_dump()
         location = cfg.location
+        base = {"lens": cfg.camera.lens.model_dump()}
         when = {
             "captured_at": frame.metadata.captured_at.isoformat(),
             "lat": location.lat, "lon": location.lon, "elevation_m": location.elevation_m,
         }
 
-        def element(kind: str, layer: str, params: dict[str, Any]) -> OverlayElement:
-            return OverlayElement(
-                type=kind, source=self.id, payload={"layer": layer, "params": {"lens": lens, **params}}
-            )
+        def element(kind: str, params: dict[str, Any]) -> OverlayElement:
+            return OverlayElement(type=kind, source=self.id, payload={"params": {**base, **params}})
 
-        grid = {"grid_color": s.grid_color}
-        sky = {**when, "max_magnitude": s.max_magnitude, "label_magnitude": s.label_magnitude,
-               "star_color": s.star_color}
-        wanted = set(sky_overlay_layers(s.model_dump()))
         elements = []
-        if "grid" in wanted:
-            elements.append(element("sky_grid", "grid", {**grid, "show_grid": True, "show_compass": False}))
-        if "constellations" in wanted:
-            lines = {**when, "constellation_color": s.constellation_color}
-            elements.append(element("sky_lines", "constellations", lines))
-        if "stars" in wanted:
-            elements.append(element("sky_map", "stars", {**sky, "show_stars": True, "show_planets": False}))
-        if "planets" in wanted:
-            elements.append(element("sky_map", "planets", {**sky, "show_stars": False, "show_planets": True}))
-        if "compass" in wanted:
-            elements.append(element("sky_grid", "compass", {**grid, "show_grid": False, "show_compass": True}))
+        if s.show_grid or s.show_compass:
+            elements.append(element("sky_grid", {
+                "show_grid": s.show_grid, "show_compass": s.show_compass, "grid_color": s.grid_color}))
+        if s.show_constellations:
+            elements.append(element("sky_lines", {**when, "constellation_color": s.constellation_color}))
+        if s.show_stars or s.show_planets:
+            elements.append(element("sky_map", {
+                **when, "show_stars": s.show_stars, "show_planets": s.show_planets,
+                "max_magnitude": s.max_magnitude, "label_magnitude": s.label_magnitude,
+                "star_color": s.star_color}))
         return elements

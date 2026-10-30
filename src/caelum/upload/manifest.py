@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from caelum.config.schema import AppConfig
-from caelum.sky.layers import LAYER_IDS, sky_overlay_layers
 
 _YEAR_RE = re.compile(r"^\d{4}$")
 _MONTH_DAY_RE = re.compile(r"^\d{2}$")
@@ -48,15 +47,6 @@ def _dated_files(data_dir: Path, subdir: str) -> dict[str, list[Path]]:
     return by_date
 
 
-def _layer_files(overlays_dir: Path, date_path: str, stem: str) -> dict[str, Any]:
-    layers = {
-        layer: f"overlays/{date_path}/{stem}.{layer}.png"
-        for layer in LAYER_IDS
-        if (overlays_dir / date_path / f"{stem}.{layer}.png").is_file()
-    }
-    return {"layers": layers} if layers else {}
-
-
 def camera_identity(config: AppConfig) -> dict[str, Any]:
     """What this camera *is* — static catalog metadata, shared by the camera's
     manifest and its `cameras.json` entry. Nothing here may change with a
@@ -77,14 +67,13 @@ def camera_identity(config: AppConfig) -> dict[str, Any]:
 
 
 def sky_info(config: AppConfig) -> dict[str, Any] | None:
-    """What a viewer needs to present the sky overlay — the lens and the
-    layers the camera renders — and no coordinates: the layers are rendered
-    on the camera, so the viewer only stacks and toggles them. None when the
-    sky overlay plugin is off."""
-    plugin = config.plugins.get("sky_overlay")
-    if plugin is None or not plugin.enabled:
+    """What a viewer needs, besides the published `location`, to draw the sky
+    over this camera's frames itself: the lens calibration. It is useless
+    without the location, so it is published only together with it
+    (`camera.identity.publish_location`)."""
+    if not config.camera.identity.publish_location:
         return None
-    return {"lens": config.camera.lens.model_dump(), "layers": sky_overlay_layers(plugin.settings)}
+    return {"lens": config.camera.lens.model_dump()}
 
 
 def write_local_manifests(
@@ -127,8 +116,6 @@ def write_local_manifests(
                     # it is a separate file (not burned in, not switched off).
                     **({"overlay": f"overlays/{date_path}/{path.stem}.png"}
                        if (overlays_dir / date_path / f"{path.stem}.png").is_file() else {}),
-                    # Toggleable layers (sky overlay): one transparent PNG each.
-                    **_layer_files(overlays_dir, date_path, path.stem),
                 }
                 for path in thumb_files
             ],

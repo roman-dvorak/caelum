@@ -7,10 +7,8 @@ from caelum.config.schema import AppConfig
 from caelum.upload import manifest
 
 
-def _config(name="Test Camera", slug="cam0", sky=False, **identity) -> AppConfig:
+def _config(name="Test Camera", slug="cam0", **identity) -> AppConfig:
     data = {"camera": {"identity": {"name": name, "slug": slug, **identity}}, "location": {"lat": 1.0, "lon": 2.0}}
-    if sky:
-        data["plugins"] = {"sky_overlay": {"enabled": True, "order": 35}}
     return AppConfig.model_validate(data)
 
 
@@ -97,27 +95,8 @@ def test_location_is_published_only_when_asked_for():
     assert manifest.camera_identity(_config(publish_location=True))["location"] == {"lat": 1.0, "lon": 2.0}
 
 
-def test_sky_info_has_the_lens_and_layers_but_no_coordinates():
+def test_sky_info_carries_the_lens_only_together_with_the_location():
     assert manifest.sky_info(_config()) is None
-    info = manifest.sky_info(_config(sky=True))
-    assert info["layers"] == ["grid", "constellations", "stars", "planets", "compass"]
+    info = manifest.sky_info(_config(publish_location=True))
     assert info["lens"]["projection"] == "equidistant_fisheye"
-    assert '"lat"' not in json.dumps(info) and '"lon"' not in json.dumps(info)
-
-
-def test_date_index_lists_the_overlay_layers_that_exist(tmp_path):
-    _touch(tmp_path / "thumbnails" / "2026" / "01" / "01" / "20260101-120000.webp")
-    _touch(tmp_path / "overlays" / "2026" / "01" / "01" / "20260101-120000.png")
-    _touch(tmp_path / "overlays" / "2026" / "01" / "01" / "20260101-120000.stars.png")
-    _touch(tmp_path / "overlays" / "2026" / "01" / "01" / "20260101-120000.compass.png")
-
-    camera_manifest = manifest.write_local_manifests(
-        tmp_path, manifest.camera_identity(_config()), manifest.sky_info(_config(sky=True))
-    )
-
-    index = json.loads((tmp_path / "thumbnails" / "2026" / "01" / "01" / "index.json").read_text())
-    assert index["images"][0]["layers"] == {
-        "stars": "overlays/2026/01/01/20260101-120000.stars.png",
-        "compass": "overlays/2026/01/01/20260101-120000.compass.png",
-    }
-    assert camera_manifest["sky"]["layers"][0] == "grid"
+    assert '"lat"' not in json.dumps(info)  # the location itself is the manifest's `location`

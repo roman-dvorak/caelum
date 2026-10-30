@@ -128,9 +128,6 @@ export interface FrameMetadata {
    * transparent PNG in `overlays/` (live: `/api/frame/overlay.png`);
    * "burned" — inside the stored thumbnail. Absent/null until rendered. */
   overlay?: OverlayLocation | null
-  /** Toggleable overlay layers stored beside the main overlay (live:
-   * `/api/frame/overlay/<layer>.png`) — the sky overlay's. */
-  overlay_layers?: string[]
 }
 
 export type OverlayLocation = 'file' | 'burned'
@@ -178,6 +175,14 @@ export interface SkyObjectsResponse {
   aspect: number
   lens: LensConfig
   objects: SkyObject[]
+}
+
+/** What the browser needs to draw the sky over the live view itself. */
+export interface SkySetup {
+  lens: LensConfig
+  lat: number
+  lon: number
+  elevation_m: number
 }
 
 export interface SkyObjectsRequest {
@@ -619,11 +624,10 @@ export interface CameraManifest {
     lat: number
     lon: number
   }
-  /** What a viewer needs to present the sky overlay — no coordinates: the
-   * camera renders each layer itself (see `DateIndexImageEntry.layers`). */
+  /** The lens calibration, published together with `location` so a viewer
+   * can draw the sky over the frames itself. */
   sky?: {
     lens: LensConfig
-    layers: string[]
   }
   dates: CameraManifestDateEntry[]
 }
@@ -637,9 +641,6 @@ export interface DateIndexImageEntry {
   /** The rendered overlay PNG to stack over `thumbnail` (relative to the
    * camera's prefix) — absent when it is burned in or switched off. */
   overlay?: string
-  /** Toggleable overlay layers by name (stars, constellations, ...): one
-   * transparent PNG each, relative to the camera's prefix. */
-  layers?: Record<string, string>
 }
 
 /** `<baseUrl>/<slug>/thumbnails/<date>/index.json` */

@@ -354,7 +354,8 @@ remote-web. It redacts the stored thumbnail only with
 `SkyOverlayWorker` (id `sky_overlay`) draws the stars, planets, Sun, Moon, a
 compass and altitude rings for the moment of each frame through `camera.lens`,
 as `sky_map`, `sky_lines` (constellation figures) and `sky_grid` overlay
-elements, one per toggleable layer. It needs a calibrated lens and
+elements. (The Dashboard draws the same sky itself in the browser and does not
+need this plugin; it is for stored pictures.) It needs a calibrated lens and
 ships disabled — see [Lens calibration and the sky overlay](/guide/lens-calibration).
 
 ## Worked example: the telescope-position widget

@@ -281,20 +281,13 @@ A date appears in the manifest only if it has at least one thumbnail. Raw
 counts are reported per date but raw files are not individually indexed — the
 viewer works from thumbnails and their sidecars.
 
-## Sky layers
+## The sky over the pictures
 
-With the `sky_overlay` plugin on and `storage_policy.overlay_mode = "file"`,
-each layer of the sky overlay — grid, constellations, stars, planets, compass —
-is rendered by the camera into its own transparent PNG,
-`overlays/YYYY/MM/DD/<stem>.<layer>.png`, and uploaded like the rest of
-`overlays/`. A date's `index.json` lists them per image:
-
-```json
-{ "time": "20261030-210000", "overlay": "overlays/2026/10/30/20261030-210000.png",
-  "layers": { "stars": "overlays/2026/10/30/20261030-210000.stars.png",
-              "constellations": "overlays/2026/10/30/20261030-210000.constellations.png" } }
-```
-
-and the camera's `manifest.json` gets a `sky` block with the lens and the
-layer names, which is what the viewer needs to offer an on/off switch for each.
-The coordinates are not part of it: the positions are already in the pixels.
+The sky (stars, constellation lines, planets, compass, altitude rings) is not
+part of the uploaded images. The viewer draws it live in the browser, from the
+frame's time, the lens calibration and the camera's position — so it costs no
+extra files. That needs the position, which is private by default: only with
+`camera.identity.publish_location: true` does the camera's `manifest.json`
+carry `location` and `sky.lens`, and only then does the viewer offer the sky
+and its on/off checkboxes. Without them the viewer shows the pictures as
+uploaded.
