@@ -12,6 +12,7 @@
       "center_x": 0.5,
       "center_y": 0.5,
       "radius": 0.48,
+      "fov_deg": 180.0,
       "azimuth_offset_deg": 0.0,
       "mirror": false
     },
@@ -142,6 +143,9 @@
     "s3_acl": "",
     "camera_slug": "cam0",
     "camera_name": "Caelum Camera",
+    "observatory_name": "",
+    "camera_type": "",
+    "owner": "",
     "thumbnail_interval_s": 60.0,
     "reconcile_interval_s": 1800.0
   },

@@ -21,6 +21,9 @@ manifests that Apache (or any other static server) hands out directly.
     "ssh_key_path": "/etc/caelum/upload_key",
     "camera_slug": "brno-north",
     "camera_name": "Brno North Allsky",
+    "observatory_name": "Brno Observatory",
+    "camera_type": "Allsky, RPi HQ + fisheye",
+    "owner": "Example Astronomical Society",
     "thumbnail_interval_s": 60.0,
     "reconcile_interval_s": 1800.0
   }
@@ -29,7 +32,11 @@ manifests that Apache (or any other static server) hands out directly.
 
 `camera_slug` is the directory name this camera owns on the remote and the key
 it is indexed under; `camera_name` is the human-readable label the viewer
-shows. Upload is disabled by default.
+shows. `observatory_name`, `camera_type` and `owner` are optional catalog
+metadata published with the camera (see `cameras.json` below). Upload is
+disabled by default. Pushes start when a frame's derivatives, overlay and
+sidecar are all written, not when the frame is merely captured, so a push
+never misses the outputs of the frame that triggered it.
 
 ::: tip A local or mounted archive
 If `remote_host` is empty, every target is treated as a plain local filesystem
@@ -190,8 +197,11 @@ The shared top-level index across every camera writing to this host:
     {
       "slug": "brno-north",
       "name": "Brno North Allsky",
-      "manifest": "brno-north/manifest.json",
-      "latest_thumbnail": "brno-north/thumbnails/2026-09-19/210501.jpg"
+      "observatory_name": "Brno Observatory",
+      "camera_type": "Allsky, RPi HQ + fisheye",
+      "owner": "Example Astronomical Society",
+      "location": { "lat": 49.2, "lon": 16.6 },
+      "manifest": "brno-north/manifest.json"
     }
   ]
 }

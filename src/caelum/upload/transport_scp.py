@@ -28,7 +28,7 @@ from pathlib import Path, PurePosixPath
 from caelum.config.schema import UploadConfig
 
 from .ssh import destination, ssh_command, ssh_options
-from .stats import TransferStats
+from .stats import PullError, TransferStats
 
 logger = logging.getLogger(__name__)
 
@@ -182,9 +182,19 @@ def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str,
 
 
 def pull_file(cfg: UploadConfig, remote_relative_path: str, local_path: Path) -> bool:
-    """Fetch one file — used to read back the shared `cameras.json`. Not
-    finding it yet (first camera, first boot) is routine, not a warning."""
+    """Fetch one file. False when it does not exist (first boot, routine);
+    `PullError` when the fetch failed for any other reason."""
     if not cfg.remote_host:
         return False
-    return _scp(cfg, [f"{destination(cfg)}:{_remote_path(cfg, remote_relative_path)}"], str(local_path),
-                warn_on_failure=False)
+    limit = ["-l", str(cfg.bandwidth_limit_kbps * 8)] if cfg.bandwidth_limit_kbps else []
+    cmd = ["scp", "-p", "-q", "-B", *ssh_options(cfg), "-P", str(cfg.ssh_port), *limit,
+           f"{destination(cfg)}:{_remote_path(cfg, remote_relative_path)}", str(local_path)]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        raise PullError(f"scp from {cfg.remote_host} timed out") from exc
+    if result.returncode == 0:
+        return True
+    if "No such file" in result.stderr:
+        return False
+    raise PullError(f"scp exit {result.returncode}: {result.stderr.strip()}")

@@ -45,9 +45,25 @@ def _dated_files(data_dir: Path, subdir: str) -> dict[str, list[Path]]:
     return by_date
 
 
-def write_local_manifests(
-    data_dir: Path, camera_slug: str, camera_name: str, location: dict[str, Any]
+def camera_identity(
+    camera_slug: str, camera_name: str, location: dict[str, Any], *,
+    observatory_name: str = "", camera_type: str = "", owner: str = "",
 ) -> dict[str, Any]:
+    """What this camera *is* — static catalog metadata, shared by the camera's
+    manifest and its `cameras.json` entry. Nothing here may change with a
+    frame (no "latest" anything): it is rewritten only when the operator
+    edits the configuration."""
+    return {
+        "slug": camera_slug,
+        "name": camera_name,
+        "observatory_name": observatory_name,
+        "camera_type": camera_type,
+        "owner": owner,
+        "location": location,
+    }
+
+
+def write_local_manifests(data_dir: Path, identity: dict[str, Any]) -> dict[str, Any]:
     """Regenerate `<data_dir>/manifest.json` and every date's
     `thumbnails/<YYYY>/<MM>/<DD>/index.json`. Returns the built camera
     manifest dict.
@@ -91,36 +107,20 @@ def write_local_manifests(
         }
         (data_dir / "thumbnails" / date_path / "index.json").write_text(json.dumps(index, indent=2))
 
-    camera_manifest = {
-        "version": 1,
-        "slug": camera_slug,
-        "name": camera_name,
-        "location": location,
-        "dates": dates,
-    }
+    camera_manifest = {"version": 1, **identity, "dates": dates}
     (data_dir / "manifest.json").write_text(json.dumps(camera_manifest, indent=2))
     return camera_manifest
 
 
-def merge_cameras_index(
-    existing: dict[str, Any] | None,
-    camera_slug: str,
-    camera_name: str,
-    camera_manifest: dict[str, Any],
-    now: datetime,
-) -> dict[str, Any]:
+def merge_cameras_index(existing: dict[str, Any] | None, identity: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Fetch-merge-push pattern: only this camera's own entry is touched, so
     concurrently-uploading cameras sharing the same remote host don't
     clobber each other's entries (each camera re-asserts its own entry every
-    cycle, so a lost race self-heals on the next one)."""
+    cycle, so a lost race self-heals on the next one). The entry is the
+    camera's static identity plus the path of its manifest — never anything
+    that changes per frame; viewers read that from the manifest."""
     cameras = {c["slug"]: c for c in (existing or {}).get("cameras", [])}
-    latest_thumbnail = camera_manifest["dates"][-1]["latest_thumbnail"] if camera_manifest["dates"] else None
-    cameras[camera_slug] = {
-        "slug": camera_slug,
-        "name": camera_name,
-        "manifest": f"{camera_slug}/manifest.json",
-        "latest_thumbnail": f"{camera_slug}/{latest_thumbnail}" if latest_thumbnail else None,
-    }
+    cameras[identity["slug"]] = {**identity, "manifest": f"{identity['slug']}/manifest.json"}
     return {
         "version": 1,
         "updated_at": now.isoformat(),

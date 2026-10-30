@@ -27,11 +27,11 @@ from pathlib import Path
 from caelum.capture.frame_store import ProcessedFrame
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import UploadConfig
-from caelum.events import FRAME_CAPTURED, EventBus
+from caelum.events import FRAME_OUTPUTS_COMPLETE, EventBus
 from caelum.storage import paths
 
 from . import manifest, transport_rsync, transport_s3, transport_scp
-from .stats import TransferStats
+from .stats import PullError, TransferStats
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,10 @@ class UploadWorker(threading.Thread):
         self._data_dir = data_dir
         self._stop_event = threading.Event()
         self._pending_incremental = threading.Event()
-        self._last_reconcile_monotonic = 0.0
+        #: None until the first pass: `time.monotonic()` is uptime on Linux, so a 0.0
+        #: start would make the first reconcile wait for the device to have been up
+        #: for a whole `reconcile_interval_s`.
+        self._last_reconcile_monotonic: float | None = None
         self._uploaded_before: datetime | None = None
         self._sync_requested = threading.Event()
         self._lock = threading.Lock()
@@ -65,7 +68,10 @@ class UploadWorker(threading.Thread):
             "last_error": None,
             "consecutive_failures": 0,
         }
-        event_bus.subscribe(FRAME_CAPTURED, self._on_frame_captured)
+        # Not FRAME_CAPTURED: that fires before the derivatives, overlay and
+        # sidecar of the frame exist, so a push triggered by it would miss them
+        # until the next frame (or the next reconcile).
+        event_bus.subscribe(FRAME_OUTPUTS_COMPLETE, self._on_frame_captured)
 
     def request_stop(self) -> None:
         self._stop_event.set()
@@ -82,7 +88,7 @@ class UploadWorker(threading.Thread):
         with self._lock:
             state = dict(self._state)
         next_in = None
-        if cfg.enabled and self._last_reconcile_monotonic:
+        if cfg.enabled and self._last_reconcile_monotonic is not None:
             next_in = max(0.0, cfg.reconcile_interval_s - (time.monotonic() - self._last_reconcile_monotonic))
         return {
             "enabled": cfg.enabled,
@@ -117,7 +123,8 @@ class UploadWorker(threading.Thread):
                     if not self._sync_requested.is_set():
                         self._incremental_push(cfg)
 
-                due = time.monotonic() - self._last_reconcile_monotonic >= cfg.reconcile_interval_s
+                due = (self._last_reconcile_monotonic is None
+                       or time.monotonic() - self._last_reconcile_monotonic >= cfg.reconcile_interval_s)
                 if due or self._sync_requested.is_set():
                     self._sync_requested.clear()
                     self._reconcile(cfg)
@@ -198,24 +205,32 @@ class UploadWorker(threading.Thread):
 
     def _push_manifests(self, cfg: UploadConfig, stats: TransferStats | None = None) -> bool:
         location = self._config_manager.current.location
-        camera_manifest = manifest.write_local_manifests(
-            self._data_dir, cfg.camera_slug, cfg.camera_name, {"lat": location.lat, "lon": location.lon}
+        identity = manifest.camera_identity(
+            cfg.camera_slug, cfg.camera_name, {"lat": location.lat, "lon": location.lon},
+            observatory_name=cfg.observatory_name, camera_type=cfg.camera_type, owner=cfg.owner,
         )
+        manifest.write_local_manifests(self._data_dir, identity)
         ok = _transport(cfg).push_file(
             cfg, self._data_dir / "manifest.json", f"{cfg.camera_slug}/manifest.json", stats=stats
         )
-        return self._update_cameras_index(cfg, camera_manifest, stats) and ok
+        return self._update_cameras_index(cfg, identity, stats) and ok
 
-    def _update_cameras_index(self, cfg: UploadConfig, camera_manifest: dict,
-                              stats: TransferStats | None = None) -> bool:
+    def _update_cameras_index(self, cfg: UploadConfig, identity: dict, stats: TransferStats | None = None) -> bool:
         with tempfile.TemporaryDirectory() as tmp:
             cameras_json_path = Path(tmp) / "cameras.json"
-            _transport(cfg).pull_file(cfg, "cameras.json", cameras_json_path)
-            existing = json.loads(cameras_json_path.read_text()) if cameras_json_path.exists() else None
+            try:
+                found = _transport(cfg).pull_file(cfg, "cameras.json", cameras_json_path)
+                existing = json.loads(cameras_json_path.read_text()) if found else None
+            except (PullError, ValueError) as exc:
+                # Never merge into "nothing" because the read failed: that would
+                # overwrite the shared index and drop every other camera. Skip
+                # this cycle; the next one re-asserts our entry.
+                logger.warning("Not updating cameras.json — could not read the current one: %s", exc)
+                if stats is not None:
+                    stats.error(f"cameras.json not updated: {exc}")
+                return False
 
-            merged = manifest.merge_cameras_index(
-                existing, cfg.camera_slug, cfg.camera_name, camera_manifest, datetime.now(UTC)
-            )
+            merged = manifest.merge_cameras_index(existing, identity, datetime.now(UTC))
             cameras_json_path.write_text(json.dumps(merged, indent=2))
             return _transport(cfg).push_file(cfg, cameras_json_path, "cameras.json", stats=stats)
 

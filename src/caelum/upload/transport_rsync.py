@@ -20,7 +20,7 @@ from pathlib import Path
 from caelum.config.schema import UploadConfig
 
 from .ssh import destination, ssh_command
-from .stats import TransferStats
+from .stats import PullError, TransferStats
 
 _FILES_RE = re.compile(r"Number of regular files transferred: ([\d,.]+)")
 _BYTES_RE = re.compile(r"Total transferred file size: ([\d,.]+)")
@@ -90,8 +90,13 @@ def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str,
 
 
 def pull_file(cfg: UploadConfig, remote_relative_path: str, local_path: Path) -> bool:
-    """Fetch one file from the remote — used to read back the shared
-    `cameras.json` before merging this camera's entry into it. Not finding
-    it yet (first camera, first boot) is routine, not a warning."""
+    """Fetch one file from the remote. False when it does not exist (first
+    boot, routine); `PullError` when the fetch failed for any other reason."""
     cmd = ["rsync", "-az", *_ssh_option(cfg), _target(cfg, remote_relative_path), str(local_path)]
-    return _run(cmd, warn_on_failure=False)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+    if "No such file or directory" in result.stderr:
+        logger.debug("rsync: %s does not exist remotely", remote_relative_path)
+        return False
+    raise PullError(f"rsync exit {result.returncode}: {result.stderr.strip()}")

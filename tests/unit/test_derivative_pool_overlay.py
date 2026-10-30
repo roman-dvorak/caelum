@@ -120,3 +120,29 @@ def test_frame_without_a_stored_thumbnail_only_feeds_the_live_view(tmp_path, mod
     assert store.get_latest().overlay_png is not None
     assert store.get_latest().metadata.overlay is None
     assert not (tmp_path / "overlays").exists()
+
+
+def test_outputs_complete_is_published_only_once_the_overlay_is_on_disk(tmp_path):
+    from caelum.events import FRAME_OUTPUTS_COMPLETE
+
+    bus = EventBus()
+    seen = []
+    png = tmp_path / "overlays" / "2026" / "10" / "16" / "20261016-210000.png"
+    bus.subscribe(FRAME_OUTPUTS_COMPLETE, lambda frame: seen.append(png.is_file()))
+
+    config = SimpleNamespace(current=SimpleNamespace(storage_policy=StoragePolicyConfig(overlay_mode="file")))
+    store = FrameStore()
+    pool = DerivativePool(bus, store, tmp_path, max_process_workers=1, config_manager=config)
+    pool.register_all([RedMaskLeftHalf()])
+    image = make_image(width=200, height=100, fill=0)
+    frame = make_processed_frame(captured_at=CAPTURED_AT, image=image)
+    thumb = paths.thumbnail_path(tmp_path, CAPTURED_AT)
+    thumb.parent.mkdir(parents=True)
+    thumb.write_bytes(encode_webp(image))
+    paths.sidecar_path(thumb).write_text(frame.metadata.model_dump_json())
+    frame = replace(frame, thumbnail_path=thumb)
+    store.update(frame)
+    pool._dispatch(frame)
+    pool.shutdown()
+
+    assert seen == [True]

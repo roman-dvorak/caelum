@@ -143,3 +143,14 @@ def test_pull_file_round_trip_and_missing_object(tmp_path, fake_s3):
     assert transport_s3.pull_file(cfg, "cameras.json", dest)
     assert dest.read_text() == '{"cameras": []}'
     assert transport_s3.pull_file(cfg, "nope.json", tmp_path / "nope.json") is False
+
+
+def test_pull_file_raises_on_failures_other_than_missing(tmp_path, fake_s3):
+    from caelum.upload.stats import PullError
+
+    def denied(bucket, key, filename):
+        raise ClientError({"Error": {"Code": "AccessDenied", "Message": "no"}}, "GetObject")
+
+    fake_s3.download_file = denied
+    with pytest.raises(PullError):
+        transport_s3.pull_file(_cfg(), "cameras.json", tmp_path / "x.json")

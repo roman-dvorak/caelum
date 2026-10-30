@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 FRAME_CAPTURED = "frame_captured"
 FRAME_METADATA_UPDATED = "frame_metadata_updated"
+#: Everything derived from one frame — its derivatives, overlay and rewritten
+#: sidecar — is on disk. Published by `DerivativePool` (payload: the
+#: `ProcessedFrame`), always after `FRAME_CAPTURED`; the uploader waits for
+#: this rather than pushing a frame whose outputs are still being written.
+FRAME_OUTPUTS_COMPLETE = "frame_outputs_complete"
 
 Subscriber = Callable[[Any], None]
 

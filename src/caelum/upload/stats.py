@@ -20,3 +20,9 @@ class TransferStats:
     def error(self, message: str) -> None:
         if len(self.errors) < _MAX_ERRORS:
             self.errors.append(message[:2000])
+
+
+class PullError(Exception):
+    """Reading a remote file failed for a reason other than it not existing
+    (network, permissions, ...). Distinct from a plain miss so that callers
+    that read-modify-write never mistake an outage for an empty remote."""

@@ -39,20 +39,25 @@ class StrictModel(BaseModel):
 
 class LensConfig(StrictModel):
     """Fisheye lens calibration — lets a pixel position in a captured frame
-    be converted to an alt/az sky position (see
-    `caelum.derivatives.projection.fraction_to_altaz`). Deliberately mirrors
-    `TelescopePositionSettings`'s field shapes (same physical projection,
-    see `projection.py`'s module docstring for why they stay separate
-    config objects). Manual entry only for now — `center_x`/`center_y`/
-    `radius` are meant to eventually be filled in by a visual, star-based
-    calibration tool instead of typed by hand."""
+    be converted to an alt/az sky position and back (see
+    `caelum.derivatives.projection`), which is what the sky overlay, the
+    compass and the click-to-sky readout are built on. Filled in by hand or
+    by the calibration tool (`/api/camera/lens/*`, web UI "Lens")."""
 
-    projection: Literal["equidistant_fisheye"] = "equidistant_fisheye"
-    #: Fractional (0..1) zenith pixel — where straight up lands in the frame.
+    projection: Literal[
+        "equidistant_fisheye", "equisolid_fisheye", "stereographic_fisheye", "orthographic_fisheye"
+    ] = "equidistant_fisheye"
+    #: Fractional (0..1) zenith pixel — where the optical axis (straight up)
+    #: lands in the frame, as a fraction of the frame width / height.
     center_x: float = Field(default=0.5, ge=0.0, le=1.0)
     center_y: float = Field(default=0.5, ge=0.0, le=1.0)
-    #: Fractional (0..1) radius from zenith to the horizon.
+    #: Radius of the image circle's edge, as a fraction of the frame's
+    #: *shorter* side (so it means the same on any aspect ratio). For a
+    #: 180 degree lens this is the horizon.
     radius: float = Field(default=0.48, ge=0.0, le=1.0)
+    #: Field of view across the image circle. 180 means the circle's edge is
+    #: the horizon; a 190 degree lens sees 5 degrees below it.
+    fov_deg: float = Field(default=180.0, ge=90.0, le=360.0)
     #: Corrects for the camera's rotation relative to true north.
     azimuth_offset_deg: float = 0.0
     #: Flip east/west — needed when the lens/mirror mirrors the sky.
@@ -314,6 +319,11 @@ class UploadConfig(StrictModel):
     s3_acl: str = ""
     camera_slug: str = "cam0"
     camera_name: str = "Caelum Camera"
+    #: Catalog metadata published in the camera's static manifest entry
+    #: (cameras.json) — what the camera *is*, never what it last did.
+    observatory_name: str = ""
+    camera_type: str = ""
+    owner: str = ""
     thumbnail_interval_s: float = 60.0
     reconcile_interval_s: float = 1800.0
 
@@ -397,6 +407,9 @@ def _default_plugins() -> dict[str, PluginConfig]:
         # Disabled by default: needs a calibrated projection first, and a
         # fake telescope marker appearing unasked would be a bad default.
         "telescope_position": PluginConfig(enabled=False, order=40),
+        # Disabled by default for the same reason: the stars it draws are
+        # only in the right place once `camera.lens` has been calibrated.
+        "sky_overlay": PluginConfig(enabled=False, order=35),
         "timelapse": PluginConfig(enabled=False, order=50),
     }
 

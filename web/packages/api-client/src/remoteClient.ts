@@ -62,7 +62,7 @@ export class RemoteApiClient {
   }
 
   /** Resolve a path relative to the data root (e.g. a `CameraSummary.manifest`
-   * or `.latest_thumbnail` value, both already `<slug>/...`-prefixed). */
+   * value, already `<slug>/...`-prefixed). */
   resolveUrl(relativePath: string): string {
     return joinPath(this.baseUrl, relativePath)
   }

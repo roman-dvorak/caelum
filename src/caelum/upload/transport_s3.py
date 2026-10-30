@@ -22,7 +22,7 @@ from typing import Any
 
 from caelum.config.schema import UploadConfig
 
-from .stats import TransferStats
+from .stats import PullError, TransferStats
 
 logger = logging.getLogger(__name__)
 
@@ -160,14 +160,17 @@ def push_file(cfg: UploadConfig, local_path: Path, remote_relative_path: str,
 
 
 def pull_file(cfg: UploadConfig, remote_relative_path: str, local_path: Path) -> bool:
-    """Fetch one object — used to read back the shared `cameras.json`. Not
-    finding it yet (first camera, first boot) is routine, not a warning."""
+    """Fetch one object. False when it does not exist (first camera, first
+    boot — routine); `PullError` for any other failure (denied, network)."""
     key = _key(cfg, remote_relative_path)
     try:
         _client(cfg).download_file(cfg.s3_bucket, key, str(local_path))
     except Exception as exc:
         if not _is_s3_error(exc):
             raise
-        logger.debug("S3 download of s3://%s/%s failed: %s", cfg.s3_bucket, key, exc)
-        return False
+        code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
+        if code in ("404", "NoSuchKey", "NotFound"):
+            logger.debug("S3 object s3://%s/%s does not exist", cfg.s3_bucket, key)
+            return False
+        raise PullError(f"S3 download of s3://{cfg.s3_bucket}/{key} failed: {exc}") from exc
     return True

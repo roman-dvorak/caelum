@@ -31,7 +31,7 @@ from caelum.capture.frame_store import FrameStore, ProcessedFrame
 from caelum.capture.metadata import OverlayElement
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import StoragePolicyConfig
-from caelum.events import FRAME_CAPTURED, EventBus
+from caelum.events import FRAME_CAPTURED, FRAME_OUTPUTS_COMPLETE, EventBus
 from caelum.storage import paths
 
 from . import overlay_render
@@ -250,6 +250,8 @@ class DerivativePool:
                 self._frame_store.set_overlay(frame.metadata.captured_at, elements, overlay, png)
         except Exception:
             logger.exception("Overlay for the frame captured at %s failed", frame.metadata.captured_at)
+        # Even when a step above failed: what did get written should go out.
+        self._event_bus.publish(FRAME_OUTPUTS_COMPLETE, frame)
 
     def _store_overlay(
         self, frame: ProcessedFrame, policy: StoragePolicyConfig, small: np.ndarray, layer: Image.Image, png: bytes
