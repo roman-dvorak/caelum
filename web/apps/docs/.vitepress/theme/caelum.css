@@ -312,3 +312,168 @@ html:not(.dark) {
   fill: var(--vp-c-bg) !important;
   color: var(--vp-c-text-2) !important;
 }
+
+/* Getting started: a vertical timeline of numbered steps, each with its
+ * links as pills (docs/getting-started.md, `pageClass: getting-started`).
+ * Every step has its own colour from the design system's accents; the number
+ * comes from a CSS counter, so the Markdown stays plain headings and lists. */
+.getting-started {
+  --step-sky: #3a6ec8;
+  --step-teal: #1f8a8a;
+  --step-violet: #6a4ec2;
+  --step-green: #3a8a5a;
+  --step-amber: #c4832a;
+  --step-rose: #b8456a;
+}
+.dark.getting-started,
+.dark .getting-started {
+  --step-sky: #5a8ee8;
+  --step-teal: #3fb0b0;
+  --step-violet: #8f78e0;
+  --step-green: #5cb581;
+  --step-amber: #e8a13a;
+  --step-rose: #e07a9a;
+}
+
+/* Soft colour wash behind the page head. */
+.getting-started .VPDoc {
+  background:
+    radial-gradient(60% 320px at 85% 0, color-mix(in srgb, var(--step-sky) 14%, transparent), transparent),
+    radial-gradient(40% 240px at 100% 0, color-mix(in srgb, var(--step-amber) 10%, transparent), transparent);
+  background-repeat: no-repeat;
+}
+
+.getting-started .vp-doc h1 {
+  font-size: 2.5rem;
+  line-height: 1.15;
+  font-weight: 500;
+}
+.getting-started .vp-doc h1 + p {
+  max-width: 56ch;
+  margin: 16px 0 0;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--vp-c-divider);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .steps {
+  counter-reset: step;
+  margin-top: 40px;
+}
+.vp-doc .step {
+  --c: var(--step-sky);
+  counter-increment: step;
+  position: relative;
+  padding: 0 0 32px 56px;
+}
+.vp-doc .step:nth-child(2) { --c: var(--step-teal); }
+.vp-doc .step:nth-child(3) { --c: var(--step-violet); }
+.vp-doc .step:nth-child(4) { --c: var(--step-green); }
+.vp-doc .step:nth-child(5) { --c: var(--step-rose); }
+.vp-doc .step:nth-child(6) { --c: var(--step-amber); }
+
+.vp-doc .step::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 72%, #000));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 16%, var(--vp-c-bg)), 0 8px 20px -8px var(--c);
+  color: #fff;
+  font: 600 0.9375rem/1 var(--vp-font-family-mono);
+}
+.vp-doc .step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 52px;
+  bottom: 8px;
+  left: 19px;
+  border-left: 2px solid color-mix(in srgb, var(--c) 40%, var(--vp-c-divider));
+}
+
+.vp-doc .step h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.5rem;
+  line-height: 40px;
+}
+.vp-doc .step p {
+  max-width: 60ch;
+  margin: 8px 0 0;
+  color: var(--vp-c-text-2);
+}
+.vp-doc .step img { margin-top: 16px; }
+.vp-doc .step .optional {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  vertical-align: middle;
+  font: 500 0.75rem/1.2 var(--vp-font-family-base);
+  letter-spacing: 0;
+  color: var(--vp-c-text-2);
+}
+
+/* Link pills, with an arrow in the step's colour. */
+.vp-doc .step ul,
+.vp-doc .chips ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.vp-doc .step li,
+.vp-doc .chips li { margin: 0; }
+.vp-doc .step li a,
+.vp-doc .chips li a {
+  --c: var(--step-sky);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 4px 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  min-height: 36px;
+  text-decoration: none;
+}
+.vp-doc .step li a::after,
+.vp-doc .chips li a::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: var(--c);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12H20'/%3E%3Cpath d='M14 6L20 12L14 18'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12H20'/%3E%3Cpath d='M14 6L20 12L14 18'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.vp-doc .step li a:hover,
+.vp-doc .chips li a:hover {
+  border-color: color-mix(in srgb, var(--c) 60%, var(--vp-c-divider));
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.vp-doc .step:nth-child(2) li a { --c: var(--step-teal); }
+.vp-doc .step:nth-child(3) li a { --c: var(--step-violet); }
+.vp-doc .step:nth-child(4) li a { --c: var(--step-green); }
+.vp-doc .step:nth-child(5) li a { --c: var(--step-rose); }
+.vp-doc .step:nth-child(6) li a { --c: var(--step-amber); }
+
+@media (max-width: 640px) {
+  .getting-started .vp-doc h1 { font-size: 2rem; }
+  .vp-doc .step { padding-left: 52px; }
+}

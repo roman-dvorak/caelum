@@ -1,80 +1,122 @@
 ---
 description: 'From a camera to the first night of allsky images: install caelum, log in, set the observing site, check the picture and publish it.'
 sidebar: false
+pageClass: getting-started
 ---
 
 # Getting started
 
-From a camera on a pole to the first night of images, in six steps. Each step
-links to the details when you need them; the [User manual](/manual) explains
-how everything fits together.
+Six steps from a camera on a pole to the first night of images. Each one links
+to the full guide; the [User manual](/manual) explains how everything fits
+together.
 
-## 1. Get a camera
+<div class="steps">
 
-caelum runs on a Raspberry Pi with a camera module, under a dome, outdoors.
-The simplest way is an [AMASC01](/cameras/amasc01) — a finished, weatherproof
-camera with a heated dome and a single PoE+ cable. You can also
-[build your own](/cameras/diy).
+<div class="step">
 
-## 2. Install caelum
+## Get a camera
 
-Installation is one command on the camera's Raspberry Pi. It sets everything
-up and starts caelum, which from then on runs on its own and comes back after
-every power cut.
+caelum runs on a Raspberry Pi with a camera module, under a dome, outdoors. The
+simplest way is an AMASC01 — a finished, weatherproof camera with a heated dome
+and a single PoE+ cable. You can also build your own.
 
-**→ [Installation](/guide/installation)**
+- [AMASC01](/cameras/amasc01)
+- [Build your own](/cameras/diy)
+- [Supported cameras](/cameras/)
 
-Choose the https option there; the web interface is then at
-`https://<camera>/`.
+</div>
 
-## 3. Log in
+<div class="step">
 
-Open the camera's address in a browser. The first time, log in as `admin`
-with the password the installer created — [Installation](/guide/installation#first-login)
-says where to find it — and set your own password under **Accounts**.
+## Install caelum
 
-You will land on the **Dashboard**: the newest frame, the current sky period
-and the exposure caelum has chosen.
+One command on the camera's Raspberry Pi sets everything up and starts caelum,
+which from then on runs on its own and comes back after every power cut.
+Choose the https option; the web interface is then at `https://<camera>/`.
+
+- [Installation](/guide/installation)
+- [Deployment](/guide/deployment)
+- [Running from source](/guide/development)
+
+</div>
+
+<div class="step">
+
+## Log in
+
+Open the camera's address in a browser. The first time, log in as `admin` with
+the password the installer created and set your own under **Accounts**. You
+land on the **Dashboard**: the newest frame, the current sky period and the
+exposure caelum has chosen.
 
 ![The caelum dashboard](/images/screenshots/dashboard.webp)
 
-## 4. Tell it where it is
+- [First login](/guide/installation#first-login)
+- [Access & security](/guide/security)
+- [Web interface](/guide/web-ui)
 
-caelum sets the exposure from where the sun and the moon really are, so it
-has to know where the camera stands. Under **Settings**, fill in the
-**location**: latitude, longitude, elevation and time zone.
+</div>
 
-Until this is right, the camera exposes for somebody else's sky.
+<div class="step">
+
+## Tell it where it is
+
+caelum sets the exposure from where the sun and the moon really are. Under
+**Settings**, fill in the **location**: latitude, longitude, elevation and time
+zone. Until this is right, the camera exposes for somebody else's sky.
 
 ![Settings, with the location section](/images/screenshots/settings.webp)
 
-## 5. Check the picture
+- [Web interface](/guide/web-ui)
+- [Configuration files](/guide/config-files)
+- [Concepts](/guide/concepts)
 
-- **Focus.** Point the camera at the sky and turn the lens until the
-  **focus score** on the Dashboard is as high as it gets.
-- **Exposure.** Leave it alone — caelum adjusts exposure and gain by itself,
-  within limits for each part of the day. On the first evening, watch the sky
-  period change from *day* through the twilights to *night* and the exposure
-  grow with it.
-- **Live view.** **Live stream** shows frames as they come; *stream mode*
-  captures faster while you watch.
+</div>
 
-The camera now captures around the clock: a frame every minute by day and
-every 30 seconds at night, with the full raw data kept for the dark hours.
+<div class="step">
 
-## 6. Share the sky (optional)
+## Check the picture
 
-To keep the images for good and show them to others, let the camera upload to
-a storage server. The [User manual](/manual#where-your-data-goes) explains how
-that works, [Upload & archive](/guide/upload) how to set it up.
+Point the camera at the sky and turn the lens until the **focus score** on the
+Dashboard is as high as it gets. Leave the exposure alone — caelum adjusts it
+and the gain by itself, within limits for each part of the day. **Live stream**
+shows frames as they come. The camera then captures around the clock: a frame
+every minute by day and every 30 seconds at night.
 
-Uploaded nights can be browsed, played as a time-lapse and downloaded in
-**[Caelum Viewer](/viewer)** — which can also read a camera directly on your
+- [Exposure control](/guide/exposure)
+- [Lens & sky overlay](/guide/lens-calibration)
+- [Storage & retention](/guide/storage)
+- [Capture programs](/capture-programs)
+
+</div>
+
+<div class="step">
+
+## Share the sky <span class="optional">optional</span>
+
+To keep the images for good and show them to others, let the camera upload to a
+storage server. Uploaded nights can be browsed, played as a time-lapse and
+downloaded in Caelum Viewer, which can also read a camera directly on your
 local network.
 
-## What next
+- [Upload & archive](/guide/upload)
+- [Caelum Viewer](/viewer)
+- [Where your data goes](/manual#where-your-data-goes)
 
-- [User manual](/manual) — how caelum works and how to operate it day to day.
-- [Web interface](/guide/web-ui) — every page of the camera's interface.
-- [Configuration files](/guide/config-files) — change several settings at once with a small JSON file.
-- [Updates](/guide/updates) — new releases install from the web interface.
+</div>
+
+</div>
+
+## Reference
+
+<div class="chips">
+
+- [User manual](/manual)
+- [Updates](/guide/updates)
+- [Plugins](/guide/plugins)
+- [Capture sets in DNG](/dng-capture-sets)
+
+</div>
+
+Stuck? Read the [User manual](/manual), or open an issue in the
+[repository](https://github.com/roman-dvorak/caelum).
