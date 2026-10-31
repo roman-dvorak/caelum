@@ -642,6 +642,7 @@ export interface AuthContext {
   auth_enabled: boolean
   preview_access: PreviewAccess
   terminal_enabled: boolean
+  camera_name: string
   authenticated: boolean
   username: string | null
   role: string | null

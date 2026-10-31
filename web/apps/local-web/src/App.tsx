@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { HashRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
   AppShell,
@@ -88,6 +88,12 @@ const ADMIN_SECTION: NavSection = {
 // every route at the single "/" document path.
 export default function App() {
   const { context, loading, error, isAuthenticated, isAdmin, logout } = useAuth()
+  const cameraName = context?.camera_name || ''
+
+  // Tab titles are how you tell several cameras apart in a browser.
+  useEffect(() => {
+    document.title = cameraName ? `${cameraName} · caelum` : 'caelum'
+  }, [cameraName])
 
   if (loading) {
     return (
@@ -121,7 +127,7 @@ export default function App() {
     <HashRouter>
       <AppShell
         sections={sections}
-        subtitle={isAdmin ? undefined : 'view only'}
+        subtitle={[cameraName, isAdmin ? '' : 'view only'].filter(Boolean).join(' · ') || undefined}
         renderNavItem={renderNavItem}
         footer={
           <div className="flex flex-col gap-2">

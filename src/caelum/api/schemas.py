@@ -237,6 +237,7 @@ class AuthContextResponse(BaseModel):
     auth_enabled: bool
     preview_access: str
     terminal_enabled: bool
+    camera_name: str = ""
     authenticated: bool
     username: str | None
     role: str | None

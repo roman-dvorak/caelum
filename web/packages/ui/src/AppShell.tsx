@@ -169,8 +169,10 @@ function Wordmark({ subtitle }: { subtitle?: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5 text-on-navy">
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber shadow-glow-amber" />
-      <span className="font-display text-display-sm font-bold tracking-[-0.03em]">caelum</span>
-      {subtitle ? <span className="truncate text-xs opacity-75">{subtitle}</span> : null}
+      <span className="flex min-w-0 flex-col">
+        <span className="font-display text-display-sm font-bold leading-tight tracking-[-0.03em]">caelum</span>
+        {subtitle ? <span className="truncate text-xs opacity-75">{subtitle}</span> : null}
+      </span>
     </span>
   )
 }
