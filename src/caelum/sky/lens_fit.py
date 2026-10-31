@@ -522,6 +522,8 @@ class PairFit:
     errors_px: list[float]
     #: How many numbers were solved for (2 per star are measured).
     parameters: int
+    #: RMS of every projection that was tried (only when more than one was).
+    by_projection: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -529,6 +531,7 @@ class PairFit:
             "rms_px": round(self.rms_px, 2),
             "errors_px": [round(e, 2) for e in self.errors_px],
             "parameters": self.parameters,
+            "by_projection": {k: round(v, 2) for k, v in self.by_projection.items()},
         }
 
 
@@ -539,6 +542,7 @@ def fit_lens_from_pairs(
     free: tuple[str, ...] = ("roll", "tilt", "fov"),
     *,
     try_mirror: bool = False,
+    projections: tuple[str, ...] | None = None,
 ) -> PairFit:
     """Solve the lens from stars the user has matched to their places in the image.
 
@@ -547,6 +551,9 @@ def fit_lens_from_pairs(
     for (`FREE_PARAMETERS`); everything else stays as in `initial`. The roll is
     first searched over the whole circle, so the starting guess need not be
     close; with `try_mirror` both handednesses are tried and the better kept.
+    `projections` lists the lens projections to try (default: only the one in
+    `initial`); with several, each is solved and the one the stars fit best
+    is kept, the others' RMS going into `by_projection`.
     Raises ValueError when the stars cannot determine the chosen unknowns."""
     unknown = [name for name in free if name not in FREE_PARAMETERS]
     if unknown or not free:
@@ -570,19 +577,35 @@ def fit_lens_from_pairs(
         diff = project_to_pixels(alt, az, _with_parameters(base, free, x), size) - target
         return np.nan_to_num(diff, nan=1e3).ravel()
 
+    unknown_projection = [name for name in projections or () if name not in PROJECTIONS]
+    if unknown_projection:
+        raise ValueError(f"Unknown projection {unknown_projection}; choose from {', '.join(PROJECTIONS)}")
+
     best: Lens | None = None
     best_cost = math.inf
-    for mirror in (initial.mirror, not initial.mirror) if try_mirror else (initial.mirror,):
-        start = Lens(**{**initial.__dict__, "mirror": mirror})
-        if "roll" in free:
-            scan = [Lens(**{**start.__dict__, "azimuth_offset_deg": float(r)}) for r in range(0, 360, 5)]
-            start = min(scan, key=lambda trial: float(np.nansum(np.nan_to_num(errors(trial), nan=1e4) ** 2)))
-        solved = _levenberg_marquardt(lambda x, b=start: residuals(x, b), _parameter_vector(start, free), iterations=60)
-        lens = _with_parameters(start, free, solved)
-        lens.tilt_deg = min(lens.tilt_deg, 60.0)
-        cost = float(np.sum(np.nan_to_num(errors(lens), nan=1e4) ** 2))
-        if cost < best_cost:
-            best, best_cost = lens, cost
+    by_projection: dict[str, float] = {}
+    for projection in projections or (initial.projection,):
+        best_here, cost_here = None, math.inf
+        for mirror in (initial.mirror, not initial.mirror) if try_mirror else (initial.mirror,):
+            start = Lens(**{**initial.__dict__, "mirror": mirror, "projection": projection})
+            if "roll" in free:
+                scan = [Lens(**{**start.__dict__, "azimuth_offset_deg": float(r)}) for r in range(0, 360, 5)]
+                start = min(scan, key=lambda trial: float(np.nansum(np.nan_to_num(errors(trial), nan=1e4) ** 2)))
+            solved = _levenberg_marquardt(
+                lambda x, b=start: residuals(x, b), _parameter_vector(start, free), iterations=60
+            )
+            lens = _with_parameters(start, free, solved)
+            lens.tilt_deg = min(lens.tilt_deg, 60.0)
+            cost = float(np.sum(np.nan_to_num(errors(lens), nan=1e4) ** 2))
+            if cost < cost_here:
+                best_here, cost_here = lens, cost
+        assert best_here is not None
+        by_projection[projection] = math.sqrt(cost_here / count)
+        if cost_here < best_cost:
+            best, best_cost = best_here, cost_here
     assert best is not None
     err = errors(best)
-    return PairFit(best, math.sqrt(float(np.mean(err**2))), [float(e) for e in err], parameters)
+    return PairFit(
+        best, math.sqrt(float(np.mean(err**2))), [float(e) for e in err], parameters,
+        by_projection if len(by_projection) > 1 else {},
+    )

@@ -183,3 +183,41 @@ async def test_stored_frame_gives_time_and_place_and_refuses_what_is_not_a_dng(t
             assert await status("x.dng", anonymous) in (401, 403)
     finally:
         await harness.config_manager.stop()
+
+
+async def test_remote_frame_is_fetched_once_then_served_like_a_stored_one(tmp_path, redis_url, monkeypatch):
+    from caelum.api.routes import sky
+
+    xmp = (b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+           b'<rdf:Description xmlns:caelum="https://caelum.astrometers.eu/ns/1.0/" '
+           b'caelum:captured_at="2026-10-30T00:48:40+00:00" caelum:latitude_deg="49.9" '
+           b'caelum:longitude_deg="14.4"/></rdf:RDF></x:xmpmeta>')
+    downloads: list[str] = []
+
+    def fake_download(url, target):
+        downloads.append(url)
+        target.write_bytes(b"not a dng" if url.endswith("bad.dng") else _minimal_dng(xmp))
+
+    monkeypatch.setattr(sky, "_download", fake_download)
+    harness = await _build_harness(tmp_path, redis_url, "sky6")
+    try:
+        async with harness.client() as client:
+            await login(client)
+            link = "https://archive.example.org/raw/2026/10/30/frame.dng"
+            first = await client.post("/api/camera/lens/remote-frame", json={"url": link})
+            assert first.status_code == 200, first.text
+            info = first.json()
+            assert info["captured_at"].startswith("2026-10-30T00:48:40") and info["path"].startswith("lens-frames/")
+            again = await client.post("/api/camera/lens/remote-frame", json={"url": link})
+            assert again.json()["path"] == info["path"] and downloads == [link]
+            image = await client.get("/api/camera/lens/stored-frame/image", params={"path": info["path"]})
+            assert image.status_code == 200
+
+            plain = await client.post("/api/camera/lens/remote-frame", json={"url": "http://example.org/a.dng"})
+            assert plain.status_code == 422
+            bad = await client.post("/api/camera/lens/remote-frame", json={"url": "https://example.org/bad.dng"})
+            assert bad.status_code == 422
+            kept = list((tmp_path / "data" / "lens-frames").glob("*.dng"))
+            assert len(kept) == 1  # the rejected file was not kept
+    finally:
+        await harness.config_manager.stop()

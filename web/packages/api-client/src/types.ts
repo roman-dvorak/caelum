@@ -139,7 +139,7 @@ export type OverlayMode = 'file' | 'burn' | 'off'
 // ---- AppConfig ------------------------------------------------------------
 
 export type { LensConfig, LensProjection } from '@roman-dvorak/caelum-sky'
-import type { LensConfig } from '@roman-dvorak/caelum-sky'
+import type { LensConfig, LensProjection } from '@roman-dvorak/caelum-sky'
 
 /** One star/planet/Sun/Moon over the camera, projected with the configured lens. */
 export interface SkyObject {
@@ -219,6 +219,8 @@ export interface LensPairsRequest {
   pairs: LensStarPair[]
   free?: LensUnknown[]
   try_mirror?: boolean
+  /** Projections to try, the best one wins; omit to keep the lens' own. */
+  projections?: LensProjection[]
   image_width: number
   image_height: number
 }
@@ -230,6 +232,8 @@ export interface LensPairsFit {
   errors_px: number[]
   /** How many numbers were solved for. */
   parameters: number
+  /** RMS (px) of every projection that was tried; empty when only one was. */
+  by_projection: Record<string, number>
 }
 
 /** A stored DNG frame the lens can be calibrated on, with when and where it was taken. */

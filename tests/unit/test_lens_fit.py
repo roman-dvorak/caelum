@@ -10,6 +10,7 @@ import pytest
 
 from caelum.derivatives.projection import altaz_to_fraction
 from caelum.sky.lens_fit import (
+    PROJECTIONS,
     Lens,
     detect_image_circle,
     detect_stars,
@@ -190,3 +191,14 @@ def test_a_wrongly_marked_star_shows_up_as_the_biggest_error():
     marked[4, 2] += 60.0  # one click on the wrong star
     fit = fit_lens_from_pairs(marked, SIZE, Lens(0.5, 0.5, 0.45), ("roll", "tilt"))
     assert int(np.argmax(fit.errors_px)) == 4
+
+
+def test_pairs_pick_the_projection_the_stars_follow():
+    truth = Lens(0.5, 0.5, 0.45, fov_deg=180.0, azimuth_offset_deg=25.0, projection="stereographic_fisheye")
+    start = Lens(0.5, 0.5, 0.45, projection="equidistant_fisheye")
+    fit = fit_lens_from_pairs(_marked_stars(truth, count=16), SIZE, start, ("roll", "fov"), projections=PROJECTIONS)
+    assert fit.lens.projection == "stereographic_fisheye"
+    assert set(fit.by_projection) == set(PROJECTIONS)
+    assert fit.by_projection["stereographic_fisheye"] == min(fit.by_projection.values())
+    with pytest.raises(ValueError, match="Unknown projection"):
+        fit_lens_from_pairs(_marked_stars(truth), SIZE, start, ("roll",), projections=("fisheye",))

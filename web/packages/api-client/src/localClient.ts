@@ -253,6 +253,11 @@ export class LocalApiClient {
     return this.request<StoredFrameInfo>(`/camera/lens/stored-frame?path=${encodeURIComponent(path)}`)
   }
 
+  /** Fetch a DNG from an https link (admin); the camera keeps a copy and the result's `path` works like a stored frame's. */
+  fetchRemoteFrame(url: string): Promise<StoredFrameInfo> {
+    return this.postJson<StoredFrameInfo>('/camera/lens/remote-frame', { url })
+  }
+
   /** Direct URL of a stored DNG as a stretched picture to calibrate on. */
   storedFrameImageUrl(path: string, maxDim = 2048): string {
     return this.apiUrl(`/camera/lens/stored-frame/image?path=${encodeURIComponent(path)}&max_dim=${maxDim}`)

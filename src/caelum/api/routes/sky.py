@@ -12,7 +12,10 @@
 * `POST /camera/lens/fit-pairs` — solve the lens (roll, tilt, field of view…)
   from stars the user has dragged onto their real places in the image;
 * `GET  /camera/lens/stored-frame` and `.../stored-frame/image` — a stored DNG
-  as a picture to calibrate on, with the time and place it was taken at.
+  as a picture to calibrate on, with the time and place it was taken at;
+* `POST /camera/lens/remote-frame` — the same for a DNG behind an https link
+  (e.g. the remote archive): fetched once into `<data>/lens-frames/` and then
+  served like any stored frame.
 
 Nothing here writes configuration: the UI saves a result through
 `PUT /api/config` like any other setting.
@@ -20,9 +23,15 @@ Nothing here writes configuration: the UI saves a result through
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import urllib.error
+import urllib.request
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 import cv2
 import numpy as np
@@ -221,6 +230,9 @@ def fit_stars(
     return {**fit.to_dict(), "frame_time": frame.metadata.captured_at, "image_width": width, "image_height": height}
 
 
+Projection = Literal["equidistant_fisheye", "equisolid_fisheye", "stereographic_fisheye", "orthographic_fisheye"]
+
+
 class PairPoint(BaseModel):
     #: The catalog star's sky position and where it really is in the frame
     #: (fractions of the width / height).
@@ -239,6 +251,8 @@ class FitPairsRequest(BaseModel):
     )
     #: Also try the lens with east and west swapped and keep the better one.
     try_mirror: bool = False
+    #: Projections to try; the one the stars fit best wins. Empty keeps the lens' own.
+    projections: list[Projection] = Field(default_factory=list)
     image_width: int = Field(gt=0, le=65536)
     image_height: int = Field(gt=0, le=65536)
 
@@ -250,7 +264,8 @@ def fit_pairs(body: FitPairsRequest) -> dict:
     pairs = np.array([[p.alt_deg, p.az_deg, p.x * size[0], p.y * size[1]] for p in body.pairs])
     try:
         fit = lens_fit.fit_lens_from_pairs(
-            pairs, size, lens_fit.Lens(**body.lens.model_dump()), tuple(body.free), try_mirror=body.try_mirror
+            pairs, size, lens_fit.Lens(**body.lens.model_dump()), tuple(body.free), try_mirror=body.try_mirror,
+            projections=tuple(body.projections) or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -311,6 +326,61 @@ def get_stored_frame_info(
     settings: Settings = Depends(get_settings),
 ) -> StoredFrameInfo:
     return _read_stored_dng(settings, path)[2]
+
+
+class RemoteFrameRequest(BaseModel):
+    url: str = Field(max_length=2048)
+
+
+_REMOTE_DIR = "lens-frames"
+_REMOTE_MAX_BYTES = 128 * 1024 * 1024
+_REMOTE_TIMEOUT_S = 60
+_REMOTE_KEEP = 8
+
+
+def _download(url: str, target: Path) -> None:
+    """Fetch `url` into `target` (atomically), refusing anything over the size cap."""
+    part = target.with_suffix(".part")
+    try:
+        with urllib.request.urlopen(url, timeout=_REMOTE_TIMEOUT_S) as response, part.open("wb") as out:
+            total = 0
+            while chunk := response.read(1 << 20):
+                total += len(chunk)
+                if total > _REMOTE_MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="The file is larger than 128 MB — not a DNG frame?")
+                out.write(chunk)
+        os.replace(part, target)
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"The server answered {exc.code} {exc.reason}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=f"Could not download the file: {exc}") from exc
+    finally:
+        part.unlink(missing_ok=True)
+
+
+@lens_router.post("/camera/lens/remote-frame", response_model=StoredFrameInfo)
+def fetch_remote_frame(body: RemoteFrameRequest, settings: Settings = Depends(get_settings)) -> StoredFrameInfo:
+    """Fetch a DNG from an https link and make it a stored frame to calibrate on.
+
+    The copy lives in `<data>/lens-frames/` under a name derived from the link
+    (asking again for the same link reuses it); only the newest few are kept."""
+    parsed = urlparse(body.url.strip())
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise HTTPException(status_code=422, detail="Give an https:// link to a DNG file.")
+    directory = settings.data_dir / _REMOTE_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    name = hashlib.sha256(body.url.strip().encode()).hexdigest()[:16] + ".dng"
+    target = directory / name
+    if not target.is_file():
+        _download(body.url.strip(), target)
+    try:
+        info = _read_stored_dng(settings, f"{_REMOTE_DIR}/{name}")[2]
+    except HTTPException:
+        target.unlink(missing_ok=True)  # not a usable DNG: do not keep it
+        raise
+    for old in sorted(directory.glob("*.dng"), key=lambda f: f.stat().st_mtime, reverse=True)[_REMOTE_KEEP:]:
+        old.unlink(missing_ok=True)
+    return info
 
 
 @lens_router.get("/camera/lens/stored-frame/image")

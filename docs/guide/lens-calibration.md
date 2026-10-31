@@ -57,10 +57,16 @@ match the stars yourself in **Mark stars by hand** on the same page:
 4. Keep adding marks if the rings away from the ones you marked are still off,
    then **Save lens**.
 
+**Zoom** the picture to place a mark precisely: the wheel zooms about the pointer, a
+drag on empty sky pans, a double-click (or the `%` button) resets. Marks, rings and
+the star names stay on their stars. The same zoom is on the Dashboard.
+
 *Solve for* chooses what is calculated; everything else is left as it is. The
 default — roll, camera tilt, field of view — is right once the circle is placed
 correctly. The roll is searched over the whole circle, so the first guess may be
 far off, and *Try both handednesses* decides whether the lens mirrors the sky.
+*Find the best projection* solves once for each of the four projections and keeps the
+one the stars fit best (the RMS of each is shown); leave it off when you know the lens.
 The optical centre can be solved too, but it trades off against the tilt: with few
 stars the two are hard to tell apart, so fix the centre unless it is wrong.
 
@@ -71,7 +77,9 @@ solver accepts; five or more, well spread, is what makes the answer trustworthy.
 ### Calibrating on a stored frame
 
 **Stored frame** loads a DNG from the archive (path relative to the data
-directory, e.g. `raw/2026/10/30/20261030-004840.dng`) instead of the live view. The
+directory, e.g. `raw/2026/10/30/20261030-004840.dng`, or an `https://` link to a
+DNG in the remote archive) instead of the live view. A linked file is downloaded by
+the camera once and kept in `lens-frames/` (the newest eight are kept; up to 128 MB). The
 time and the camera's position come from the file. Use it for a good night's frame
 when the one on the live view is not suitable. The automatic *Detect* and *Fit*
 buttons work on the live frame only.
@@ -185,7 +193,8 @@ through `PUT /api/config`).
 | --- | --- |
 | `POST /api/camera/lens/detect-circle` | Image circle of the latest frame. |
 | `POST /api/camera/lens/fit-stars` | `{fit_fov, from_config}` — fit to the stars of the latest frame. |
-| `POST /api/camera/lens/fit-pairs` | `{lens, pairs, free, try_mirror, image_width, image_height}` — solve roll, tilt, field of view, centre and/or radius from stars matched by hand. Each pair is `{alt_deg, az_deg, x, y}` (the star's sky position and its place in the frame, as fractions); the reply has the new `lens`, the `rms_px` and each star's `errors_px`. Needs no frame. |
+| `POST /api/camera/lens/fit-pairs` | `{lens, pairs, free, try_mirror, projections, image_width, image_height}` — solve roll, tilt, field of view, centre and/or radius from stars matched by hand. Each pair is `{alt_deg, az_deg, x, y}` (the star's sky position and its place in the frame, as fractions); the reply has the new `lens`, the `rms_px`, each star's `errors_px` and, when several `projections` were tried, `by_projection`. Needs no frame. |
+| `POST /api/camera/lens/remote-frame` | `{url}` — fetch a DNG from an https link into `lens-frames/`; replies like `stored-frame`, with the `path` to use. |
 | `GET /api/camera/lens/stored-frame` | `?path=` — when and where a stored DNG was taken (its XMP). |
 | `GET /api/camera/lens/stored-frame/image` | `?path=&max_dim=` — the DNG as a stretched PNG to calibrate on. |
 | `GET /api/sky/setup` | Preview level. The lens and the observer's position the Dashboard draws the sky from. |

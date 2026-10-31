@@ -62,6 +62,7 @@ export function Dashboard() {
             src={frame.imageBlobUrl}
             overlaySrc={overlaySrc}
             alt="Live camera feed"
+            zoomable
           >
             {skySetup && skyView.on ? (
               <SkyCanvas

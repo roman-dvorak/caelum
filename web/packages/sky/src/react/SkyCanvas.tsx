@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   compassPoint,
   drawSky,
@@ -8,8 +8,10 @@ import {
   type SkyData,
   type SkyHit,
 } from '../index.ts'
+import { SkyDetailContext } from './detail.ts'
 
 const HIT_RADIUS_PX = 14
+
 
 export interface SkyCanvasProps {
   lens: LensConfig
@@ -28,7 +30,9 @@ export interface SkyCanvasProps {
   interactive?: boolean
   /** Click handler, in frame fractions (the lens page uses it to pick the centre). */
   onPick?: (x: number, y: number) => void
-  /** Drawn after the sky, in CSS pixels — e.g. the stars a fit matched. */
+  /** Overrides `SkyDetailContext`: draw this many times finer than the box. */
+  detail?: number
+  /** Drawn after the sky, in CSS pixels of the (detail-scaled) canvas — e.g. the stars a fit matched. */
   extraDraw?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void
   /**
    * Lets a star's ring be grabbed and dragged onto the real star in the picture
@@ -60,6 +64,8 @@ const TOOLTIP_STYLE: React.CSSProperties = {
 interface Tip {
   x: number
   y: number
+  /** On-screen pixels per layout pixel of the box (the host's zoom): the label is drawn at its natural size. */
+  scale: number
   text: string
 }
 
@@ -90,15 +96,18 @@ export function SkyCanvas({
   onPick,
   extraDraw,
   onStarDrag,
+  detail: detailProp,
 }: SkyCanvasProps) {
+  const contextDetail = useContext(SkyDetailContext)
+  const detail = Math.max(1, detailProp ?? contextDetail)
   const rootRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitsRef = useRef<SkyHit[]>([])
   const [sky, setSky] = useState<SkyData | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [tip, setTip] = useState<Tip | null>(null)
-  // A star being dragged: where it sits on the canvas and where the pointer is (CSS pixels).
-  const [drag, setDrag] = useState<{ hit: SkyHit; x: number; y: number } | null>(null)
+  // A star being dragged: the star (in drawing units) and where the pointer is (layout pixels of the box).
+  const [drag, setDrag] = useState<{ hit: SkyHit; x: number; y: number; scale: number } | null>(null)
 
   useEffect(() => {
     let disposed = false
@@ -134,19 +143,36 @@ export function SkyCanvas({
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx || !sky || size.width === 0) return
     const ratio = window.devicePixelRatio || 1
-    canvas.width = Math.round(size.width * ratio)
-    canvas.height = Math.round(size.height * ratio)
+    const width = size.width * detail
+    const height = size.height * detail
+    canvas.width = Math.round(width * ratio)
+    canvas.height = Math.round(height * ratio)
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    hitsRef.current = drawSky(ctx, size.width, size.height, sky, options)
-    extraDraw?.(ctx, size.width, size.height)
-  }, [sky, size, options, extraDraw])
+    hitsRef.current = drawSky(ctx, width, height, sky, options)
+    extraDraw?.(ctx, width, height)
+  }, [sky, size, options, extraDraw, detail])
 
-  function hitAt(px: number, py: number): SkyHit | null {
+  /**
+   * The pointer in the canvas' own drawing units. The box may be scaled or
+   * panned by the host (CSS transform): its on-screen rectangle then differs
+   * from its layout size, and positions have to be converted back.
+   */
+  function locate(event: React.PointerEvent<HTMLDivElement>) {
+    const root = rootRef.current
+    const rect = root?.getBoundingClientRect()
+    if (!root || !rect || rect.width === 0 || root.clientWidth === 0) return null
+    const screenPerLayout = rect.width / root.clientWidth
+    const lx = (event.clientX - rect.left) / screenPerLayout
+    const ly = (event.clientY - rect.top) / screenPerLayout
+    return { rect, screenPerLayout, lx, ly, dx: lx * detail, dy: ly * detail, screenPerDraw: screenPerLayout / detail }
+  }
+
+  function hitAt(px: number, py: number, screenPerDraw: number): SkyHit | null {
     let best: SkyHit | null = null
     let bestDistance = HIT_RADIUS_PX
     for (const hit of hitsRef.current) {
       // Brighter objects win ties: a bright star next to a faint one is the one asked about.
-      const distance = Math.hypot(hit.x - px, hit.y - py) + hit.mag * 0.4
+      const distance = Math.hypot(hit.x - px, hit.y - py) * screenPerDraw + hit.mag * 0.4
       if (distance < bestDistance) {
         best = hit
         bestDistance = distance
@@ -156,53 +182,54 @@ export function SkyCanvas({
   }
 
   function onMove(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = rootRef.current?.getBoundingClientRect()
-    if (!rect || rect.width === 0) return
-    const px = event.clientX - rect.left
-    const py = event.clientY - rect.top
+    const at = locate(event)
+    if (!at) return
     if (drag) {
-      setDrag({ ...drag, x: px, y: py })
+      setDrag({ ...drag, x: at.lx, y: at.ly, scale: at.screenPerLayout })
       setTip(null)
       return
     }
-    const best = hitAt(px, py)
+    // Positions in `tip` are layout pixels of the box; `scale` undoes the host's zoom for the label.
+    const best = hitAt(at.dx, at.dy, at.screenPerDraw)
     if (best) {
-      setTip({ x: best.x, y: best.y, text: describe(best) })
+      setTip({ x: best.x / detail, y: best.y / detail, scale: at.screenPerLayout, text: describe(best) })
       return
     }
-    const altaz = fractionToAltAz(lens, rect.width / rect.height, px / rect.width, py / rect.height)
+    const altaz = fractionToAltAz(lens, at.rect.width / at.rect.height, (event.clientX - at.rect.left) / at.rect.width, (event.clientY - at.rect.top) / at.rect.height)
     setTip(
       altaz
-        ? { x: px, y: py, text: `alt ${altaz.alt.toFixed(1)}° · az ${altaz.az.toFixed(1)}° ${compassPoint(altaz.az)}` }
+        ? { x: at.lx, y: at.ly, scale: at.screenPerLayout, text: `alt ${altaz.alt.toFixed(1)}° · az ${altaz.az.toFixed(1)}° ${compassPoint(altaz.az)}` }
         : null,
     )
   }
 
   function onDown(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = rootRef.current?.getBoundingClientRect()
-    if (!rect || rect.width === 0) return
+    const at = locate(event)
+    if (!at) return
+    const fx = (event.clientX - at.rect.left) / at.rect.width
+    const fy = (event.clientY - at.rect.top) / at.rect.height
     if (onPick) {
-      onPick((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height)
+      event.stopPropagation() // a click here is a pick, not the start of a pan
+      onPick(fx, fy)
       return
     }
     if (!onStarDrag) return
-    const px = event.clientX - rect.left
-    const py = event.clientY - rect.top
-    const hit = hitAt(px, py)
+    const hit = hitAt(at.dx, at.dy, at.screenPerDraw)
     if (!hit) return
+    event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDrag({ hit, x: px, y: py })
+    setDrag({ hit, x: at.lx, y: at.ly, scale: at.screenPerLayout })
   }
 
   function onUp(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = rootRef.current?.getBoundingClientRect()
-    if (!drag || !rect || rect.width === 0) return
+    const at = locate(event)
+    if (!drag || !at) return
     const { hit } = drag
     setDrag(null)
-    const x = (event.clientX - rect.left) / rect.width
-    const y = (event.clientY - rect.top) / rect.height
+    const x = (event.clientX - at.rect.left) / at.rect.width
+    const y = (event.clientY - at.rect.top) / at.rect.height
     // Let go on the ring itself (a click) is not a move.
-    if (Math.hypot(event.clientX - rect.left - hit.x, event.clientY - rect.top - hit.y) < 3) return
+    if (Math.hypot(at.dx - hit.x, at.dy - hit.y) * at.screenPerDraw < 3) return
     if (x >= 0 && x <= 1 && y >= 0 && y <= 1) onStarDrag?.(hit, x, y)
   }
 
@@ -229,12 +256,21 @@ export function SkyCanvas({
       />
       {drag ? (
         <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-          <line x1={drag.hit.x} y1={drag.hit.y} x2={drag.x} y2={drag.y} stroke="#7CFC9A" strokeWidth={1.5} />
-          <circle cx={drag.x} cy={drag.y} r={5} fill="none" stroke="#7CFC9A" strokeWidth={1.5} />
+          <line x1={drag.hit.x / detail} y1={drag.hit.y / detail} x2={drag.x} y2={drag.y} stroke="#7CFC9A" strokeWidth={1.5 / drag.scale} />
+          <circle cx={drag.x} cy={drag.y} r={5 / drag.scale} fill="none" stroke="#7CFC9A" strokeWidth={1.5 / drag.scale} />
         </svg>
       ) : null}
       {tip ? (
-        <div role="tooltip" style={{ ...TOOLTIP_STYLE, left: tip.x, top: tip.y + 14 }}>
+        <div
+          role="tooltip"
+          style={{
+            ...TOOLTIP_STYLE,
+            left: tip.x,
+            top: tip.y + 14 / tip.scale,
+            transform: `translateX(-50%) scale(${1 / tip.scale})`,
+            transformOrigin: 'top center',
+          }}
+        >
           {tip.text}
         </div>
       ) : null}

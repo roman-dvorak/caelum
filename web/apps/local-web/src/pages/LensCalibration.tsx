@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Field,
+  ImageViewer,
   Message,
   PageHeader,
   Panel,
@@ -108,6 +109,7 @@ export function LensCalibration() {
   const [pairs, setPairs] = useState<Pair[]>([])
   const [free, setFree] = useState<LensUnknown[]>(['roll', 'tilt', 'fov'])
   const [tryMirror, setTryMirror] = useState(true)
+  const [tryProjections, setTryProjections] = useState(false)
   const [pairFit, setPairFit] = useState<LensPairsFit | null>(null)
   const [imageSize, setImageSize] = useState({ width: 4, height: 3 })
   const imgRef = useRef<HTMLImageElement>(null)
@@ -248,10 +250,11 @@ export function LensCalibration() {
 
   const loadStored = () =>
     run('stored', async () => {
-      const path = storedPath.trim()
-      const info = await localApiClient.getStoredFrame(path)
+      const given = storedPath.trim()
+      // An https link is fetched by the camera and kept as a stored frame; anything else is a path in the data directory.
+      const info = /^https:\/\//i.test(given) ? await localApiClient.fetchRemoteFrame(given) : await localApiClient.getStoredFrame(given)
       releaseFrozen()
-      setStored({ info, url: localApiClient.storedFrameImageUrl(path) })
+      setStored({ info, url: localApiClient.storedFrameImageUrl(info.path) })
       setPairs([])
       setPairFit(null)
       setMessage({
@@ -267,6 +270,7 @@ export function LensCalibration() {
         pairs: pairs.map((p) => ({ alt_deg: p.alt, az_deg: p.az, x: p.x, y: p.y })),
         free,
         try_mirror: tryMirror,
+        projections: tryProjections ? PROJECTIONS.map((p) => p.value) : undefined,
         image_width: shown?.sensor?.width ?? imageSize.width,
         image_height: shown?.sensor?.height ?? imageSize.height,
       })
@@ -402,15 +406,13 @@ export function LensCalibration() {
         bodyClassName="p-0"
       >
         {shown ? (
-          <div className="relative leading-none">
-            <img
-              ref={imgRef}
-              src={shown.url}
-              alt="Frame to calibrate on"
-              className="block h-auto w-full"
-              onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
-              onError={() => stored && setMessage({ kind: 'error', text: `Could not load the picture of ${stored.info.path}.` })}
-            />
+          <ImageViewer
+            src={shown.url}
+            alt="Frame to calibrate on"
+            imgRef={imgRef}
+            zoomable
+            onImageLoad={(img) => setImageSize({ width: img.naturalWidth, height: img.naturalHeight })}
+          >
             {skySetup && skyView.on ? (
               <SkyCanvas
                 lens={lens}
@@ -427,7 +429,7 @@ export function LensCalibration() {
                 extraDraw={drawMarks}
               />
             ) : null}
-          </div>
+          </ImageViewer>
         ) : (
           <div className="flex aspect-video items-center justify-center text-sm text-ink-muted">
             {streamStatus === 'connecting' ? 'Connecting to live stream…' : 'Waiting for first frame…'}
@@ -451,6 +453,10 @@ export function LensCalibration() {
             <label className="flex items-center gap-2 text-sm text-ink select-none">
               <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} className="accent-amber" />
               Snap to the star under the pointer
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink select-none" title="Solve once for each of the four projections and keep the one the stars fit best">
+              <input type="checkbox" checked={tryProjections} onChange={(e) => setTryProjections(e.target.checked)} className="accent-amber" />
+              Find the best projection
             </label>
             <label className="flex items-center gap-2 text-sm text-ink select-none">
               <input type="checkbox" checked={tryMirror} onChange={(e) => setTryMirror(e.target.checked)} className="accent-amber" />
@@ -483,6 +489,14 @@ export function LensCalibration() {
               <Readout label="Stars / unknowns" value={`${pairs.length} / ${pairFit.parameters}`} />
               <Readout label="Camera tilt" value={`${(pairFit.lens.tilt_deg ?? 0).toFixed(2)}°`} />
               <Readout label="Leaning towards" value={pairFit.lens.tilt_deg ? compass(pairFit.lens.tilt_azimuth_deg ?? 0) : '—'} />
+              {Object.keys(pairFit.by_projection).length > 0 ? (
+                <Readout
+                  label="Projections (RMS px)"
+                  value={Object.entries(pairFit.by_projection)
+                    .map(([name, rms]) => `${name.replace('_fisheye', '')} ${rms.toFixed(1)}`)
+                    .join(' · ')}
+                />
+              ) : null}
             </div>
           ) : null}
           {pairs.length > 0 ? (
@@ -509,14 +523,15 @@ export function LensCalibration() {
         <div className="flex flex-col gap-3">
           <p className="text-sm text-ink-muted">
             Calibrate on a frame from the archive instead of the live view — for example a good night’s DNG. Its time and the camera’s position are
-            read from the file. Give the path relative to the data directory, e.g. <code>raw/2026/10/30/20261030-004840.dng</code>.
+            read from the file. Give the path relative to the data directory, e.g. <code>raw/2026/10/30/20261030-004840.dng</code>, or an{' '}
+            <code>https://</code> link to a DNG (the remote archive): the camera downloads it once and keeps the copy in <code>lens-frames/</code>.
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <input
               type="text"
               value={storedPath}
               onChange={(e) => setStoredPath(e.target.value)}
-              placeholder="raw/YYYY/MM/DD/…dng"
+              placeholder="raw/YYYY/MM/DD/…dng  or  https://…/frame.dng"
               className={`${inputClass} w-full max-w-xl font-mono`}
             />
             <Button onClick={() => void loadStored()} disabled={busy !== null || storedPath.trim() === ''}>
