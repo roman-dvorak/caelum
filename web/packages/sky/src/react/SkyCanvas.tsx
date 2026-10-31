@@ -30,6 +30,12 @@ export interface SkyCanvasProps {
   onPick?: (x: number, y: number) => void
   /** Drawn after the sky, in CSS pixels — e.g. the stars a fit matched. */
   extraDraw?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void
+  /**
+   * Lets a star's ring be grabbed and dragged onto the real star in the picture
+   * (a line follows the pointer). Called on release with the star and where it
+   * was dropped, in frame fractions. Ignored while `onPick` is set.
+   */
+  onStarDrag?: (hit: SkyHit, x: number, y: number) => void
 }
 
 // Inline styles, so the component looks right in any app — with or without
@@ -83,6 +89,7 @@ export function SkyCanvas({
   interactive = false,
   onPick,
   extraDraw,
+  onStarDrag,
 }: SkyCanvasProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -90,6 +97,8 @@ export function SkyCanvas({
   const [sky, setSky] = useState<SkyData | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [tip, setTip] = useState<Tip | null>(null)
+  // A star being dragged: where it sits on the canvas and where the pointer is (CSS pixels).
+  const [drag, setDrag] = useState<{ hit: SkyHit; x: number; y: number } | null>(null)
 
   useEffect(() => {
     let disposed = false
@@ -132,11 +141,7 @@ export function SkyCanvas({
     extraDraw?.(ctx, size.width, size.height)
   }, [sky, size, options, extraDraw])
 
-  function onMove(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = rootRef.current?.getBoundingClientRect()
-    if (!rect || rect.width === 0) return
-    const px = event.clientX - rect.left
-    const py = event.clientY - rect.top
+  function hitAt(px: number, py: number): SkyHit | null {
     let best: SkyHit | null = null
     let bestDistance = HIT_RADIUS_PX
     for (const hit of hitsRef.current) {
@@ -147,6 +152,20 @@ export function SkyCanvas({
         bestDistance = distance
       }
     }
+    return best
+  }
+
+  function onMove(event: React.PointerEvent<HTMLDivElement>) {
+    const rect = rootRef.current?.getBoundingClientRect()
+    if (!rect || rect.width === 0) return
+    const px = event.clientX - rect.left
+    const py = event.clientY - rect.top
+    if (drag) {
+      setDrag({ ...drag, x: px, y: py })
+      setTip(null)
+      return
+    }
+    const best = hitAt(px, py)
     if (best) {
       setTip({ x: best.x, y: best.y, text: describe(best) })
       return
@@ -161,8 +180,30 @@ export function SkyCanvas({
 
   function onDown(event: React.PointerEvent<HTMLDivElement>) {
     const rect = rootRef.current?.getBoundingClientRect()
-    if (!onPick || !rect || rect.width === 0) return
-    onPick((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height)
+    if (!rect || rect.width === 0) return
+    if (onPick) {
+      onPick((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height)
+      return
+    }
+    if (!onStarDrag) return
+    const px = event.clientX - rect.left
+    const py = event.clientY - rect.top
+    const hit = hitAt(px, py)
+    if (!hit) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDrag({ hit, x: px, y: py })
+  }
+
+  function onUp(event: React.PointerEvent<HTMLDivElement>) {
+    const rect = rootRef.current?.getBoundingClientRect()
+    if (!drag || !rect || rect.width === 0) return
+    const { hit } = drag
+    setDrag(null)
+    const x = (event.clientX - rect.left) / rect.width
+    const y = (event.clientY - rect.top) / rect.height
+    // Let go on the ring itself (a click) is not a move.
+    if (Math.hypot(event.clientX - rect.left - hit.x, event.clientY - rect.top - hit.y) < 3) return
+    if (x >= 0 && x <= 1 && y >= 0 && y <= 1) onStarDrag?.(hit, x, y)
   }
 
   return (
@@ -172,17 +213,26 @@ export function SkyCanvas({
         position: 'absolute',
         inset: 0,
         pointerEvents: interactive ? 'auto' : 'none',
-        cursor: onPick ? 'crosshair' : undefined,
+        cursor: onPick ? 'crosshair' : drag ? 'grabbing' : undefined,
+        touchAction: onStarDrag ? 'none' : undefined,
       }}
       onPointerMove={interactive ? onMove : undefined}
       onPointerLeave={interactive ? () => setTip(null) : undefined}
       onPointerDown={interactive ? onDown : undefined}
+      onPointerUp={interactive ? onUp : undefined}
+      onPointerCancel={interactive ? () => setDrag(null) : undefined}
     >
       <canvas
         ref={canvasRef}
         aria-hidden
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity }}
       />
+      {drag ? (
+        <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+          <line x1={drag.hit.x} y1={drag.hit.y} x2={drag.x} y2={drag.y} stroke="#7CFC9A" strokeWidth={1.5} />
+          <circle cx={drag.x} cy={drag.y} r={5} fill="none" stroke="#7CFC9A" strokeWidth={1.5} />
+        </svg>
+      ) : null}
       {tip ? (
         <div role="tooltip" style={{ ...TOOLTIP_STYLE, left: tip.x, top: tip.y + 14 }}>
           {tip.text}

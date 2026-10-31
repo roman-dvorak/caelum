@@ -41,7 +41,7 @@ class _Projector:
     def __init__(self, params: dict[str, Any], aspect: float) -> None:
         self.lens = LensConfig.model_validate(params["lens"])
         self.aspect = aspect
-        self.horizon = 90.0 - self.lens.fov_deg / 2.0
+        self.horizon = 90.0 - self.lens.fov_deg / 2.0 - self.lens.tilt_deg
 
     def __call__(self, alt: float, az: float) -> tuple[float, float] | None:
         point = project_altaz_to_pixel(alt, az, self.lens, self.aspect)

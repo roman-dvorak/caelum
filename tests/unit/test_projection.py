@@ -87,3 +87,33 @@ def test_wide_lens_sees_below_the_horizon_but_not_past_its_edge():
     assert altaz_to_fraction(-6.0, 0.0, **cal) is None
     horizon = altaz_to_fraction(0.0, 0.0, **cal)
     assert 0.5 - horizon.y < 0.48  # the horizon lies inside the circle's edge
+
+
+_TILTED = dict(center_x=0.5, center_y=0.5, radius=0.45, azimuth_offset_deg=20.0, mirror=True, aspect=4 / 3,
+               fov_deg=185.0, projection="equisolid_fisheye", tilt_deg=8.0, tilt_azimuth_deg=135.0)
+
+
+def test_the_tilted_optical_axis_lands_in_the_middle_of_the_frame():
+    # The camera leans 8 degrees towards the south-east: it looks at altitude 82, azimuth 135.
+    point = altaz_to_fraction(82.0, 135.0, **_TILTED)
+    assert (point.x, point.y) == pytest.approx((0.5, 0.5), abs=1e-9)
+
+
+def test_the_zenith_moves_away_from_the_centre_when_tilted():
+    zenith = altaz_to_fraction(90.0, 0.0, **_TILTED)
+    assert abs(zenith.x - 0.5) + abs(zenith.y - 0.5) > 0.01
+
+
+@pytest.mark.parametrize("alt_deg,az_deg", [(80.0, 10.0), (45.0, 200.0), (15.0, 300.0), (90.0, 0.0), (3.0, 135.0)])
+def test_tilted_lens_round_trips(alt_deg, az_deg):
+    point = altaz_to_fraction(alt_deg, az_deg, **_TILTED)
+    assert point is not None
+    back = fraction_to_altaz(point.x, point.y, **{k: v for k, v in _TILTED.items()})
+    assert back[0] == pytest.approx(alt_deg, abs=1e-6)
+    assert (back[1] - az_deg + 180.0) % 360.0 - 180.0 == pytest.approx(0.0, abs=1e-6) or alt_deg == 90.0
+
+
+def test_zero_tilt_is_the_untilted_lens():
+    plain = {k: v for k, v in _TILTED.items() if not k.startswith("tilt")}
+    tilted = altaz_to_fraction(40.0, 77.0, **plain, tilt_deg=0.0, tilt_azimuth_deg=250.0)
+    assert tilted == altaz_to_fraction(40.0, 77.0, **plain)

@@ -14,6 +14,11 @@ export interface LensConfig {
   radius: number
   /** Field of view across the image circle (180: its edge is the horizon). */
   fov_deg: number
+  /** Roll of the image about the optical axis — against true north when the camera looks at the zenith. */
   azimuth_offset_deg: number
   mirror: boolean
+  /** How far the optical axis leans from the zenith (default 0: straight up) … */
+  tilt_deg?: number
+  /** … and towards which compass azimuth. */
+  tilt_azimuth_deg?: number
 }

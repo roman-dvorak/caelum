@@ -248,6 +248,14 @@ def _widen(entry: tuple[int, int, bytes]) -> bytes:
     return value
 
 
+def xmp_packet(data: bytes) -> bytes | None:
+    """The XMP packet of IFD0 (caelum's capture metadata lives in it), if any."""
+    values = _get(data, _ifd0(data), _TAG_XMP)
+    if not values:
+        return None
+    return bytes(values[0]) if isinstance(values[0], bytes) else bytes(values)
+
+
 def read_info(path: Path) -> DngInfo:
     return parse(path.read_bytes())
 

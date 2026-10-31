@@ -61,6 +61,9 @@ class Lens:
     azimuth_offset_deg: float = 0.0
     mirror: bool = False
     projection: str = "equidistant_fisheye"
+    #: The optical axis leans this far from the zenith, towards this azimuth.
+    tilt_deg: float = 0.0
+    tilt_azimuth_deg: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -71,17 +74,34 @@ class Lens:
             "fov_deg": round(self.fov_deg, 2),
             "azimuth_offset_deg": round(self.azimuth_offset_deg % 360.0, 2),
             "mirror": self.mirror,
+            "tilt_deg": round(self.tilt_deg, 3),
+            "tilt_azimuth_deg": round(self.tilt_azimuth_deg % 360.0, 2),
         }
+
+
+def _to_camera(
+    alt_deg: np.ndarray, az_deg: np.ndarray, tilt_deg: float, tilt_azimuth_deg: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Angle off the optical axis and azimuth around it (radians); the array
+    form of `derivatives.projection.sky_to_camera`."""
+    alt, az = np.radians(np.asarray(alt_deg, dtype=float)), np.radians(np.asarray(az_deg, dtype=float))
+    if tilt_deg == 0.0:
+        return np.pi / 2.0 - alt, az
+    e = np.stack([np.sin(az) * np.cos(alt), np.cos(az) * np.cos(alt), np.sin(alt)], axis=-1)
+    t, ta = math.radians(tilt_deg), math.radians(tilt_azimuth_deg)
+    u = np.array([math.cos(ta), -math.sin(ta), 0.0])
+    rotated = e * math.cos(t) + np.cross(u, e) * math.sin(t) + np.outer(e @ u, u) * (1.0 - math.cos(t))
+    return np.arccos(np.clip(rotated[..., 2], -1.0, 1.0)), np.arctan2(rotated[..., 0], rotated[..., 1])
 
 
 def project_to_pixels(alt_deg: np.ndarray, az_deg: np.ndarray, lens: Lens, size: tuple[int, int]) -> np.ndarray:
     """(N, 2) pixel coordinates; NaN for directions the lens cannot see."""
     width, height = size
     theta_max = math.radians(lens.fov_deg) / 2.0
-    theta = np.radians(90.0 - np.asarray(alt_deg, dtype=float))
+    theta, azimuth = _to_camera(alt_deg, az_deg, lens.tilt_deg, lens.tilt_azimuth_deg)
     visible = theta <= theta_max + 1e-9
     r = lens.radius * min(width, height) * _radial_fraction(lens.projection, np.where(visible, theta, 0.0), theta_max)
-    phi = np.radians(np.asarray(az_deg, dtype=float) + lens.azimuth_offset_deg)
+    phi = azimuth + math.radians(lens.azimuth_offset_deg)
     if lens.mirror:
         phi = -phi
     x = lens.center_x * width + r * np.sin(phi)
@@ -443,3 +463,126 @@ def fit_lens_from_stars(
     best = min(solid, key=lambda r: r.rms_px)
     best.by_projection = {r.lens.projection: r.rms_px for r in results}
     return best
+
+
+# ---- fitting to stars the user has matched by hand ---------------------------
+
+#: What `fit_lens_from_pairs` may solve for, and the `Lens` fields each stands for.
+#: The tilt is solved as its east and north components: the azimuth it leans
+#: towards means nothing at zero tilt, which would stall the fit there.
+FREE_PARAMETERS = ("roll", "tilt", "center", "fov", "radius")
+
+
+def _parameter_vector(lens: Lens, free: tuple[str, ...]) -> np.ndarray:
+    values: list[float] = []
+    for name in free:
+        if name == "roll":
+            values.append(lens.azimuth_offset_deg)
+        elif name == "tilt":
+            ta = math.radians(lens.tilt_azimuth_deg)
+            values += [lens.tilt_deg * math.sin(ta), lens.tilt_deg * math.cos(ta)]
+        elif name == "center":
+            values += [lens.center_x, lens.center_y]
+        elif name == "fov":
+            values.append(lens.fov_deg)
+        elif name == "radius":
+            values.append(lens.radius)
+    return np.array(values, dtype=float)
+
+
+def _with_parameters(lens: Lens, free: tuple[str, ...], x: np.ndarray) -> Lens:
+    out = Lens(**lens.__dict__)
+    i = 0
+    for name in free:
+        if name == "roll":
+            out.azimuth_offset_deg = float(x[i])
+            i += 1
+        elif name == "tilt":
+            east, north = float(x[i]), float(x[i + 1])
+            out.tilt_deg = math.hypot(east, north)
+            out.tilt_azimuth_deg = math.degrees(math.atan2(east, north)) % 360.0 if out.tilt_deg > 0.0 else 0.0
+            i += 2
+        elif name == "center":
+            out.center_x, out.center_y = float(x[i]), float(x[i + 1])
+            i += 2
+        elif name == "fov":
+            out.fov_deg = float(x[i])
+            i += 1
+        elif name == "radius":
+            out.radius = float(x[i])
+            i += 1
+    return out
+
+
+@dataclass
+class PairFit:
+    lens: Lens
+    rms_px: float
+    #: Distance in pixels between where the fitted lens puts each star and where it was marked, in the order given.
+    errors_px: list[float]
+    #: How many numbers were solved for (2 per star are measured).
+    parameters: int
+
+    def to_dict(self) -> dict:
+        return {
+            "lens": self.lens.to_dict(),
+            "rms_px": round(self.rms_px, 2),
+            "errors_px": [round(e, 2) for e in self.errors_px],
+            "parameters": self.parameters,
+        }
+
+
+def fit_lens_from_pairs(
+    pairs: np.ndarray,
+    size: tuple[int, int],
+    initial: Lens,
+    free: tuple[str, ...] = ("roll", "tilt", "fov"),
+    *,
+    try_mirror: bool = False,
+) -> PairFit:
+    """Solve the lens from stars the user has matched to their places in the image.
+
+    `pairs` is (N, 4): altitude, azimuth (degrees) of the catalog star and
+    where it really is in the frame, in pixels. `free` names what to solve
+    for (`FREE_PARAMETERS`); everything else stays as in `initial`. The roll is
+    first searched over the whole circle, so the starting guess need not be
+    close; with `try_mirror` both handednesses are tried and the better kept.
+    Raises ValueError when the stars cannot determine the chosen unknowns."""
+    unknown = [name for name in free if name not in FREE_PARAMETERS]
+    if unknown or not free:
+        raise ValueError(f"Cannot solve for {unknown or 'nothing'}; choose from {', '.join(FREE_PARAMETERS)}")
+    free = tuple(dict.fromkeys(free))
+    pairs = np.asarray(pairs, dtype=float)
+    count = len(pairs)
+    parameters = len(_parameter_vector(initial, free))
+    if 2 * count < parameters + 1:
+        raise ValueError(
+            f"{count} star{'s' if count != 1 else ''} fix {2 * count} numbers, too few for {parameters} unknowns "
+            f"({', '.join(free)}) — mark more stars or solve for fewer things."
+        )
+    alt, az, target = pairs[:, 0], pairs[:, 1], pairs[:, 2:4]
+
+    def errors(lens: Lens) -> np.ndarray:
+        diff = project_to_pixels(alt, az, lens, size) - target
+        return np.hypot(diff[:, 0], diff[:, 1])
+
+    def residuals(x: np.ndarray, base: Lens) -> np.ndarray:
+        diff = project_to_pixels(alt, az, _with_parameters(base, free, x), size) - target
+        return np.nan_to_num(diff, nan=1e3).ravel()
+
+    best: Lens | None = None
+    best_cost = math.inf
+    for mirror in (initial.mirror, not initial.mirror) if try_mirror else (initial.mirror,):
+        start = Lens(**{**initial.__dict__, "mirror": mirror})
+        if "roll" in free:
+            scan = [Lens(**{**start.__dict__, "azimuth_offset_deg": float(r)}) for r in range(0, 360, 5)]
+            start = min(scan, key=lambda trial: float(np.nansum(np.nan_to_num(errors(trial), nan=1e4) ** 2)))
+        solved = _levenberg_marquardt(lambda x, b=start: residuals(x, b), _parameter_vector(start, free), iterations=60)
+        lens = _with_parameters(start, free, solved)
+        lens.tilt_deg = min(lens.tilt_deg, 60.0)
+        cost = float(np.sum(np.nan_to_num(errors(lens), nan=1e4) ** 2))
+        if cost < best_cost:
+            best, best_cost = lens, cost
+    assert best is not None
+    err = errors(best)
+    return PairFit(best, math.sqrt(float(np.mean(err**2))), [float(e) for e in err], parameters)

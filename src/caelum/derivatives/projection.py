@@ -56,6 +56,48 @@ def _inverse_radial_fraction(projection: str, fraction: float, theta_max: float)
     return target
 
 
+def _tilt_vector(tilt_deg: float, tilt_azimuth_deg: float) -> tuple[float, float, float, float, float]:
+    """(ux, uy, uz, sin t, cos t): the axis and angle of the rotation that
+    takes the tilted optical axis back to the zenith. The camera looks at
+    altitude `90 - tilt` towards azimuth `tilt_azimuth`; the axis is
+    horizontal, perpendicular to that direction."""
+    t = math.radians(tilt_deg)
+    ta = math.radians(tilt_azimuth_deg)
+    return math.cos(ta), -math.sin(ta), 0.0, math.sin(t), math.cos(t)
+
+
+def _rotate(
+    v: tuple[float, float, float], u: tuple[float, float, float], sin_a: float, cos_a: float
+) -> tuple[float, float, float]:
+    """Rodrigues: `v` rotated by the angle (given as sin, cos) about the unit axis `u`."""
+    dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+    cross = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+    return tuple(v[i] * cos_a + cross[i] * sin_a + u[i] * dot * (1.0 - cos_a) for i in range(3))  # type: ignore[return-value]
+
+
+def sky_to_camera(alt_deg: float, az_deg: float, tilt_deg: float, tilt_azimuth_deg: float) -> tuple[float, float]:
+    """(angle off the optical axis, azimuth around it), both in radians, for a
+    sky direction. With no tilt the axis is the zenith, so these are the zenith
+    angle and the azimuth itself."""
+    if tilt_deg == 0.0:
+        return math.radians(90.0 - alt_deg), math.radians(az_deg)
+    alt, az = math.radians(alt_deg), math.radians(az_deg)
+    e = (math.sin(az) * math.cos(alt), math.cos(az) * math.cos(alt), math.sin(alt))
+    ux, uy, uz, sin_t, cos_t = _tilt_vector(tilt_deg, tilt_azimuth_deg)
+    x, y, z = _rotate(e, (ux, uy, uz), sin_t, cos_t)
+    return math.acos(max(-1.0, min(1.0, z))), math.atan2(x, y)
+
+
+def camera_to_sky(theta: float, phi: float, tilt_deg: float, tilt_azimuth_deg: float) -> tuple[float, float]:
+    """Inverse of `sky_to_camera`: (altitude, azimuth) in degrees, azimuth 0..360."""
+    if tilt_deg == 0.0:
+        return 90.0 - math.degrees(theta), math.degrees(phi) % 360.0
+    e = (math.sin(theta) * math.sin(phi), math.sin(theta) * math.cos(phi), math.cos(theta))
+    ux, uy, uz, sin_t, cos_t = _tilt_vector(tilt_deg, tilt_azimuth_deg)
+    x, y, z = _rotate(e, (ux, uy, uz), -sin_t, cos_t)
+    return math.degrees(math.asin(max(-1.0, min(1.0, z)))), math.degrees(math.atan2(x, y)) % 360.0
+
+
 def _axis_scales(aspect: float) -> tuple[float, float]:
     """Fractions of the image width/height that one unit of `radius` spans.
 
@@ -79,20 +121,25 @@ def altaz_to_fraction(
     aspect: float = 1.0,
     fov_deg: float = 180.0,
     projection: str = "equidistant_fisheye",
+    tilt_deg: float = 0.0,
+    tilt_azimuth_deg: float = 0.0,
 ) -> Point | None:
-    """Allsky fisheye projection. The optical axis points at the zenith, so
-    the zenith angle (90 - altitude) goes through the lens' radial function
-    and the direction comes straight from azimuth. `radius` is the edge of
+    """Allsky fisheye projection. The optical axis points at the zenith — or,
+    with `tilt_deg`, that far from it towards azimuth `tilt_azimuth_deg` — so
+    the angle off the axis (the zenith angle, 90 - altitude, when it is
+    straight up) goes through the lens' radial function and the direction
+    comes from the azimuth around the axis; `azimuth_offset_deg` is the roll
+    of the image about the axis. `radius` is the edge of
     the image circle, which is where the zenith angle reaches `fov_deg / 2`
     (the horizon, for a 180 degree lens). Returns None for anything the lens
     cannot see (below the horizon on a 180 degree lens, outside the circle
     on a wider one) — there is nothing to draw."""
     theta_max = math.radians(fov_deg) / 2.0
-    theta = math.radians(90.0 - alt_deg)
+    theta, azimuth = sky_to_camera(alt_deg, az_deg, tilt_deg, tilt_azimuth_deg)
     if theta > theta_max + 1e-9:
         return None
     r = radius * _radial_fraction(projection, theta, theta_max)
-    phi = math.radians(az_deg + azimuth_offset_deg)
+    phi = azimuth + math.radians(azimuth_offset_deg)
     if mirror:
         phi = -phi
     sx, sy = _axis_scales(aspect)
@@ -111,6 +158,8 @@ def fraction_to_altaz(
     aspect: float = 1.0,
     fov_deg: float = 180.0,
     projection: str = "equidistant_fisheye",
+    tilt_deg: float = 0.0,
+    tilt_azimuth_deg: float = 0.0,
 ) -> tuple[float, float] | None:
     """Inverse of `altaz_to_fraction`. Returns None outside the calibrated
     image circle (including a degenerate `radius <= 0`, which encloses
@@ -126,16 +175,17 @@ def fraction_to_altaz(
     phi = math.atan2(dx, dy)
     if mirror:
         phi = -phi
-    az_deg = (math.degrees(phi) - azimuth_offset_deg) % 360.0
+    azimuth = phi - math.radians(azimuth_offset_deg)
     theta = _inverse_radial_fraction(projection, r / radius, math.radians(fov_deg) / 2.0)
-    return 90.0 - math.degrees(theta), az_deg
+    return camera_to_sky(theta, azimuth, tilt_deg, tilt_azimuth_deg)
 
 
 class _CalibrationLike(Protocol):
     """Structural shape shared by `LensConfig` and `TelescopePositionSettings`
     — matched by attribute, not by inheritance, so this module stays free of
     a dependency on either's home package. Settings objects without `fov_deg`
-    / `projection` are treated as a plain 180 degree equidistant lens."""
+    / `projection` / `tilt_*` are treated as a plain 180 degree equidistant lens
+    looking at the zenith."""
 
     center_x: float
     center_y: float
@@ -154,6 +204,8 @@ def _kwargs(calibration: _CalibrationLike, aspect: float) -> dict:
         "aspect": aspect,
         "fov_deg": getattr(calibration, "fov_deg", 180.0),
         "projection": getattr(calibration, "projection", "equidistant_fisheye"),
+        "tilt_deg": getattr(calibration, "tilt_deg", 0.0),
+        "tilt_azimuth_deg": getattr(calibration, "tilt_azimuth_deg", 0.0),
     }
 
 

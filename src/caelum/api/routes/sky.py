@@ -8,7 +8,11 @@
 * `POST /sky/objects`        — the same for a lens given in the request, so
   the calibration page can show a candidate before it is saved;
 * `POST /camera/lens/detect-circle` and `POST /camera/lens/fit-stars` — find
-  the lens geometry from the latest frame (admin; see `sky/lens_fit.py`).
+  the lens geometry from the latest frame (admin; see `sky/lens_fit.py`);
+* `POST /camera/lens/fit-pairs` — solve the lens (roll, tilt, field of view…)
+  from stars the user has dragged onto their real places in the image;
+* `GET  /camera/lens/stored-frame` and `.../stored-frame/image` — a stored DNG
+  as a picture to calibrate on, with the time and place it was taken at.
 
 Nothing here writes configuration: the UI saves a result through
 `PUT /api/config` like any other setting.
@@ -16,18 +20,23 @@ Nothing here writes configuration: the UI saves a result through
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from typing import Literal
 
+import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from caelum.api.deps import get_config_manager, get_frame_store
+from caelum.api.deps import get_config_manager, get_frame_store, get_settings
 from caelum.capture.frame_store import FrameStore, ProcessedFrame
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import LensConfig
+from caelum.settings import Settings
 from caelum.sky import lens_fit
 from caelum.sky.positions import sky_objects
+from caelum.storage import browse, dng_reader
 
 router = APIRouter()  # preview level
 lens_router = APIRouter()  # admin only
@@ -76,7 +85,7 @@ def _frame_geometry(frame: ProcessedFrame | None, config: ConfigManager) -> tupl
 def _project(lens: LensConfig, size: tuple[int, int], when: datetime, config: ConfigManager,
              max_mag: float, bodies: bool) -> list[SkyObjectResponse]:
     location = config.current.location
-    horizon = 90.0 - lens.fov_deg / 2.0  # lowest altitude the lens can see
+    horizon = 90.0 - lens.fov_deg / 2.0 - lens.tilt_deg  # lowest altitude the lens can see
     found = sky_objects(
         when, location.lat, location.lon, location.elevation_m, max_mag=max_mag, min_alt_deg=horizon, bodies=bodies
     )
@@ -210,3 +219,111 @@ def fit_stars(
                    "check location.lat/lon and the camera clock.",
         )
     return {**fit.to_dict(), "frame_time": frame.metadata.captured_at, "image_width": width, "image_height": height}
+
+
+class PairPoint(BaseModel):
+    #: The catalog star's sky position and where it really is in the frame
+    #: (fractions of the width / height).
+    alt_deg: float = Field(ge=-90.0, le=90.0)
+    az_deg: float
+    x: float = Field(ge=0.0, le=1.0)
+    y: float = Field(ge=0.0, le=1.0)
+
+
+class FitPairsRequest(BaseModel):
+    #: The starting lens: what is not solved for stays as it is here.
+    lens: LensConfig
+    pairs: list[PairPoint] = Field(min_length=2, max_length=500)
+    free: list[Literal["roll", "tilt", "center", "fov", "radius"]] = Field(
+        default_factory=lambda: ["roll", "tilt", "fov"], min_length=1
+    )
+    #: Also try the lens with east and west swapped and keep the better one.
+    try_mirror: bool = False
+    image_width: int = Field(gt=0, le=65536)
+    image_height: int = Field(gt=0, le=65536)
+
+
+@lens_router.post("/camera/lens/fit-pairs")
+def fit_pairs(body: FitPairsRequest) -> dict:
+    """Solve the lens from stars matched by hand. Needs no frame: the pairs and the frame's size say it all."""
+    size = (body.image_width, body.image_height)
+    pairs = np.array([[p.alt_deg, p.az_deg, p.x * size[0], p.y * size[1]] for p in body.pairs])
+    try:
+        fit = lens_fit.fit_lens_from_pairs(
+            pairs, size, lens_fit.Lens(**body.lens.model_dump()), tuple(body.free), try_mirror=body.try_mirror
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return fit.to_dict()
+
+
+# ---- a stored frame to calibrate on -----------------------------------------
+
+
+class StoredFrameInfo(BaseModel):
+    path: str
+    captured_at: datetime
+    lat: float
+    lon: float
+    elevation_m: float
+    #: Sensor size, not the size of the picture served.
+    width: int
+    height: int
+
+
+def _xmp_attribute(xmp: bytes, name: str) -> str | None:
+    match = re.search(rb'caelum:' + name.encode() + rb'="([^"]*)"', xmp)
+    return match.group(1).decode() if match else None
+
+
+def _read_stored_dng(settings: Settings, path: str) -> tuple[bytes, dng_reader.DngInfo, StoredFrameInfo]:
+    try:
+        target = browse.resolve_within(settings.data_dir, path)
+    except browse.PathOutsideRoot as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail=f"No such file: {path}")
+    if target.suffix.lower() != ".dng":
+        raise HTTPException(status_code=415, detail="Only DNG frames can be used for calibration")
+    data = target.read_bytes()
+    try:
+        info = dng_reader.parse(data)
+        xmp = dng_reader.xmp_packet(data)
+    except dng_reader.DngFormatError as exc:
+        raise HTTPException(status_code=422, detail=f"Not a readable DNG: {exc}") from exc
+    when = _xmp_attribute(xmp or b"", "captured_at")
+    lat, lon = _xmp_attribute(xmp or b"", "latitude_deg"), _xmp_attribute(xmp or b"", "longitude_deg")
+    if when is None or lat is None or lon is None:
+        raise HTTPException(
+            status_code=422,
+            detail="This DNG carries no caelum capture time and position, so the sky above it cannot be worked out.",
+        )
+    elevation = _xmp_attribute(xmp or b"", "elevation_m")
+    return data, info, StoredFrameInfo(
+        path=path, captured_at=datetime.fromisoformat(when), lat=float(lat), lon=float(lon),
+        elevation_m=float(elevation) if elevation else 0.0, width=info.width, height=info.height,
+    )
+
+
+@lens_router.get("/camera/lens/stored-frame", response_model=StoredFrameInfo)
+def get_stored_frame_info(
+    path: str = Query(..., description="DNG path relative to the data directory"),
+    settings: Settings = Depends(get_settings),
+) -> StoredFrameInfo:
+    return _read_stored_dng(settings, path)[2]
+
+
+@lens_router.get("/camera/lens/stored-frame/image")
+def get_stored_frame_image(path: str = Query(...), max_dim: int = Query(2048, ge=256, le=4096),
+                           settings: Settings = Depends(get_settings)) -> Response:
+    """The DNG as a PNG stretched so that faint stars show — what the calibration is drawn on."""
+    data, info, _ = _read_stored_dng(settings, path)
+    gray = dng_reader.linear_rgb(data, info, max_dim).mean(axis=2)
+    low, high = np.percentile(gray, [1.0, 99.7])
+    stretched = np.arcsinh(8.0 * np.clip((gray - low) / max(high - low, 1e-6), 0.0, 1.0)) / np.arcsinh(8.0)
+    ok, encoded = cv2.imencode(".png", (stretched * 255.0).astype(np.uint8))
+    if not ok:
+        raise HTTPException(status_code=500, detail="PNG encoding failed")
+    return Response(
+        content=encoded.tobytes(), media_type="image/png", headers={"Cache-Control": "private, max-age=300"}
+    )

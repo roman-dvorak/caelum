@@ -31,13 +31,63 @@ account and a frame from the camera.
    - the **projection**: equidistant, equisolid, stereographic or
      orthographic — the RMS of each is shown so you can see the choice is a
      real one.
-3. Drag any value by hand if you want, or **Pick centre on image**. The
+3. Drag any value by hand if you want, or **Pick centre on image** / **Pick
+   circle edge on image**. The
    circled stars, the 0°/30°/60° rings and the N/E/S/W letters follow
    immediately, in the browser. Hover over the image for the name and the
    altitude/azimuth of whatever is under the pointer.
 4. **Save lens.**
 
-A good fit is 20+ stars with an RMS of a pixel or two. Few matches usually
+### Marking stars by hand
+
+The automatic fit needs a dark, clear frame and a camera that looks straight up.
+When there is a bright Moon in the picture, thin cloud, or the camera is leaning,
+match the stars yourself in **Mark stars by hand** on the same page:
+
+1. Set the rough values (centre, radius — *Pick centre on image* and *Pick circle
+   edge on image* help) so that the stars' rings are somewhere near the real ones.
+2. **Grab the ring of a star and drag it onto the real star.** A line follows the
+   pointer; the mark snaps to the centre of the star under it (switch *Snap* off
+   for a faint one). The first mark holds the live frame still, so the marks stay
+   on the picture they were made on.
+3. Mark five or more stars, spread around the sky rather than in one corner, and
+   press **Solve**. The lens jumps to the fit and the rings move onto the stars.
+   Every mark shows how far it is from where the solved lens puts it; a star marked
+   on its neighbour stands out as a red line — remove it (✕) and solve again.
+4. Keep adding marks if the rings away from the ones you marked are still off,
+   then **Save lens**.
+
+*Solve for* chooses what is calculated; everything else is left as it is. The
+default — roll, camera tilt, field of view — is right once the circle is placed
+correctly. The roll is searched over the whole circle, so the first guess may be
+far off, and *Try both handednesses* decides whether the lens mirrors the sky.
+The optical centre can be solved too, but it trades off against the tilt: with few
+stars the two are hard to tell apart, so fix the centre unless it is wrong.
+
+Each star fixes two numbers (its x and y). Roll, the tilt (two numbers: how far and
+which way) and the field of view are four unknowns, so three stars is the least the
+solver accepts; five or more, well spread, is what makes the answer trustworthy.
+
+### Calibrating on a stored frame
+
+**Stored frame** loads a DNG from the archive (path relative to the data
+directory, e.g. `raw/2026/10/30/20261030-004840.dng`) instead of the live view. The
+time and the camera's position come from the file. Use it for a good night's frame
+when the one on the live view is not suitable. The automatic *Detect* and *Fit*
+buttons work on the live frame only.
+
+### The camera is not looking at the zenith
+
+If the camera leans a little, the sky is rotated about the horizontal axis
+perpendicular to the lean before the lens maps it. `tilt_deg` is how far the
+optical axis is from the zenith, `tilt_azimuth_deg` the compass azimuth it leans
+towards. The optical centre then marks where the camera looks, not where the
+zenith is, and `azimuth_offset_deg` is the roll about that axis. A tilt of a degree
+or two — common with an allsky dome that is not quite level — is enough to push
+the outer stars off by several pixels. The automatic fit assumes a camera that
+looks straight up; mark the stars by hand to find the tilt.
+
+A good automatic fit is 20+ stars with an RMS of a pixel or two. Few matches usually
 mean wrong `location.lat`/`lon` or a camera clock that is off by minutes; the
 page says which of its checks failed.
 
@@ -49,7 +99,9 @@ page says which of its checks failed.
 | `radius` | Edge of the image circle, as a fraction of the frame's **shorter** side — so the same number means the same circle on 4:3 and 16:9. |
 | `fov_deg` | Field of view across the circle. 180 means the edge is the horizon; a 190° lens sees 5° below it. |
 | `projection` | `equidistant_fisheye` (r ∝ θ, most allsky lenses), `equisolid_fisheye`, `stereographic_fisheye`, `orthographic_fisheye`. |
-| `azimuth_offset_deg` | How far the camera is turned against true north. |
+| `azimuth_offset_deg` | How far the camera is turned against true north (the roll about its optical axis). |
+| `tilt_deg` | How far the optical axis leans from the zenith. 0 = looking straight up. |
+| `tilt_azimuth_deg` | Compass azimuth the axis leans towards (0 north, 90 east). |
 | `mirror` | East and west swapped. A camera looking up with north at the top sees east on the left, which needs this on. |
 
 ::: warning Older configuration
@@ -133,6 +185,9 @@ through `PUT /api/config`).
 | --- | --- |
 | `POST /api/camera/lens/detect-circle` | Image circle of the latest frame. |
 | `POST /api/camera/lens/fit-stars` | `{fit_fov, from_config}` — fit to the stars of the latest frame. |
+| `POST /api/camera/lens/fit-pairs` | `{lens, pairs, free, try_mirror, image_width, image_height}` — solve roll, tilt, field of view, centre and/or radius from stars matched by hand. Each pair is `{alt_deg, az_deg, x, y}` (the star's sky position and its place in the frame, as fractions); the reply has the new `lens`, the `rms_px` and each star's `errors_px`. Needs no frame. |
+| `GET /api/camera/lens/stored-frame` | `?path=` — when and where a stored DNG was taken (its XMP). |
+| `GET /api/camera/lens/stored-frame/image` | `?path=&max_dim=` — the DNG as a stretched PNG to calibrate on. |
 | `GET /api/sky/setup` | Preview level. The lens and the observer's position the Dashboard draws the sky from. |
 | `GET /api/sky/objects` | Preview level. Sky objects projected with the configured lens. |
 | `POST /api/sky/objects` | The same with a lens given in the body. |

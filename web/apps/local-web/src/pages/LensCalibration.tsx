@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Field,
@@ -12,10 +12,42 @@ import {
   inputClass,
   useSkySettings,
 } from '@caelum/ui'
-import type { LensCircleDetection, LensConfig, LensProjection, LensStarFit } from '@caelum/api-client'
+import type {
+  LensCircleDetection,
+  LensConfig,
+  LensPairsFit,
+  LensProjection,
+  LensStarFit,
+  LensUnknown,
+  StoredFrameInfo,
+} from '@caelum/api-client'
+import { altAzToFraction } from '@roman-dvorak/caelum-sky'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
 import { useSkySetup } from '../hooks/useSkySetup.ts'
+import { snapToStar } from '../lib/starSnap.ts'
 import { localApiClient } from '../services/client.ts'
+
+/** A star the user has matched: where the catalog puts it in the sky, and where it really is in the picture. */
+interface Pair {
+  key: string
+  name: string
+  mag: number
+  alt: number
+  az: number
+  /** Frame fractions. */
+  x: number
+  y: number
+}
+
+const UNKNOWNS: { value: LensUnknown; label: string; hint: string }[] = [
+  { value: 'roll', label: 'Roll / north', hint: 'turn of the picture about the optical axis' },
+  { value: 'tilt', label: 'Camera tilt', hint: 'how far, and which way, the camera leans from the zenith' },
+  { value: 'fov', label: 'Field of view', hint: 'how much sky the circle holds' },
+  { value: 'center', label: 'Optical centre', hint: 'trades off against tilt — fix it unless it is wrong' },
+  { value: 'radius', label: 'Circle radius', hint: 'normally a measurement; fix it' },
+]
+
+const PAIR_COLOR = '#7CFC9A'
 
 const PROJECTIONS: { value: LensProjection; label: string }[] = [
   { value: 'equidistant_fisheye', label: 'Equidistant (r ∝ θ) — most allsky lenses' },
@@ -32,8 +64,21 @@ const FALLBACK_LENS: LensConfig = {
   fov_deg: 180,
   azimuth_offset_deg: 0,
   mirror: false,
+  tilt_deg: 0,
+  tilt_azimuth_deg: 0,
 }
 
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted.length ? sorted[sorted.length >> 1] : 0
+}
+
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+
+function compass(azimuthDeg: number): string {
+  return `${COMPASS[Math.round((((azimuthDeg % 360) + 360) % 360) / 22.5) % 16]} (${(((azimuthDeg % 360) + 360) % 360).toFixed(0)}°)`
+}
 
 function round(value: number, digits: number): number {
   const k = 10 ** digits
@@ -45,7 +90,7 @@ export function LensCalibration() {
 
   const [saved, setSaved] = useState<LensConfig | null>(null)
   const [lens, setLens] = useState<LensConfig>(FALLBACK_LENS)
-  const [pickCenter, setPickCenter] = useState(false)
+  const [pick, setPick] = useState<'center' | 'edge' | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'info' | 'error' | 'success'; text: string } | null>(null)
   const [circle, setCircle] = useState<LensCircleDetection | null>(null)
@@ -53,6 +98,19 @@ export function LensCalibration() {
   const skySetup = useSkySetup()
   const [skyView, updateSkyView] = useSkySettings()
   const [overlayEnabled, setOverlayEnabled] = useState<boolean | null>(null)
+
+  // Which picture the lens is calibrated on, and the stars marked on it by hand.
+  const [stored, setStored] = useState<{ info: StoredFrameInfo; url: string } | null>(null)
+  const [storedPath, setStoredPath] = useState('')
+  const [frozen, setFrozen] = useState<{ url: string; time: Date } | null>(null)
+  const [marking, setMarking] = useState(true)
+  const [snap, setSnap] = useState(true)
+  const [pairs, setPairs] = useState<Pair[]>([])
+  const [free, setFree] = useState<LensUnknown[]>(['roll', 'tilt', 'fov'])
+  const [tryMirror, setTryMirror] = useState(true)
+  const [pairFit, setPairFit] = useState<LensPairsFit | null>(null)
+  const [imageSize, setImageSize] = useState({ width: 4, height: 3 })
+  const imgRef = useRef<HTMLImageElement>(null)
 
 
   useEffect(() => {
@@ -76,24 +134,166 @@ export function LensCalibration() {
   const change = useCallback((patch: Partial<LensConfig>) => setLens((current) => ({ ...current, ...patch })), [])
   const dirty = useMemo(() => saved !== null && JSON.stringify(saved) !== JSON.stringify(lens), [saved, lens])
 
-  // The matched stars of the last fit, drawn by the sky canvas after the sky: where the camera saw them.
-  const drawMatches = useCallback(
-    (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-      if (!fit) return
-      ctx.strokeStyle = '#7CFC9A'
-      ctx.lineWidth = 1
-      for (const m of fit.matches) {
-        ctx.strokeRect((m.x / fit.image_width) * w - 3, (m.y / fit.image_height) * h - 3, 6, 6)
+  // The picture on screen: a stored DNG, a live frame held still for marking, or the newest live frame.
+  const shown = useMemo(() => {
+    if (stored) {
+      return {
+        url: stored.url,
+        time: new Date(stored.info.captured_at),
+        lat: stored.info.lat,
+        lon: stored.info.lon,
+        elevation: stored.info.elevation_m,
+        sensor: { width: stored.info.width, height: stored.info.height },
       }
+    }
+    const url = frozen?.url ?? frame?.imageBlobUrl
+    const time = frozen?.time ?? (frame ? new Date(frame.metadata.captured_at) : null)
+    if (!url || !time || !skySetup) return null
+    return { url, time, lat: skySetup.lat, lon: skySetup.lon, elevation: skySetup.elevation_m, sensor: null }
+  }, [stored, frozen, frame, skySetup])
+
+  const aspect = imageSize.width / imageSize.height
+  const pairErrors = useMemo(
+    () => (pairFit && pairFit.errors_px.length === pairs.length ? pairFit.errors_px : null),
+    [pairFit, pairs.length],
+  )
+
+  // Drawn by the sky canvas after the sky: the stars of the last automatic fit, and the stars marked by hand —
+  // a line from where the lens puts each one to where it really is.
+  const drawMarks = useCallback(
+    (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+      if (fit) {
+        ctx.strokeStyle = PAIR_COLOR
+        ctx.lineWidth = 1
+        for (const m of fit.matches) {
+          ctx.strokeRect((m.x / fit.image_width) * w - 3, (m.y / fit.image_height) * h - 3, 6, 6)
+        }
+      }
+      ctx.lineWidth = 1.5
+      pairs.forEach((p, i) => {
+        const bad = pairErrors !== null && pairs.length >= 4 && pairErrors[i] > 5 && pairErrors[i] > 3 * median(pairErrors)
+        ctx.strokeStyle = bad ? '#ff6e64' : PAIR_COLOR
+        const tx = p.x * w
+        const ty = p.y * h
+        const from = altAzToFraction(lens, w / h, p.alt, p.az)
+        if (from) {
+          ctx.beginPath()
+          ctx.moveTo(from.x * w, from.y * h)
+          ctx.lineTo(tx, ty)
+          ctx.stroke()
+        }
+        ctx.beginPath()
+        ctx.moveTo(tx - 7, ty)
+        ctx.lineTo(tx - 2, ty)
+        ctx.moveTo(tx + 2, ty)
+        ctx.lineTo(tx + 7, ty)
+        ctx.moveTo(tx, ty - 7)
+        ctx.lineTo(tx, ty - 2)
+        ctx.moveTo(tx, ty + 2)
+        ctx.lineTo(tx, ty + 7)
+        ctx.stroke()
+      })
     },
-    [fit],
+    [fit, pairs, pairErrors, lens],
   )
 
   function onPick(x: number, y: number) {
-    if (!pickCenter) return
-    change({ center_x: round(x, 4), center_y: round(y, 4) })
-    setPickCenter(false)
+    if (pick === 'center') {
+      change({ center_x: round(x, 4), center_y: round(y, 4) })
+    } else if (pick === 'edge') {
+      // The radius is a fraction of the shorter side; measure in units where the height is 1.
+      const distance = Math.hypot((x - lens.center_x) * aspect, y - lens.center_y)
+      change({ radius: round(distance / Math.min(aspect, 1), 4) })
+    }
+    setPick(null)
   }
+
+  // ---- stars marked by hand ----------------------------------------------
+
+  const onStarDrag = useCallback(
+    (hit: { kind: string; name: string; mag: number; alt: number; az: number }, x: number, y: number) => {
+      const target = (snap && imgRef.current ? snapToStar(imgRef.current, x, y) : null) ?? { x, y }
+      const key = `${hit.kind}:${hit.name}`
+      // A frame that would be replaced by the next live one is held still: the marks belong to this picture.
+      if (!stored && !frozen && frame) void freezeLive()
+      setPairs((current) => [
+        ...current.filter((p) => p.key !== key),
+        { key, name: hit.name, mag: hit.mag, alt: hit.alt, az: hit.az, x: target.x, y: target.y },
+      ])
+      setPairFit(null)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snap, stored, frozen, frame],
+  )
+
+  async function freezeLive() {
+    if (!frame) return
+    const blob = await (await fetch(frame.imageBlobUrl)).blob()
+    setFrozen({ url: URL.createObjectURL(blob), time: new Date(frame.metadata.captured_at) })
+  }
+
+  function releaseFrozen() {
+    setFrozen((current) => {
+      if (current) URL.revokeObjectURL(current.url)
+      return null
+    })
+  }
+
+  function backToLive() {
+    releaseFrozen()
+    setStored(null)
+    setPairs([])
+    setPairFit(null)
+  }
+
+  const loadStored = () =>
+    run('stored', async () => {
+      const path = storedPath.trim()
+      const info = await localApiClient.getStoredFrame(path)
+      releaseFrozen()
+      setStored({ info, url: localApiClient.storedFrameImageUrl(path) })
+      setPairs([])
+      setPairFit(null)
+      setMessage({
+        kind: 'success',
+        text: `Loaded ${info.path}, taken ${info.captured_at.replace('T', ' ').slice(0, 19)} UTC at ${info.lat.toFixed(3)}°, ${info.lon.toFixed(3)}°.`,
+      })
+    })
+
+  const solvePairs = () =>
+    run('pairs', async () => {
+      const result = await localApiClient.fitLensFromPairs({
+        lens,
+        pairs: pairs.map((p) => ({ alt_deg: p.alt, az_deg: p.az, x: p.x, y: p.y })),
+        free,
+        try_mirror: tryMirror,
+        image_width: shown?.sensor?.width ?? imageSize.width,
+        image_height: shown?.sensor?.height ?? imageSize.height,
+      })
+      setLens(result.lens)
+      setPairFit(result)
+      // One star marked on its neighbour drags the whole solution: name the one that sits furthest from its place.
+      const worst = result.errors_px.reduce((best, e, i) => (e > result.errors_px[best] ? i : best), 0)
+      const suspect =
+        pairs.length >= 4 && result.errors_px[worst] > 3 * median(result.errors_px) && result.errors_px[worst] > 5 ? pairs[worst] : null
+      setMessage({
+        kind: suspect ? 'info' : 'success',
+        text:
+          `Solved from ${pairs.length} stars: residual ${result.rms_px.toFixed(2)} px RMS` +
+          (result.lens.tilt_deg ? `, camera tilted ${result.lens.tilt_deg.toFixed(2)}° towards ${compass(result.lens.tilt_azimuth_deg ?? 0)}` : '') +
+          (suspect
+            ? `. ${suspect.name} is ${result.errors_px[worst].toFixed(0)} px off — it may be marked on the wrong star (red line); remove it and solve again.`
+            : '.'),
+      })
+    })
+
+  const removePair = (key: string) => {
+    setPairs((current) => current.filter((p) => p.key !== key))
+    setPairFit(null)
+  }
+
+  const toggleFree = (value: LensUnknown) =>
+    setFree((current) => (current.includes(value) ? current.filter((v) => v !== value) : [...current, value]))
 
   // ---- actions ------------------------------------------------------------
   async function run(name: string, task: () => Promise<void>) {
@@ -178,23 +378,53 @@ export function LensCalibration() {
 
       {message ? <Message kind={message.kind}>{message.text}</Message> : null}
 
-      <Panel title="Frame" actions={<SkySettingsMenu settings={skyView} onChange={updateSkyView} />} bodyClassName="p-0">
-        {frame ? (
+      <Panel
+        title="Frame"
+        actions={
+          <div className="flex items-center gap-3">
+            {stored ? (
+              <StatusBadge>Stored: {stored.info.path.split('/').pop()}</StatusBadge>
+            ) : frozen ? (
+              <StatusBadge tone="live">Held still</StatusBadge>
+            ) : null}
+            {stored || frozen ? (
+              <Button variant="ghost" onClick={backToLive}>
+                Back to live
+              </Button>
+            ) : (
+              <Button variant="ghost" onClick={() => void freezeLive()} disabled={!frame}>
+                Hold this frame
+              </Button>
+            )}
+            <SkySettingsMenu settings={skyView} onChange={updateSkyView} />
+          </div>
+        }
+        bodyClassName="p-0"
+      >
+        {shown ? (
           <div className="relative leading-none">
-            <img src={frame.imageBlobUrl} alt="Latest frame" className="block h-auto w-full" />
+            <img
+              ref={imgRef}
+              src={shown.url}
+              alt="Frame to calibrate on"
+              className="block h-auto w-full"
+              onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
+              onError={() => stored && setMessage({ kind: 'error', text: `Could not load the picture of ${stored.info.path}.` })}
+            />
             {skySetup && skyView.on ? (
               <SkyCanvas
                 lens={lens}
-                latDeg={skySetup.lat}
-                lonDeg={skySetup.lon}
-                elevationM={skySetup.elevation_m}
-                when={new Date(frame.metadata.captured_at)}
+                latDeg={shown.lat}
+                lonDeg={shown.lon}
+                elevationM={shown.elevation}
+                when={shown.time}
                 hidden={skyView.hidden}
                 maxMagnitude={skyView.maxMagnitude}
                 opacity={skyView.opacity}
                 interactive
-                onPick={pickCenter ? onPick : undefined}
-                extraDraw={drawMatches}
+                onPick={pick ? onPick : undefined}
+                onStarDrag={marking ? onStarDrag : undefined}
+                extraDraw={drawMarks}
               />
             ) : null}
           </div>
@@ -205,16 +435,107 @@ export function LensCalibration() {
         )}
       </Panel>
 
+      <Panel title="Mark stars by hand">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-ink-muted">
+            When the automatic fit has nothing to work with — the Moon is up, there is cloud, or the camera is not looking straight up — match stars
+            yourself. <strong className="font-medium text-ink">Grab the ring of a star and drag it onto the real star</strong> in the picture (it
+            snaps to the star’s centre); do that for five or more stars spread over the whole sky, then <strong className="font-medium text-ink">Solve</strong>.
+            The first mark holds the frame still, so the marks stay on the picture you made them on. The lens fitted from them also gets the camera’s tilt.
+          </p>
+          <div className="flex flex-wrap items-end gap-6">
+            <label className="flex items-center gap-2 text-sm text-ink select-none">
+              <input type="checkbox" checked={marking} onChange={(e) => setMarking(e.target.checked)} className="accent-amber" />
+              Dragging marks stars
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink select-none">
+              <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} className="accent-amber" />
+              Snap to the star under the pointer
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink select-none">
+              <input type="checkbox" checked={tryMirror} onChange={(e) => setTryMirror(e.target.checked)} className="accent-amber" />
+              Try both handednesses (east/west)
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <span className="text-sm text-ink-muted">Solve for:</span>
+            {UNKNOWNS.map((u) => (
+              <label key={u.value} title={u.hint} className="flex items-center gap-2 text-sm text-ink select-none">
+                <input type="checkbox" checked={free.includes(u.value)} onChange={() => toggleFree(u.value)} className="accent-amber" />
+                {u.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="primary" onClick={() => void solvePairs()} disabled={busy !== null || pairs.length < 2 || free.length === 0}>
+              {busy === 'pairs' ? 'Solving…' : `Solve from ${pairs.length} star${pairs.length === 1 ? '' : 's'}`}
+            </Button>
+            <Button onClick={() => { setPairs((c) => c.slice(0, -1)); setPairFit(null) }} disabled={pairs.length === 0}>
+              Undo last
+            </Button>
+            <Button variant="ghost" onClick={() => { setPairs([]); setPairFit(null) }} disabled={pairs.length === 0}>
+              Clear marks
+            </Button>
+          </div>
+          {pairFit ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Readout label="Residual (RMS)" value={`${pairFit.rms_px.toFixed(2)} px`} />
+              <Readout label="Stars / unknowns" value={`${pairs.length} / ${pairFit.parameters}`} />
+              <Readout label="Camera tilt" value={`${(pairFit.lens.tilt_deg ?? 0).toFixed(2)}°`} />
+              <Readout label="Leaning towards" value={pairFit.lens.tilt_deg ? compass(pairFit.lens.tilt_azimuth_deg ?? 0) : '—'} />
+            </div>
+          ) : null}
+          {pairs.length > 0 ? (
+            <ul className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              {pairs.map((p, i) => (
+                <li key={p.key} className="flex items-center justify-between gap-2 border-b border-border-subtle py-1">
+                  <span className="text-ink">
+                    {p.name} <span className="text-ink-muted">· mag {p.mag.toFixed(1)}</span>
+                  </span>
+                  <span className="flex items-center gap-3">
+                    {pairErrors ? <span className="text-ink-muted tabular-nums">{pairErrors[i].toFixed(1)} px</span> : null}
+                    <button type="button" className="text-ink-muted hover:text-ink" aria-label={`Remove ${p.name}`} onClick={() => removePair(p.key)}>
+                      ✕
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </Panel>
+
+      <Panel title="Stored frame">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-muted">
+            Calibrate on a frame from the archive instead of the live view — for example a good night’s DNG. Its time and the camera’s position are
+            read from the file. Give the path relative to the data directory, e.g. <code>raw/2026/10/30/20261030-004840.dng</code>.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <input
+              type="text"
+              value={storedPath}
+              onChange={(e) => setStoredPath(e.target.value)}
+              placeholder="raw/YYYY/MM/DD/…dng"
+              className={`${inputClass} w-full max-w-xl font-mono`}
+            />
+            <Button onClick={() => void loadStored()} disabled={busy !== null || storedPath.trim() === ''}>
+              {busy === 'stored' ? 'Loading…' : 'Load frame'}
+            </Button>
+          </div>
+        </div>
+      </Panel>
+
       <Panel title="Find it automatically">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-3">
-            <Button variant="primary" onClick={() => void detectCircle()} disabled={busy !== null || !frame}>
+            <Button variant="primary" onClick={() => void detectCircle()} disabled={busy !== null || !frame || stored !== null}>
               {busy === 'circle' ? 'Detecting…' : 'Detect image circle'}
             </Button>
-            <Button variant="primary" onClick={() => void fitStars(true)} disabled={busy !== null || !frame}>
+            <Button variant="primary" onClick={() => void fitStars(true)} disabled={busy !== null || !frame || stored !== null}>
               {busy === 'stars' ? 'Fitting… (up to a minute)' : 'Fit from stars'}
             </Button>
-            <Button onClick={() => void fitStars(false)} disabled={busy !== null || !frame}>
+            <Button onClick={() => void fitStars(false)} disabled={busy !== null || !frame || stored !== null}>
               Fit from stars, keep field of view
             </Button>
           </div>
@@ -261,8 +582,14 @@ export function LensCalibration() {
             <Field label="Field of view (°)" hint="180 = the edge is the horizon">
               {number('fov_deg', 0.5, 90, 360, 2)}
             </Field>
-            <Field label="North offset (°)" hint="Rotation of the camera against true north">
+            <Field label="North offset (°)" hint="Roll of the picture about the optical axis (against north when looking up)">
               {number('azimuth_offset_deg', 0.5, -360, 360, 2)}
+            </Field>
+            <Field label="Camera tilt (°)" hint="How far the axis leans from the zenith (0 = straight up)">
+              {number('tilt_deg', 0.1, 0, 60, 2)}
+            </Field>
+            <Field label="Tilted towards (°)" hint="Compass azimuth of the lean: 0 N, 90 E, 180 S, 270 W">
+              {number('tilt_azimuth_deg', 1, 0, 360, 1)}
             </Field>
           </div>
           <div className="flex flex-wrap items-end gap-4">
@@ -286,8 +613,11 @@ export function LensCalibration() {
                 <span className="block text-xs text-ink-muted">A camera looking up with north at the top sees east on the left; that needs this ticked. “Fit from stars” decides it for you.</span>
               </span>
             </label>
-            <Button variant={pickCenter ? 'primary' : 'secondary'} onClick={() => setPickCenter((v) => !v)} disabled={!frame}>
-              {pickCenter ? 'Click the centre on the image…' : 'Pick centre on image'}
+            <Button variant={pick === 'center' ? 'primary' : 'secondary'} onClick={() => setPick((v) => (v === 'center' ? null : 'center'))} disabled={!shown}>
+              {pick === 'center' ? 'Click the centre on the image…' : 'Pick centre on image'}
+            </Button>
+            <Button variant={pick === 'edge' ? 'primary' : 'secondary'} onClick={() => setPick((v) => (v === 'edge' ? null : 'edge'))} disabled={!shown}>
+              {pick === 'edge' ? 'Click the edge of the circle…' : 'Pick circle edge on image'}
             </Button>
           </div>
           <div className="flex flex-wrap gap-3 border-t border-border-subtle pt-4">

@@ -58,8 +58,13 @@ class LensConfig(StrictModel):
     #: Field of view across the image circle. 180 means the circle's edge is
     #: the horizon; a 190 degree lens sees 5 degrees below it.
     fov_deg: float = Field(default=180.0, ge=90.0, le=360.0)
-    #: Corrects for the camera's rotation relative to true north.
+    #: Roll of the camera about its optical axis — against true north when it
+    #: looks at the zenith.
     azimuth_offset_deg: float = 0.0
+    #: How far the optical axis leans away from the zenith (0 = looking
+    #: straight up), and towards which compass azimuth it leans.
+    tilt_deg: float = Field(default=0.0, ge=0.0, le=60.0)
+    tilt_azimuth_deg: float = 0.0
     #: Flip east/west — needed when the lens/mirror mirrors the sky.
     mirror: bool = False
 

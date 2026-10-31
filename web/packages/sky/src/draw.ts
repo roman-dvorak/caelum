@@ -65,7 +65,7 @@ export function drawSky(
   // Sizes were designed for a ~800 px wide view; small thumbnails shrink them.
   const k = Math.min(1, Math.max(0.45, width / 800))
   const aspect = width / height
-  const horizon = 90 - o.lens.fov_deg / 2
+  const horizon = 90 - o.lens.fov_deg / 2 - (o.lens.tilt_deg ?? 0)
   const minAlt = Math.max(0, horizon)
   const show = (layer: SkyLayer) => !o.hidden?.has(layer)
   const project = (alt: number, az: number): [number, number] | null => {

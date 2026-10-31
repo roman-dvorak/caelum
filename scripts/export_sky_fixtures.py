@@ -31,6 +31,8 @@ LENSES = [
     LensConfig(projection="equisolid_fisheye", center_x=0.52, center_y=0.47, radius=0.45, fov_deg=170,
                azimuth_offset_deg=33.0, mirror=True),
     LensConfig(projection="stereographic_fisheye", radius=0.4, fov_deg=160, azimuth_offset_deg=-80.0),
+    LensConfig(projection="equidistant_fisheye", radius=0.46, fov_deg=186, azimuth_offset_deg=12.0, mirror=True,
+               tilt_deg=7.5, tilt_azimuth_deg=215.0),
 ]
 ASPECT = 4 / 3
 POINTS = [(85.0, 10.0), (60.0, 120.0), (30.0, 200.0), (12.0, 300.0), (5.0, 45.0)]

@@ -9,7 +9,14 @@ import numpy as np
 import pytest
 
 from caelum.derivatives.projection import altaz_to_fraction
-from caelum.sky.lens_fit import Lens, detect_image_circle, detect_stars, fit_lens_from_stars, project_to_pixels
+from caelum.sky.lens_fit import (
+    Lens,
+    detect_image_circle,
+    detect_stars,
+    fit_lens_from_pairs,
+    fit_lens_from_stars,
+    project_to_pixels,
+)
 from caelum.sky.positions import star_positions
 
 WHEN = datetime(2026, 10, 30, 21, 0, tzinfo=UTC)
@@ -126,3 +133,60 @@ def test_fit_gives_up_when_the_frame_has_no_stars():
     noise = np.random.default_rng(3).normal(10, 2, (SIZE[1], SIZE[0])).clip(0, 255).astype(np.uint8)
     stars = detect_stars(noise)
     assert fit_lens_from_stars(stars, SIZE, WHEN, LAT, LON, Lens(0.5, 0.5, 0.48)) is None
+
+
+def test_numpy_projection_matches_the_scalar_one_when_tilted():
+    lens = Lens(0.48, 0.52, 0.45, fov_deg=190.0, azimuth_offset_deg=33.0, mirror=True, projection="equisolid_fisheye",
+                tilt_deg=9.0, tilt_azimuth_deg=250.0)
+    for alt, az in [(80.0, 10.0), (45.0, 123.0), (5.0, 300.0)]:
+        expected = altaz_to_fraction(
+            alt, az, center_x=lens.center_x, center_y=lens.center_y, radius=lens.radius,
+            azimuth_offset_deg=lens.azimuth_offset_deg, mirror=lens.mirror, aspect=SIZE[0] / SIZE[1],
+            fov_deg=lens.fov_deg, projection=lens.projection, tilt_deg=lens.tilt_deg,
+            tilt_azimuth_deg=lens.tilt_azimuth_deg,
+        )
+        got = project_to_pixels(np.array([alt]), np.array([az]), lens, SIZE)[0]
+        assert got[0] == pytest.approx(expected.x * SIZE[0])
+        assert got[1] == pytest.approx(expected.y * SIZE[1])
+
+
+def _marked_stars(truth: Lens, count: int = 14, noise: float = 0.8, seed: int = 1) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    alt, az = rng.uniform(15, 85, count), rng.uniform(0, 360, count)
+    xy = project_to_pixels(alt, az, truth, SIZE) + rng.normal(0, noise, (count, 2))
+    return np.column_stack([alt, az, xy])
+
+
+def test_pairs_recover_roll_tilt_and_field_of_view_from_a_rough_start():
+    truth = Lens(
+        0.5, 0.5, 0.45, fov_deg=182.0, azimuth_offset_deg=-41.0, mirror=True, tilt_deg=5.5, tilt_azimuth_deg=210.0
+    )
+    start = Lens(0.5, 0.5, 0.45, fov_deg=180.0, mirror=True)
+    fit = fit_lens_from_pairs(_marked_stars(truth), SIZE, start, ("roll", "tilt", "fov"))
+    assert fit.rms_px < 1.5
+    assert fit.lens.azimuth_offset_deg % 360 == pytest.approx(-41.0 % 360, abs=0.5)
+    assert fit.lens.tilt_deg == pytest.approx(5.5, abs=0.3)
+    assert fit.lens.tilt_azimuth_deg == pytest.approx(210.0, abs=5.0)
+    assert fit.lens.fov_deg == pytest.approx(182.0, abs=0.5)
+
+
+def test_pairs_find_the_handedness_when_asked():
+    truth = Lens(0.5, 0.5, 0.45, azimuth_offset_deg=70.0, mirror=True)
+    fit = fit_lens_from_pairs(_marked_stars(truth), SIZE, Lens(0.5, 0.5, 0.45), ("roll",), try_mirror=True)
+    assert fit.lens.mirror is True and fit.rms_px < 1.5
+
+
+def test_pairs_refuse_to_solve_for_more_than_the_stars_say():
+    truth = Lens(0.5, 0.5, 0.45, azimuth_offset_deg=10.0)
+    with pytest.raises(ValueError, match="too few"):
+        fit_lens_from_pairs(_marked_stars(truth, count=2), SIZE, Lens(0.5, 0.5, 0.45), ("roll", "tilt", "fov"))
+    with pytest.raises(ValueError, match="Cannot solve"):
+        fit_lens_from_pairs(_marked_stars(truth), SIZE, Lens(0.5, 0.5, 0.45), ("colour",))
+
+
+def test_a_wrongly_marked_star_shows_up_as_the_biggest_error():
+    truth = Lens(0.5, 0.5, 0.45, azimuth_offset_deg=10.0, tilt_deg=3.0, tilt_azimuth_deg=90.0)
+    marked = _marked_stars(truth, count=16)
+    marked[4, 2] += 60.0  # one click on the wrong star
+    fit = fit_lens_from_pairs(marked, SIZE, Lens(0.5, 0.5, 0.45), ("roll", "tilt"))
+    assert int(np.argmax(fit.errors_px)) == 4

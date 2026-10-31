@@ -203,6 +203,46 @@ export interface LensStarFit {
   image_height: number
 }
 
+/** What `fit-pairs` may solve for: roll about the axis, tilt of the axis, optical centre, field of view, circle radius. */
+export type LensUnknown = 'roll' | 'tilt' | 'center' | 'fov' | 'radius'
+
+/** A catalog star's sky position and where it really is in the frame (fractions of the width / height). */
+export interface LensStarPair {
+  alt_deg: number
+  az_deg: number
+  x: number
+  y: number
+}
+
+export interface LensPairsRequest {
+  lens: LensConfig
+  pairs: LensStarPair[]
+  free?: LensUnknown[]
+  try_mirror?: boolean
+  image_width: number
+  image_height: number
+}
+
+export interface LensPairsFit {
+  lens: LensConfig
+  rms_px: number
+  /** Per pair, in the order sent: how far the fitted lens puts the star from where it was marked. */
+  errors_px: number[]
+  /** How many numbers were solved for. */
+  parameters: number
+}
+
+/** A stored DNG frame the lens can be calibrated on, with when and where it was taken. */
+export interface StoredFrameInfo {
+  path: string
+  captured_at: string
+  lat: number
+  lon: number
+  elevation_m: number
+  width: number
+  height: number
+}
+
 /** What the camera is — catalog metadata, published in its manifest. */
 export interface CameraIdentityConfig {
   name: string

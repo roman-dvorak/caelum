@@ -47,7 +47,10 @@ import type {
   UsageResponse,
   UserSummary,
   LensCircleDetection,
+  LensPairsFit,
+  LensPairsRequest,
   LensStarFit,
+  StoredFrameInfo,
   LiveWhiteBalanceFrame,
   LiveWhiteBalanceInfo,
   WhiteBalanceRequest,
@@ -238,6 +241,21 @@ export class LocalApiClient {
   /** Fit centre / north / field of view / projection to the stars of the latest frame (admin). */
   fitLensFromStars(body: { fit_fov?: boolean; from_config?: boolean } = {}): Promise<LensStarFit> {
     return this.postJson<LensStarFit>('/camera/lens/fit-stars', body)
+  }
+
+  /** Solve roll, tilt, field of view … from stars the user matched by hand (admin). */
+  fitLensFromPairs(body: LensPairsRequest): Promise<LensPairsFit> {
+    return this.postJson<LensPairsFit>('/camera/lens/fit-pairs', body)
+  }
+
+  /** When and where a stored DNG was taken (admin); `path` is relative to the data directory. */
+  getStoredFrame(path: string): Promise<StoredFrameInfo> {
+    return this.request<StoredFrameInfo>(`/camera/lens/stored-frame?path=${encodeURIComponent(path)}`)
+  }
+
+  /** Direct URL of a stored DNG as a stretched picture to calibrate on. */
+  storedFrameImageUrl(path: string, maxDim = 2048): string {
+    return this.apiUrl(`/camera/lens/stored-frame/image?path=${encodeURIComponent(path)}&max_dim=${maxDim}`)
   }
 
   getPlugins(): Promise<PluginsResponse> {
