@@ -61,21 +61,6 @@ THERMAL_FIELDS: tuple[str, ...] = (
 ANNOTATION_KEY = "thermal"
 
 
-class ThermalOverlaySettings(BaseModel):
-    enabled: bool = True
-    #: Fractional (0..1) anchor of the label in the frame.
-    x: float = Field(default=0.02, ge=0.0, le=1.0)
-    y: float = Field(default=0.98, ge=0.0, le=1.0)
-    align: str = "left"
-    valign: str = "bottom"
-    font_size_px: float = Field(default=14.0, gt=0.0)
-    color: str = "#ffffff"
-    background: str | None = "#000000"
-    #: `str.format` template over the thermal fields; a missing value
-    #: renders as an en dash.
-    template: str = "Dome {dome_temp:.1f} C  Body {body_temp:.1f} C  Env {envi_temp:.1f} C  RH {dome_humidity:.0f} %"
-
-
 class ThermalStatusSettings(BaseModel):
     path: str = "/var/run/thermal-control-status.json"
     poll_interval_s: float = Field(default=5.0, gt=0.0)
@@ -97,7 +82,6 @@ class ThermalStatusSettings(BaseModel):
             "failsafe_mode",
         ]
     )
-    overlay: ThermalOverlaySettings = Field(default_factory=ThermalOverlaySettings)
 
 
 class ThermalStatusPoller(threading.Thread):

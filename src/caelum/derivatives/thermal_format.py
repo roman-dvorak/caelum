@@ -1,9 +1,7 @@
-"""Formatting of thermal values into text, shared by the thermal overlay
-plugin and the overlay editor's `{placeholders}`."""
+"""Formatting of thermal values into text, for the overlay editor's `{placeholders}`."""
 
 from __future__ import annotations
 
-import string
 from typing import Any
 
 from caelum.telemetry.thermal import THERMAL_FIELDS
@@ -26,11 +24,3 @@ def thermal_kwargs(thermal: dict[str, Any] | None) -> dict[str, Any]:
         name: values[name] if values.get(name) is not None else _MISSING
         for name in THERMAL_FIELDS
     }
-
-
-def format_thermal(template: str, thermal: dict[str, Any] | None) -> str:
-    try:
-        return string.Formatter().format(template, **thermal_kwargs(thermal))
-    except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-        # A bad placeholder shows the raw template so the mistake is visible.
-        return template

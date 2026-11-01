@@ -1,19 +1,18 @@
-"""Overlay label for the thermal status of the camera management board.
+"""Thermal status of the AMRPI4HAT01 board — configuration of the feed.
 
-The values come from the frame's own metadata (`annotations["thermal"]`,
-attached at capture from `caelum.telemetry.thermal.ThermalStatusPoller`), so
-the overlay always shows exactly what is stored with the frame.
+The plugin draws nothing itself. Its settings (`ThermalStatusSettings`)
+configure `caelum.telemetry.thermal.ThermalStatusPoller`; while the plugin
+is enabled, every frame carries the reading in `annotations["thermal"]`
+(sidecar JSON, DNG XMP), and the values are `{placeholders}` in the overlay
+editor's templates — the overlay is the editor's business, not the plugin's.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from caelum.capture.frame_store import ProcessedFrame
-from caelum.capture.metadata import OverlayElement
-from caelum.derivatives.thermal_format import format_thermal
 from caelum.plugins.base import Plugin
-from caelum.telemetry.thermal import ANNOTATION_KEY, ThermalStatusSettings
+from caelum.telemetry.thermal import ThermalStatusSettings
 
 
 class ThermalStatusWorker(Plugin):
@@ -27,26 +26,3 @@ class ThermalStatusWorker(Plugin):
     @property
     def thermal_settings(self) -> ThermalStatusSettings:
         return self._settings
-
-    def provide_overlay_elements(self, frame: ProcessedFrame) -> list[OverlayElement]:
-        overlay = self._settings.overlay
-        thermal = (frame.metadata.annotations or {}).get(ANNOTATION_KEY)
-        if not overlay.enabled or not thermal:
-            return []
-        text = format_thermal(overlay.template, thermal)
-        return [
-            OverlayElement(
-                type="custom_label",
-                source=self.id,
-                payload={
-                    "x": overlay.x,
-                    "y": overlay.y,
-                    "text": text,
-                    "align": overlay.align,
-                    "valign": overlay.valign,
-                    "font_size_px": overlay.font_size_px,
-                    "color": overlay.color,
-                    "background": overlay.background,
-                },
-            )
-        ]

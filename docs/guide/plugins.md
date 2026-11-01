@@ -401,7 +401,8 @@ The camera management board AMRPI4HAT01 runs its own control software, which
 writes its state (temperatures, humidity, pressure, dew points, heater and
 fan PWM, flags) to `/var/run/thermal-control-status.json`. The
 `thermal_status` plugin (disabled by default) puts selected values into the
-metadata of every frame and into the overlay.
+metadata of every frame. It draws nothing itself: the values reach the
+overlay only through the overlay editor's templates.
 
 ```text
  status file --(poller thread, every poll_interval_s)--> last reading in memory
@@ -410,7 +411,7 @@ metadata of every frame and into the overlay.
                                       |
               frame submission --> sidecar JSON + DNG XMP (caelum:thermal_*)
                                       |
-                  thermal_status plugin --> overlay label
+              overlay editor label template: {dome_temp:.1f}
 ```
 
 The file is read on its own thread, so capture never waits for it. The
@@ -427,12 +428,7 @@ a missing or corrupt file keeps the last reading, and a file not updated for
       "path": "/var/run/thermal-control-status.json",
       "poll_interval_s": 5,
       "max_age_s": 60,
-      "metadata_fields": ["dome_temp", "body_temp", "envi_temp", "dome_humidity", "heater_pwm"],
-      "overlay": {
-        "enabled": true,
-        "x": 0.02, "y": 0.98, "align": "left", "valign": "bottom",
-        "template": "Dome {dome_temp:.1f} C  Body {body_temp:.1f} C  RH {dome_humidity:.0f} %"
-      }
+      "metadata_fields": ["dome_temp", "body_temp", "envi_temp", "dome_humidity", "heater_pwm"]
     }
   }
 }
@@ -441,7 +437,7 @@ a missing or corrupt file keeps the last reading, and a file not updated for
 - `metadata_fields` — which keys of the status file are stored with the frame:
   in the sidecar JSON as `annotations.thermal` and in the DNG XMP as
   `caelum:thermal_<key>`, plus `age_s`, the age of the reading.
-- `overlay.template` — a `str.format` template; a value the frame has no
-  reading for is shown as an en dash.
-- The same fields are available as placeholders in the overlay editor's own
-  labels (`{dome_temp:.1f}`, `{heater_pwm:.0f}`, ...).
+- Overlay — every key of the status file is a placeholder in the overlay
+  editor's labels, for example `Dome {dome_temp:.1f} C, RH {dome_humidity:.0f} %`.
+  The values come from the frame's own metadata, so they work while the plugin
+  is enabled; a value the frame has no reading for is shown as an en dash.

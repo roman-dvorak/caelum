@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-from caelum.derivatives.thermal_format import format_thermal
+from caelum.derivatives.thermal_format import thermal_kwargs
 from caelum.telemetry.thermal import ThermalStatusPoller, ThermalStatusSettings
 
 STATUS = {"dome_temp": 29.86, "body_temp": 34.49, "envi_temp": 13.65, "dome_humidity": 36.5,
@@ -60,13 +60,9 @@ def test_disabled_poller_returns_none(tmp_path):
     assert poller.snapshot() is None
 
 
-def test_format_missing_value_is_dash():
-    text = format_thermal("{dome_temp:.1f} / {body_temp:.1f}", {"dome_temp": 1.25})
-    assert text == "1.2 / –"
-
-
-def test_format_bad_placeholder_returns_template():
-    assert format_thermal("{nope}", {}) == "{nope}"
+def test_missing_value_formats_as_dash():
+    kwargs = thermal_kwargs({"dome_temp": 1.25})
+    assert f"{kwargs['dome_temp']:.1f} / {kwargs['body_temp']:.1f}" == "1.2 / \u2013"
 
 
 def _frame_with_thermal(thermal):
@@ -75,23 +71,6 @@ def _frame_with_thermal(thermal):
     frame = make_processed_frame()
     frame.metadata.annotations = {"thermal": thermal} if thermal else None
     return frame
-
-
-def test_plugin_draws_label_from_frame_annotations():
-    from caelum.derivatives.thermal_status import ThermalStatusWorker
-
-    worker = ThermalStatusWorker({"overlay": {"template": "D {dome_temp:.1f} B {body_temp:.1f}"}})
-    (element,) = worker.provide_overlay_elements(_frame_with_thermal({"dome_temp": 29.86}))
-    assert element.type == "custom_label"
-    assert element.payload["text"] == "D 29.9 B –"
-
-
-def test_plugin_draws_nothing_without_reading_or_when_overlay_off():
-    from caelum.derivatives.thermal_status import ThermalStatusWorker
-
-    assert ThermalStatusWorker({}).provide_overlay_elements(_frame_with_thermal(None)) == []
-    off = ThermalStatusWorker({"overlay": {"enabled": False}})
-    assert off.provide_overlay_elements(_frame_with_thermal({"dome_temp": 1.0})) == []
 
 
 def test_overlay_editor_template_can_use_thermal_placeholders():
@@ -128,4 +107,3 @@ def test_plugin_settings_are_listed_with_defaults():
     settings = PluginLoader([ThermalStatusWorker]).effective_settings("thermal_status", {})
     assert settings["path"] == "/var/run/thermal-control-status.json"
     assert "dome_temp" in settings["metadata_fields"]
-    assert settings["overlay"]["enabled"] is True
