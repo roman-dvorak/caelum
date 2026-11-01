@@ -214,23 +214,48 @@ def _draw_detection_box(c: _Canvas, p: dict[str, Any]) -> None:
     _draw_box(c, p, _AMBER, _str(p, "label"))
 
 
+#: Crosshair colour and caption per mount status.
+_MOUNT_STYLE: dict[str, tuple[tuple[int, int, int, int], str]] = {
+    "tracking": ((90, 220, 120, 255), "tracking"),
+    "slewing": ((232, 161, 58, 255), "slewing"),
+    "idle": ((120, 190, 255, 255), "idle"),
+    "parked": ((170, 170, 190, 255), "parked"),
+    "disconnected": ((150, 150, 150, 255), "not connected"),
+    "error": ((235, 80, 80, 255), "error"),
+    "offline": ((130, 130, 130, 255), "offline"),
+}
+
+
 def _draw_telescope_marker(c: _Canvas, p: dict[str, Any]) -> None:
+    """A crosshair (not a field of view): a ring with a gap in the centre and
+    four ticks, coloured by the mount's status, with a small caption."""
     x, y = _num(p, "x"), _num(p, "y")
     if x is None or y is None:
         return
-    cx, cy, r = x * c.width, y * c.height, c.px(6)
+    color, caption = _MOUNT_STYLE.get(_str(p, "status") or "", (_AMBER, ""))
+    cx, cy = x * c.width, y * c.height
+    ring, gap, tick = c.px(9), c.px(3), c.px(8)
+    width = c.px(2)
     layer = Image.new("RGBA", c.image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*_AMBER[:3], 76), outline=_AMBER, width=c.px(2))
-    label = _str(p, "label")
+    outline = (0, 0, 0, 170)
+    for line_w, col in ((width + c.px(2), outline), (width, color)):
+        draw.ellipse([cx - ring, cy - ring, cx + ring, cy + ring], outline=col, width=line_w)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            draw.line(
+                [cx + dx * gap, cy + dy * gap, cx + dx * (ring + tick), cy + dy * (ring + tick)],
+                fill=col,
+                width=line_w,
+            )
+    label = " · ".join(t for t in (_str(p, "label"), caption) if t)
     if label:
         font = _font(c.text_px(10))
         text_w = font.getlength(label)
         ascent, descent = font.getmetrics()
-        top = cy + r + c.px(2)
+        top = cy + ring + tick + c.px(3)
         half = text_w / 2 + c.px(3)
         draw.rectangle([cx - half, top, cx + half, top + ascent + descent], fill=_CHIP_BG)
-        draw.text((cx - text_w / 2, top), label, font=font, fill=_AMBER_BRIGHT)
+        draw.text((cx - text_w / 2, top), label, font=font, fill=color)
     c.paste_layer(layer)
 
 

@@ -70,6 +70,10 @@ class DerivativeWorker:
     #: per-frame dispatch. None until registered.
     data_dir: Path | None = None
 
+    def close(self) -> None:
+        """Called when the worker is discarded (config reload or shutdown) —
+        stop any threads or connections it started."""
+
     def on_frame(self, frame: ProcessedFrame) -> None:
         """Called for every captured frame, off the capture thread —
         accumulate whatever state is needed (e.g. append a keogram column)."""

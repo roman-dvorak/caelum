@@ -145,7 +145,12 @@ class DerivativePool:
         detector's previous frame at the old `max_dim`) matches its new
         configuration. The cost is that an in-progress keogram restarts.
         """
-        self._workers = []
+        old, self._workers = self._workers, []
+        for worker in old:
+            try:
+                worker.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("closing worker %s failed", getattr(worker, "id", worker))
         self.register_all(workers)
 
     def _on_frame_captured(self, frame: ProcessedFrame) -> None:
@@ -278,6 +283,11 @@ class DerivativePool:
         _write_atomic(paths.sidecar_path(thumb), metadata.model_dump_json(indent=2).encode())
 
     def shutdown(self) -> None:
+        for worker in self._workers:
+            try:
+                worker.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("closing worker %s failed", getattr(worker, "id", worker))
         self._thread_pool.shutdown(wait=True, cancel_futures=True)
         self._overlay_pool.shutdown(wait=True, cancel_futures=True)
         self.process_pool.shutdown(wait=True, cancel_futures=True)
