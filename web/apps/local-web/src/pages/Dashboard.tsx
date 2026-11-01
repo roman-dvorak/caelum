@@ -73,6 +73,7 @@ export function Dashboard() {
                 when={new Date(frame.metadata.captured_at)}
                 hidden={skyView.hidden}
                 maxMagnitude={skyView.maxMagnitude}
+                symbolScale={skyView.symbolScale}
                 opacity={skyView.opacity}
                 interactive
               />

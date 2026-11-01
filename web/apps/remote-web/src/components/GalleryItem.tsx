@@ -10,6 +10,7 @@ export interface SkyView {
   lon: number
   hidden: ReadonlySet<string>
   maxMagnitude: number
+  symbolScale: number
   opacity: number
 }
 
@@ -44,7 +45,7 @@ export function GalleryItem({ slug, time, thumbnailPath, overlayPath, showOverla
         alt={`Frame at ${time}`}
       >
         {sky && !Number.isNaN(when.getTime()) ? (
-          <SkyCanvas lens={sky.lens} latDeg={sky.lat} lonDeg={sky.lon} when={when} hidden={sky.hidden} maxMagnitude={sky.maxMagnitude}
+          <SkyCanvas lens={sky.lens} latDeg={sky.lat} lonDeg={sky.lon} when={when} hidden={sky.hidden} maxMagnitude={sky.maxMagnitude} symbolScale={sky.symbolScale}
             opacity={sky.opacity} />
         ) : null}
       </ImageViewer>

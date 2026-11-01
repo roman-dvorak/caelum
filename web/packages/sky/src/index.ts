@@ -1,6 +1,7 @@
 export * from './astro.ts'
 export * from './catalog.ts'
 export * from './draw.ts'
+export * from './controls.ts'
 export * from './lens.ts'
 export type { SkyBody } from './bodies.ts'
 export type { LensConfig, LensProjection } from './types.ts'

@@ -1,11 +1,14 @@
 import type { LensConfig } from './types.ts'
-import { eclipticPath, starPositions } from './astro.ts'
+import { eclipticPath, horizontal, julianDate, starPositions } from './astro.ts'
 import type { SkyData } from './catalog.ts'
 import { altAzToFraction } from './lens.ts'
 
 /** The toggleable parts of the sky overlay. */
-export const SKY_LAYERS = ['outline', 'grid', 'ecliptic', 'constellations', 'stars', 'planets', 'compass'] as const
+export const SKY_LAYERS = ['outline', 'grid', 'ecliptic', 'radec', 'constellations', 'stars', 'planets', 'compass'] as const
 export type SkyLayer = (typeof SKY_LAYERS)[number]
+
+/** Layers that are off until the viewer switches them on. */
+export const DEFAULT_HIDDEN_LAYERS: readonly string[] = ['radec']
 
 export const DEFAULT_MAX_MAGNITUDE = 3.5
 /** Stars up to this magnitude also get their name. */
@@ -22,6 +25,8 @@ export interface SkyDrawOptions {
   hidden?: ReadonlySet<string>
   /** Dimmest star drawn. */
   maxMagnitude?: number
+  /** Multiplies the size of the rings marking stars and bodies (default 1). */
+  symbolScale?: number
 }
 
 /** A star or body that was drawn, with its place on the canvas (CSS pixels). */
@@ -38,6 +43,7 @@ export interface SkyHit {
 const OUTLINE_COLOR = '#f6be64'
 const GRID_COLOR = '#50c8dc'
 const ECLIPTIC_COLOR = '#f0d060'
+const RADEC_COLOR = '#d29cff'
 const STAR_COLOR = '#e8f1ff'
 const FIGURE_COLOR = '#8caaff'
 const BODY_COLOR = { sun: '#ffd65a', moon: '#dce0e8', planet: '#e8a13a' } as const
@@ -65,6 +71,7 @@ export function drawSky(
   // Sizes were designed for a ~800 px wide view; small thumbnails shrink them.
   const k = Math.min(1, Math.max(0.45, width / 800))
   const aspect = width / height
+  const scale = o.symbolScale ?? 1
   const horizon = 90 - o.lens.fov_deg / 2 - (o.lens.tilt_deg ?? 0)
   const minAlt = Math.max(0, horizon)
   const show = (layer: SkyLayer) => !o.hidden?.has(layer)
@@ -125,14 +132,12 @@ export function drawSky(
   }
 
   if (show('ecliptic')) {
-    // The Sun's path: dashed, with its name where it is highest in the picture.
+    // The Sun's path, dashed.
     ctx.strokeStyle = ECLIPTIC_COLOR
     ctx.globalAlpha = 0.75
     ctx.lineWidth = Math.max(1, 1.5 * k)
     ctx.setLineDash([6 * k, 5 * k])
     let pen = false
-    let top: [number, number] | null = null
-    let topAlt = -90
     ctx.beginPath()
     for (const [alt, az] of eclipticPath(o.when, o.latDeg, o.lonDeg, 2)) {
       const p = alt >= minAlt ? project(alt, az) : null
@@ -143,21 +148,45 @@ export function drawSky(
       if (pen) ctx.lineTo(p[0], p[1])
       else ctx.moveTo(p[0], p[1])
       pen = true
-      if (alt > topAlt) {
-        topAlt = alt
-        top = p
-      }
     }
     ctx.stroke()
     ctx.setLineDash([])
     ctx.globalAlpha = 1
-    if (top) {
-      ctx.font = `${Math.max(9, Math.round(11 * k))}px ${MONO}`
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'bottom'
-      ctx.fillStyle = ECLIPTIC_COLOR
-      ctx.fillText('ecliptic', top[0] + 6 * k, top[1] - 4 * k)
+  }
+
+  if (show('radec')) {
+    // Circles of equal declination and meridians of equal right ascension: they
+    // turn with the sky, so a star keeps its place on them.
+    const jd = julianDate(o.when)
+    const rad = Math.PI / 180
+    const line = (ra: number[], dec: number[]) => {
+      ctx.beginPath()
+      let pen = false
+      ra.forEach((r, i) => {
+        const [alt, az] = horizontal(r * rad, dec[i] * rad, jd, o.latDeg, o.lonDeg)
+        const p = alt >= minAlt ? project(alt, az) : null
+        if (!inFrame(p)) {
+          pen = false
+          return
+        }
+        if (pen) ctx.lineTo(p[0], p[1])
+        else ctx.moveTo(p[0], p[1])
+        pen = true
+      })
+      ctx.stroke()
     }
+    ctx.strokeStyle = RADEC_COLOR
+    ctx.globalAlpha = 0.55
+    ctx.lineWidth = Math.max(1, k)
+    ctx.setLineDash([2 * k, 4 * k])
+    for (let dec = -60; dec <= 60; dec += 30) {
+      line(Array.from({ length: 181 }, (_, i) => i * 2), Array(181).fill(dec))
+    }
+    for (let ra = 0; ra < 360; ra += 30) {
+      line(Array(121).fill(ra), Array.from({ length: 121 }, (_, i) => -90 + i * 1.5))
+    }
+    ctx.setLineDash([])
+    ctx.globalAlpha = 1
   }
 
   const positions = show('stars') || show('constellations') ? starPositions(sky.stars, o.when, o.latDeg, o.lonDeg) : null
@@ -205,7 +234,7 @@ export function drawSky(
       if (!inFrame(p)) return
       // A ring rather than a dot: it marks the star without hiding it, so it
       // can be compared with the real one underneath.
-      const size = Math.max(3, 3 + (4.5 - mag) * 1.6) * k
+      const size = Math.max(3, 3 + (4.5 - mag) * 1.6) * k * scale
       ctx.globalAlpha = 0.85
       ctx.beginPath()
       ctx.arc(p[0], p[1], size, 0, Math.PI * 2)
@@ -225,9 +254,9 @@ export function drawSky(
       ctx.strokeStyle = BODY_COLOR[body.kind]
       ctx.lineWidth = 2 * k
       ctx.beginPath()
-      ctx.arc(p[0], p[1], (body.kind === 'planet' ? 5 : 8) * k, 0, Math.PI * 2)
+      ctx.arc(p[0], p[1], (body.kind === 'planet' ? 5 : 8) * k * scale, 0, Math.PI * 2)
       ctx.stroke()
-      label(body.name, p[0] + 12 * k, p[1], BODY_COLOR[body.kind])
+      label(body.name, p[0] + 12 * k * scale, p[1], BODY_COLOR[body.kind])
       hits.push({ kind: body.kind, name: body.name, mag: body.kind === 'planet' ? 0 : -10, alt: body.alt, az: body.az, x: p[0], y: p[1] })
     }
   }

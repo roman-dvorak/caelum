@@ -24,6 +24,8 @@ export interface SkyCanvasProps {
   hidden?: ReadonlySet<string>
   /** Dimmest star drawn. */
   maxMagnitude?: number
+  /** Size of the star and body rings relative to the default (1). */
+  symbolScale?: number
   /** How opaque the sky is over the picture, 0 – 1 (default 1). */
   opacity?: number
   /** Show a popup with the name or sky position under the pointer. */
@@ -91,6 +93,7 @@ export function SkyCanvas({
   when,
   hidden,
   maxMagnitude,
+  symbolScale,
   opacity = 1,
   interactive = false,
   onPick,
@@ -134,8 +137,8 @@ export function SkyCanvas({
 
   const whenMs = when.getTime()
   const options = useMemo(
-    () => ({ lens, latDeg, lonDeg, elevationM, when: new Date(whenMs), hidden, maxMagnitude }),
-    [lens, latDeg, lonDeg, elevationM, whenMs, hidden, maxMagnitude],
+    () => ({ lens, latDeg, lonDeg, elevationM, when: new Date(whenMs), hidden, maxMagnitude, symbolScale }),
+    [lens, latDeg, lonDeg, elevationM, whenMs, hidden, maxMagnitude, symbolScale],
   )
 
   useEffect(() => {

@@ -76,3 +76,15 @@ describe('lens projection', () => {
     }
   })
 })
+
+describe('sky settings menu description', () => {
+  it('has a text in every language for every layer and slider', async () => {
+    const { SKY_LAYERS, SKY_SLIDERS, skyText, skySliderLabel } = await import('../src/index.ts')
+    for (const locale of ['en', 'cs']) {
+      const text = skyText(locale)
+      for (const layer of SKY_LAYERS) expect(text.layers[layer]).toBeTruthy()
+      for (const spec of SKY_SLIDERS) expect(skySliderLabel(spec, text, 1)).not.toContain('{value}')
+    }
+    expect(skyText('xx').sky).toBe('Sky')
+  })
+})

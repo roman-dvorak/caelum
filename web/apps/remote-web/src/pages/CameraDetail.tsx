@@ -93,7 +93,7 @@ function Gallery({ slug, dateIndex, manifest }: { slug: string; dateIndex: DateI
   // The sky can be drawn here only when the camera published where it is.
   const sky: SkyView | undefined =
     manifest.sky && manifest.location && skyView.on
-      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden: skyView.hidden, maxMagnitude: skyView.maxMagnitude, opacity: skyView.opacity }
+      ? { lens: manifest.sky.lens, lat: manifest.location.lat, lon: manifest.location.lon, hidden: skyView.hidden, maxMagnitude: skyView.maxMagnitude, symbolScale: skyView.symbolScale, opacity: skyView.opacity }
       : undefined
 
   return (

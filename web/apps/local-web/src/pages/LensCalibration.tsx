@@ -422,6 +422,7 @@ export function LensCalibration() {
                 when={shown.time}
                 hidden={skyView.hidden}
                 maxMagnitude={skyView.maxMagnitude}
+                symbolScale={skyView.symbolScale}
                 opacity={skyView.opacity}
                 interactive
                 onPick={pick ? onPick : undefined}
