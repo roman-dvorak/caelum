@@ -13,7 +13,7 @@ service and is controlled from a web UI.
 - **Sky-aware auto-exposure** — closed-loop exposure/gain control with
   separate presets for day, civil/nautical/astronomical twilight and night;
   Sun/Moon positions from astropy's builtin ephemeris, fully offline.
-- **RAM-first pipeline** — thumbnails, JSON metadata sidecars and raw FITS,
+- **RAM-first pipeline** — thumbnails, JSON metadata sidecars and raw DNG,
   dark-frame and lens/white-balance calibration, configurable overlays.
 - **Plugins** — keograms, meteor detection, timelapses, telescope-position
   overlay; third-party plugins use the same interface.
@@ -334,7 +334,7 @@ in the file changes. The gains the frame was captured with stay in the XMP
 re-sends the file on the next upload pass.
 
 The live stream (`/api/frame/latest.jpg`, `/ws/stream`) stays JPEG. Older
-captures in `.jpg`/`.fits` keep working everywhere alongside the new formats.
+captures in `.jpg`/`.fits` (JPEG thumbnails, FITS raws) keep working everywhere alongside the new formats.
 
 ## Upload
 
@@ -421,9 +421,8 @@ preview level and deletes admin-only:
 - `/api/files` — the data directory as it sits on disk: listing, download,
   recursive delete, and per-category usage plus free space. Every path is
   resolved and confined to the data directory before use, symlinks included.
-  `/api/files/preview` renders any image *including FITS* as a downscaled PNG
-  with a percentile stretch, which is the only way to look at a raw frame in a
-  browser; a DNG previews as its capture's stored thumbnail.
+  `/api/files/preview` renders an image as a downscaled PNG (legacy FITS raws
+  with a percentile stretch); a DNG previews as its capture's stored thumbnail.
 - `/api/frames` — the same files seen as a time series instead of a tree. One
   capture is up to three files in three directories (thumbnail, `.json`
   sidecar, raw DNG — or FITS for older captures); this collapses them into one row per capture, and

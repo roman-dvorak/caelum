@@ -33,7 +33,7 @@ and the moon actually are for the configured observing site, classifies the sky
 into one of five periods, looks up the exposure envelope configured for that
 period, and drives exposure and gain inside it using measurements from the
 previous frame. The same period classification decides whether a frame is
-persisted as a full raw FITS file or as a thumbnail only, and how long to wait
+persisted as a full raw DNG file or as a thumbnail only, and how long to wait
 before the next capture. Exposure policy and storage policy read the same
 source of truth, so "is this a night frame" and "how long should we expose"
 can never disagree.

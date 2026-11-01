@@ -237,10 +237,10 @@ data tree is not swallowed by it:
 ```
 
 The `!-f` / `!-d` conditions mean any real file — every JSON manifest, every
-JPEG — is served as itself and only genuinely missing paths reach the app.
+WebP thumbnail — is served as itself and only genuinely missing paths reach the app.
 
 ::: warning
-Everything under this document root is public: thumbnails, FITS files,
+Everything under this document root is public: thumbnails, raw DNG files,
 per-frame metadata and the `location` coordinates in each `manifest.json`. If
 your camera's exact position is not something you want published, set
 `location` to a rounded coordinate — the sky-state calculation does not care

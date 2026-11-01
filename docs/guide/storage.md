@@ -23,15 +23,15 @@ A populated data directory looks like this:
 data/
   raw/
     2026/09/19/
-      20260919-210431.fits
+      20260919-210431.dng
       20260919-210431.json
-      20260919-210501.fits
+      20260919-210501.dng
       20260919-210501.json
   thumbnails/
     2026/09/19/
-      20260919-210431.jpg
+      20260919-210431.webp
       20260919-210431.json
-      20260919-210501.jpg
+      20260919-210501.webp
       20260919-210501.json
       index.json
   overlays/
@@ -103,7 +103,7 @@ help from the parent directory.
 ## Metadata sidecars
 
 Every stored image gets a JSON sidecar with the same stem and a `.json`
-extension — `210431.fits` and `210431.json`, `210431.jpg` and `210431.json`. It
+extension — `210431.dng` and `210431.json`, `210431.webp` and `210431.json`. It
 is the frame's `FrameMetadata` serialised with `indent=2`: capture time,
 exposure, gain, the full sky state, the focus score and the overlay elements.
 The same document is written next to the raw file and next to the
@@ -111,28 +111,25 @@ thumbnail; the thumbnail's copy is rewritten once the overlay is rendered,
 with every plugin's elements and `overlay` saying where the rendered image
 is (`"file"` or `"burned"`).
 
-That redundancy is on purpose: a raw FITS pulled off the archive months later
+That redundancy is on purpose: a raw DNG pulled off the archive months later
 carries its own provenance next to it.
 
-The raw FITS file additionally carries the key values in its header, so
-standard astronomy tools see them without reading the sidecar:
+The raw DNG file additionally carries the key values inside itself — standard
+EXIF tags (`ExposureTime`, `DateTimeOriginal` in UTC, `Make`/`Model`) and an XMP
+packet in the `caelum:` namespace with the sky period, Sun and Moon position,
+moon illumination, site location, exposure and gains and the exposure loop's
+brightness measurement — so a DNG separated from its sidecar still says when
+and how it was taken. The pixels are the sensor's untouched Bayer data,
+losslessly compressed unless `dng_compress` is off. Several raw frames of one
+capture set go into one multi-frame DNG, see
+[Capture sets in DNG](/dng-capture-sets).
 
-```ini
-EXPOSURE = 4.0          / seconds
-GAIN     = 2.5          / analogue gain
-DATE-OBS = 2026-09-19T21:04:31.482913+00:00
-SUNALT   = -21.4        / degrees
-MOONALT  = 14.8         / degrees
-MOONILLU = 0.62         / fraction 0-1
-SKYPERD  = 'night'
-```
-
-The image data is stored in the FITS convention for a colour cube — axes
-reordered to `(channels, height, width)`.
+Older captures may still be `.fits` raws and `.jpg` thumbnails; caelum reads
+both next to the new formats.
 
 ## When raw files are written
 
-Every captured frame produces a thumbnail plus a sidecar. Raw FITS files are
+Every captured frame produces a thumbnail plus a sidecar. Raw DNG files are
 conditional.
 
 `StoragePolicy.decide()` sets `save_raw` to true when the frame's sky period is
@@ -143,7 +140,7 @@ listed in `storage_policy.raw_periods`, which defaults to:
   "storage_policy": {
     "raw_periods": ["astronomical_twilight", "night"],
     "thumbnail_max_dim": 1024,
-    "jpeg_quality": 85,
+    "webp_quality": 80,
     "night_capture_interval_s": 30.0,
     "day_capture_interval_s": 60.0,
     "realtime_stream_fps": 2.0
@@ -152,12 +149,12 @@ listed in `storage_policy.raw_periods`, which defaults to:
 ```
 
 So out of the box, daylight and the two brighter twilights produce thumbnails
-only, and astronomical twilight and night produce a full FITS file as well. The
+only, and astronomical twilight and night produce a full DNG file as well. The
 same flag also selects the capture cadence — `night_capture_interval_s` when
 raw is being saved, `day_capture_interval_s` otherwise.
 
 Thumbnails are encoded in memory at `thumbnail_max_dim` on the longest side
-(1024 px by default) at `jpeg_quality`. No temporary files are involved at any
+(1024 px by default) at `webp_quality`. No temporary files are involved at any
 point in the pipeline.
 
 The actual writing happens in `StorageWriter`, which subscribes to

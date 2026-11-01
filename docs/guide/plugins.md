@@ -49,7 +49,7 @@ actually need.
 `modify_image` is chained across every enabled worker in ascending `order`
 before `on_frame`/`provide_overlay_elements`/`create_derivative` run — see
 `DerivativePool._run_modify_chain`. Only `ProcessedFrame.image` passes through
-the chain; the thumbnail JPEG and any raw FITS write are already fixed by the
+the chain; the thumbnail WebP and any raw DNG write are already fixed by the
 time it runs, so a `modify_image` change is visible to derivative workers
 (keograms, meteor detection) but never to the stored thumbnail/raw file or the
 live view — an overlay element (see `provide_overlay_elements` above) is the

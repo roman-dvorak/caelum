@@ -6,7 +6,7 @@ description: 'Uploading caelum frames to a permanent remote archive with rsync, 
 
 The camera's local disk rotates. The remote host is the permanent archive, and
 it is also what serves the public read-only viewer. The remote needs no backend
-whatsoever — the uploader writes a static tree of JPEGs, FITS files and JSON
+whatsoever — the uploader writes a static tree of WebP thumbnails, DNG files and JSON
 manifests that Apache (or any other static server) hands out directly.
 
 ## Configuration
@@ -186,12 +186,12 @@ sudo -u caelum ssh -i /etc/caelum/upload_key \
     thumbnails/
       2026-09-19/
         index.json
-        210431.jpg
+        210431.webp
         210431.json
         ...
     raw/
       2026-09-19/
-        210431.fits
+        210431.dng
         210431.json
     derivatives/
       2026-09-19/
@@ -250,7 +250,7 @@ along with the next rsync like any other file:
       "thumbnail_count": 842,
       "has_raw": true,
       "raw_count": 611,
-      "latest_thumbnail": "thumbnails/2026-09-19/210501.jpg"
+      "latest_thumbnail": "thumbnails/2026-09-19/210501.webp"
     }
   ]
 }
@@ -270,7 +270,7 @@ One per thumbnail date directory, listing that night's frames:
   "images": [
     {
       "time": "210431",
-      "thumbnail": "thumbnails/2026-09-19/210431.jpg",
+      "thumbnail": "thumbnails/2026-09-19/210431.webp",
       "metadata": "thumbnails/2026-09-19/210431.json"
     }
   ]

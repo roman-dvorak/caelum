@@ -137,7 +137,7 @@ mean.
 
 A browser over the data directory — `raw/`, `thumbnails/`, `derivatives/`,
 `darks/` and whatever else lives under `CAELUM_DATA_DIR`. It is the page for
-answering "did that FITS file actually get written", for pulling a single frame
+answering "did that DNG file actually get written", for pulling a single frame
 off the camera, and for checking that the date directories look the way
 [Storage](/guide/storage) says they should.
 
