@@ -82,6 +82,9 @@ def wheel_version(wheel: Path) -> str:
     return match["version"]
 
 
+_PIP_TIMEOUT_S = 120
+_PIP_RETRIES = 10
+
 #: On top of a copy of the running release: pip's build and unpack temp files.
 _INSTALL_MARGIN_MB = 200
 
@@ -160,6 +163,9 @@ def install_release(layout: ReleaseLayout, wheel: Path, log: Callable[[str], Non
         # No cache: it would only keep a second copy of every wheel on a disk
         # the release itself has to fit on.
         pip_cmd += ["--progress-bar", "off", "--no-cache-dir"]
+        # A Pi on a slow link: pip's defaults (15 s, 5 retries) give up on
+        # the big wheels (OpenCV, astropy) before a download finishes.
+        pip_cmd += ["--timeout", str(_PIP_TIMEOUT_S), "--retries", str(_PIP_RETRIES)]
         if system_site:
             constraints = target / "constraints.txt"
             with zipfile.ZipFile(wheel) as zf:

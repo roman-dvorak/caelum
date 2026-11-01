@@ -102,3 +102,20 @@ def test_update_stops_before_installing_when_the_disk_is_too_full(tmp_path, monk
     assert installed == []
     assert updater.state == "failed"
     assert "Not enough disk space" in (updater.error or "")
+
+
+def test_pip_gets_a_long_timeout_and_many_retries_for_slow_links(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    layout = SimpleNamespace(current=tmp_path / "cur", releases=tmp_path / "releases", version_of=lambda _p: "0.5.0")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(releases, "wheel_version", lambda _w: "0.6.0")
+    monkeypatch.setattr(releases, "_read_pyvenv_cfg", lambda _p: {"executable": "/usr/bin/python3"})
+    monkeypatch.setattr(releases, "_run", lambda cmd, _log: commands.append([str(c) for c in cmd]))
+
+    assert releases.install_release(layout, tmp_path / "caelum.whl", lambda _m: None) == "0.6.0"
+
+    pip = next(c for c in commands if c[0].endswith("/bin/pip"))
+    assert pip[pip.index("--timeout") + 1] == "120"
+    assert pip[pip.index("--retries") + 1] == "10"
+    assert "--no-cache-dir" in pip
