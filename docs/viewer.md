@@ -1,6 +1,6 @@
 ---
 sidebar: false
-description: 'Caelum Viewer: a static web app for browsing allsky camera data — timeline by sky period, time-lapse playback, video and image export, frame metadata, charts, filters and RAW download.'
+description: 'Caelum Viewer: a static web app for browsing allsky camera data — timeline by sky period, time-lapse playback, the sky drawn over the picture, all cameras on one timeline, video and image export, frame metadata, charts, filters and RAW download.'
 ---
 
 # Web viewer
@@ -20,12 +20,23 @@ it runs as static files and reads the data from one of two places:
   <span>viewer.caelum.astrometers.eu</span>
 </p>
 
-![Caelum Viewer showing a night frame, the day's timeline and the frame's metadata](/images/screenshots/caelum-viewer.webp)
+![Caelum Viewer in simple mode: a night frame with the sky drawn over it, playback controls and the day's timeline](/images/screenshots/caelum-viewer-sky.webp)
 
 ## What it does
 
 - **Camera, day and time** — chosen from a camera catalogue; the whole view
-  state is in the URL, so any frame can be bookmarked or shared.
+  state is in the URL, so any frame can be bookmarked or shared. *Today* jumps
+  to the current UTC day.
+- **All cameras** — with a catalogue, the *All cameras* button shows every
+  camera side by side on one shared timeline. Playback and *Live* move all of
+  them at once; click a camera to open it or to enlarge its frame. Frames more
+  than an hour away from the chosen time are hidden, and in *Live* a camera
+  whose newest frame is old is marked.
+- **Camera info** — the ⓘ button describes the camera: station name, camera
+  type, owner, position (if published), per-day frame counts and everything
+  else its `manifest.json` carries, with a link to the file index of an
+  https archive.
+- **The sky over the picture** — see [below](#the-sky-over-the-picture).
 - **Timeline** — 24 hours UTC, coloured by sky period (day, civil, nautical
   and astronomical twilight, night). Click or drag to move through the day.
 - **Frame detail** — zoom (wheel, `+`/`−`), pan by dragging, fullscreen, and
@@ -51,7 +62,12 @@ it runs as static files and reads the data from one of two places:
 - **Filters** — by sky period, by value ranges of any metadata field and by
   whether a RAW exists. They apply to playback, the gallery and the charts.
 - **Gallery** — the day's WebP thumbnails.
-- **About** — the viewer's version, build commit and build time.
+- **About** — the viewer's version, build commit and build time, and a link
+  to this documentation.
+- **Language** — English or Czech. The browser's language is used at first;
+  the `EN` / `CS` switch overrides it and is remembered.
+- **Installable** — the viewer is a PWA, so a browser can install it as an app.
+  On small screens the top bar folds its secondary items into a ⋮ menu.
 
 The viewer opens in **simple mode** — image, overlay, playback and timeline
 only. **Advanced mode** adds the metadata, filter, export, gallery and chart
@@ -59,9 +75,39 @@ panels; the section of the day and the export are available only there. The
 side panels can be collapsed (filter and export start collapsed). The browser
 remembers the chosen mode and which panels are open.
 
+![Caelum Viewer in advanced mode: a night frame, the day's timeline and the frame's metadata](/images/screenshots/caelum-viewer.webp)
+
+Without any source in the URL the viewer opens a start screen: recently viewed
+cameras (which can be pinned or removed) and a form for a catalogue or a single
+source.
+
 Keyboard: `←`/`→` (with Shift, by 10), `Home`/`End`, `Space` plays,
 `F` fullscreen, `+`/`−`/`0` zoom, `L` live, `O` overlay, `[`/`]` section
 start/end at the current frame, `Esc` cancels the section.
+
+## The sky over the picture
+
+When the camera has a [lens calibration](/guide/lens-calibration) and has
+published where it is, the viewer draws the sky over the frame itself, in the
+browser, for the moment the frame was taken. The **sky** checkbox switches it
+on; the ▾ next to it opens the menu:
+
+- parts to show: lens outline and centre, horizon and altitude rings, ecliptic,
+  RA/Dec circles (off at first), constellation lines, stars, Sun, Moon and
+  planets, compass;
+- sliders for the faintest star magnitude, the size of the symbols and the
+  opacity of the whole layer.
+
+Hovering a star or a planet names it. The settings are remembered by the
+browser. This is separate from the *overlay* with time and exposure, which the
+camera burns into the preview.
+
+The viewer reads the lens and position from the camera's `manifest.json`
+(`sky.lens` and `location`) or, straight from a camera, from its
+`/api/sky/setup`. The position goes into the manifest only when the camera has
+`camera.identity.publish_location` on (see [Upload](/guide/upload)); without
+it, an older caelum or a plain archive, the viewer shows the pictures as they
+are and offers no sky.
 
 ## From a storage server
 
@@ -93,7 +139,13 @@ https://viewer.caelum.astrometers.eu/?catalog=https://example.org/cameras.json
 
 Further parameters: `camera=`, `date=YYYY-MM-DD`, `time=HH:MM[:SS]` (UTC),
 `live=1`, `from=` / `to=HH:MM[:SS]` (section of the day, UTC),
-`mode=simple|advanced`.
+`mode=simple|advanced`, `lang=en|cs`.
+
+For a single source without a catalogue, `name=` sets the camera's name and
+`link=` the address of its own web interface; `thumbnails=` and `raw=` change
+the folders that hold them if the layout differs from caelum's, and
+`style=virtual` makes an S3 source use virtual-hosted addressing (path style is
+the default).
 
 ::: warning CORS and public data
 The data is on a different domain than the viewer, so the server has to send
