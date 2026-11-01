@@ -380,3 +380,54 @@ unasked would be a bad default) — enable it from the Overlay editor page or
 upload/delete). The camera renders the asset into the overlay image, so the
 remote archive needs no copy of it.
 :::
+
+## Worked example: thermal status of the AMRPI4HAT01 board
+
+The camera management board AMRPI4HAT01 runs its own control software, which
+writes its state (temperatures, humidity, pressure, dew points, heater and
+fan PWM, flags) to `/var/run/thermal-control-status.json`. The
+`thermal_status` plugin (disabled by default) puts selected values into the
+metadata of every frame and into the overlay.
+
+```text
+ status file --(poller thread, every poll_interval_s)--> last reading in memory
+                                                              |
+ capture thread: snapshot() -> annotations["thermal"] --------+
+                                      |
+              frame submission --> sidecar JSON + DNG XMP (caelum:thermal_*)
+                                      |
+                  thermal_status plugin --> overlay label
+```
+
+The file is read on its own thread, so capture never waits for it. The
+capture thread only takes a snapshot from memory when a frame is submitted;
+a missing or corrupt file keeps the last reading, and a file not updated for
+`max_age_s` (the control software stopped) attaches nothing.
+
+```json
+{
+  "thermal_status": {
+    "enabled": true,
+    "order": 45,
+    "settings": {
+      "path": "/var/run/thermal-control-status.json",
+      "poll_interval_s": 5,
+      "max_age_s": 60,
+      "metadata_fields": ["dome_temp", "body_temp", "envi_temp", "dome_humidity", "heater_pwm"],
+      "overlay": {
+        "enabled": true,
+        "x": 0.02, "y": 0.98, "align": "left", "valign": "bottom",
+        "template": "Dome {dome_temp:.1f} C  Body {body_temp:.1f} C  RH {dome_humidity:.0f} %"
+      }
+    }
+  }
+}
+```
+
+- `metadata_fields` — which keys of the status file are stored with the frame:
+  in the sidecar JSON as `annotations.thermal` and in the DNG XMP as
+  `caelum:thermal_<key>`, plus `age_s`, the age of the reading.
+- `overlay.template` — a `str.format` template; a value the frame has no
+  reading for is shown as an en dash.
+- The same fields are available as placeholders in the overlay editor's own
+  labels (`{dome_temp:.1f}`, `{heater_pwm:.0f}`, ...).

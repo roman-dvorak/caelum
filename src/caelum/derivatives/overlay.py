@@ -22,7 +22,9 @@ from pydantic import BaseModel, Field, model_validator
 from caelum.capture.frame_store import ProcessedFrame
 from caelum.capture.metadata import FrameMetadata, OverlayElement
 from caelum.derivatives.overlay_render import format_exposure
+from caelum.derivatives.thermal_format import thermal_kwargs
 from caelum.plugins.base import Plugin
+from caelum.telemetry.thermal import ANNOTATION_KEY, THERMAL_FIELDS
 
 #: The fixed set of `str.format()` fields a label `template` may reference.
 #: Mirrored in the frontend's overlay editor as the "insert placeholder"
@@ -58,6 +60,7 @@ LABEL_PLACEHOLDERS: tuple[str, ...] = (
     "owner",
     "camera_model",
     "software",
+    *THERMAL_FIELDS,
 )
 
 
@@ -223,6 +226,7 @@ def _render_label_text(template: str, metadata: FrameMetadata) -> str:
             owner=provenance.get("owner") or "",
             camera_model=provenance.get("camera_model") or provenance.get("camera_backend") or "",
             software=f"caelum {version}" if version else "caelum",
+            **thermal_kwargs((metadata.annotations or {}).get(ANNOTATION_KEY)),
         )
     except (KeyError, AttributeError, IndexError, ValueError, TypeError, ZeroDivisionError):
         # A bad/unknown placeholder shouldn't drop the whole overlay element

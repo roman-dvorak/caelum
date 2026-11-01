@@ -23,6 +23,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 from caelum import __version__
 from caelum.cameras.base import CameraBackend, CameraStalled, CaptureRequest, RawFrame
@@ -174,6 +175,7 @@ class CaptureWorker(threading.Thread):
         white_balance_override: WhiteBalanceOverride | None = None,
         program_provider: Callable[[AppConfig], LoadedProgram] | None = None,
         program_store: ProgramStore | None = None,
+        annotation_provider: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(name="CaptureWorker", daemon=True)
         self._camera_factory = camera_factory
@@ -185,6 +187,9 @@ class CaptureWorker(threading.Thread):
         self._exposure_controller = exposure_controller
         self._storage_policy = storage_policy
         self._frame_sink = frame_sink
+        # Extra per-frame annotations (e.g. sensor readings) — must return
+        # from memory, it runs on the capture thread.
+        self._annotation_provider = annotation_provider
         self._sky_state_refresh_interval_s = sky_state_refresh_interval_s
         self.stream_mode = stream_mode or StreamModeController()
         # Set to cut a wait for the next slot short: stream mode toggled
@@ -752,8 +757,14 @@ class CaptureWorker(threading.Thread):
         }
 
     def _submit(self, cfg: AppConfig, capture_set: CaptureSet, provenance: dict) -> None:
+        extra = None
+        if self._annotation_provider is not None:
+            try:
+                extra = self._annotation_provider()
+            except Exception:
+                logger.exception("Annotation provider failed")
         submissions = [self._with_slot(s) for s in build_submissions(cfg, capture_set, provenance,
-                                                                      self._storage_policy)]
+                                                                      self._storage_policy, extra)]
         if len(submissions) == 1:
             self._frame_sink.submit(submissions[0])
         else:
@@ -781,7 +792,11 @@ def stamp_slot(raw: RawFrame, slot: float) -> RawFrame:
 
 
 def build_submissions(
-    cfg: AppConfig, capture_set: CaptureSet, provenance: dict, storage_policy: StoragePolicy
+    cfg: AppConfig,
+    capture_set: CaptureSet,
+    provenance: dict,
+    storage_policy: StoragePolicy,
+    extra_annotations: dict[str, Any] | None = None,
 ) -> list[FrameSubmission]:
     """One `FrameSubmission` per frame of the set; with more than one frame
     each carries its `capture_set` record (see `FrameMetadata.capture_set`)."""
@@ -805,7 +820,7 @@ def build_submissions(
                 entry["members"] = [
                     _member_summary(f, i, f is primary, set_time) for i, f in enumerate(capture_set.frames)
                 ]
-        annotations = dict(frame.annotations)
+        annotations = {**(extra_annotations or {}), **frame.annotations}
         if is_primary and capture_set.annotations:
             annotations["set"] = dict(capture_set.annotations)
         decision = storage_policy.decide(frame.sky, cfg.storage_policy)

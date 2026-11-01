@@ -429,6 +429,8 @@ def _default_plugins() -> dict[str, PluginConfig]:
         # only in the right place once `camera.lens` has been calibrated.
         "sky_overlay": PluginConfig(enabled=False, order=35),
         "timelapse": PluginConfig(enabled=False, order=50),
+        # Disabled by default: needs the AMRPI4HAT01 board and its status file.
+        "thermal_status": PluginConfig(enabled=False, order=45),
     }
 
 

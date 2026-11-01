@@ -115,6 +115,7 @@ def _xmp_fields(info: FrameInfo, metadata: FrameMetadata, stats: FrameStats) -> 
         **_capture_settings_xmp(info.capture_settings),
         **_provenance_xmp(info.provenance),
         **_capture_set_xmp(info.capture_set),
+        **_thermal_xmp(metadata.annotations),
     }
 
 
@@ -133,6 +134,13 @@ def _provenance_xmp(provenance: dict[str, Any] | None) -> dict[str, Any]:
         "camera_capabilities": json.dumps(caps, sort_keys=True, separators=(",", ":")) if caps else None,
         "config_sha256": provenance.get("config_sha256"),
     }
+
+
+def _thermal_xmp(annotations: dict[str, Any] | None) -> dict[str, Any]:
+    thermal = (annotations or {}).get("thermal")
+    if not isinstance(thermal, dict):
+        return {}
+    return {f"thermal_{key}": value for key, value in thermal.items()}
 
 
 def _capture_set_xmp(capture_set: dict[str, Any] | None) -> dict[str, Any]:

@@ -41,6 +41,16 @@ const LABEL_PLACEHOLDERS = [
   'sky_state.moon_illumination',
   'focus_score',
   'captured_at_local:%H:%M:%S',
+  'dome_temp:.1f',
+  'body_temp:.1f',
+  'envi_temp:.1f',
+  'dome_humidity:.0f',
+  'body_humidity:.0f',
+  'envi_humidity:.0f',
+  'body_pressure:.0f',
+  'dome_dew_point:.1f',
+  'heater_pwm:.0f',
+  'fan_pwm:.0f',
 ]
 
 const DEFAULT_TELESCOPE_SETTINGS: TelescopePositionSettings = {

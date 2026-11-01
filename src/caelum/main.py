@@ -33,6 +33,7 @@ from caelum.derivatives.overlay import OverlayWorker
 from caelum.derivatives.pool import DerivativePool
 from caelum.derivatives.sky_overlay import SkyOverlayWorker
 from caelum.derivatives.telescope_position import TelescopePositionWorker
+from caelum.derivatives.thermal_status import ThermalStatusWorker
 from caelum.derivatives.timelapse import TimelapseWorker
 from caelum.events import EventBus
 from caelum.logging_conf import configure_logging
@@ -43,6 +44,7 @@ from caelum.processing.jobs import FrameSink
 from caelum.scheduling.interval_scheduler import IntervalScheduler
 from caelum.settings import Settings, load_settings
 from caelum.storage.retention import RetentionSweeper
+from caelum.telemetry.thermal import ANNOTATION_KEY, ThermalStatusPoller
 from caelum.update import releases as update_releases
 from caelum.update.job import Updater
 from caelum.upload.uploader import UploadWorker
@@ -126,6 +128,7 @@ async def _async_main(settings: Settings) -> None:
         storage_policy=StoragePolicy(),
         frame_sink=frame_sink,
         program_store=program_store,
+        annotation_provider=lambda: {ANNOTATION_KEY: s} if (s := thermal_poller.snapshot()) else {},
     )
 
     upload_worker = UploadWorker(config_manager, event_bus, settings.data_dir)
@@ -133,6 +136,7 @@ async def _async_main(settings: Settings) -> None:
         config_manager, settings.data_dir, get_uploaded_before=upload_worker.uploaded_before
     )
     interval_scheduler = IntervalScheduler()
+    thermal_poller = ThermalStatusPoller()
     interval_scheduler.register(retention_sweeper)
 
     derivative_pool = DerivativePool(event_bus, frame_store, settings.data_dir, config_manager=config_manager)
@@ -147,12 +151,15 @@ async def _async_main(settings: Settings) -> None:
             OverlayWorker,
             SkyOverlayWorker,
             TelescopePositionWorker,
+            ThermalStatusWorker,
             TimelapseWorker,
         ]
     )
 
     def reload_plugins(new_config: AppConfig) -> None:
         loaded = plugin_loader.load(new_config)
+        thermal = next((lp.plugin for lp in loaded if lp.id == ThermalStatusWorker.id), None)
+        thermal_poller.configure(thermal.thermal_settings if thermal is not None else None)
         derivative_pool.replace_all(lp.plugin for lp in loaded)
         logger.info("Plugins loaded: %s", ", ".join(lp.id for lp in loaded) or "none")
 
@@ -176,6 +183,7 @@ async def _async_main(settings: Settings) -> None:
     frame_sink.start()
     capture_worker.start()
     interval_scheduler.start()
+    thermal_poller.start()
     upload_worker.start()
     logger.info(
         "caelum %s starting: camera=%s processing=%s http=%s:%d local-web=%s auth=%s",
@@ -234,6 +242,7 @@ async def _async_main(settings: Settings) -> None:
             health_task.cancel()
         capture_worker.request_stop()
         interval_scheduler.request_stop()
+        thermal_poller.request_stop()
         upload_worker.request_stop()
         capture_worker.join(timeout=5)
         interval_scheduler.join(timeout=5)
