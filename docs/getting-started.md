@@ -49,7 +49,7 @@ the password the installer created and set your own under **Accounts**. You
 land on the **Dashboard**: the newest frame, the current sky period and the
 exposure caelum has chosen.
 
-![The caelum dashboard](/images/screenshots/dashboard.webp)
+![The caelum dashboard with the sky drawn over the latest frame](/images/screenshots/dashboard-sky.webp)
 
 - [First login](/guide/installation#first-login)
 - [Access & security](/guide/security)
