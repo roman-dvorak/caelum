@@ -5,13 +5,15 @@ import {
   LiveFrame,
   Message,
   MetricGrid,
+  MoonIcon,
   PageHeader,
+  PERIOD_COLORS,
   SectionHeading,
   SkyCanvas,
-  SkyStateBadge,
-  StatusBadge,
   StatusTile,
   SkySettingsMenu,
+  SunIcon,
+  periodLabel,
   useSkySettings,
 } from '@caelum/ui'
 import { useFrameStream } from '../hooks/useFrameStream.ts'
@@ -20,6 +22,10 @@ import { useSkySetup } from '../hooks/useSkySetup.ts'
 import { useTelescope } from '../hooks/useTelescope.ts'
 import { useSkyState } from '../hooks/useSkyState.ts'
 import { useStatus } from '../hooks/useStatus.ts'
+
+// The header boxes share one height and shape (the Button's), so they sit
+// on a single row like the controls of Recordings and Files.
+const HEADER_BOX = 'inline-flex h-9 items-center gap-2 rounded-md border px-3 whitespace-nowrap'
 
 export function Dashboard() {
   const { status, error: statusError } = useStatus()
@@ -44,22 +50,45 @@ export function Dashboard() {
           actions={
             <>
               {status ? (
-                <StatusBadge tone={status.capturing ? 'live' : 'neutral'}>
+                <span
+                  className={`${HEADER_BOX} text-label-sm tracking-[0.08em] uppercase ${
+                    status.capturing
+                      ? 'border-amber/50 bg-amber-surface text-amber-ink'
+                      : 'border-border bg-panel-raised text-ink-muted'
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${status.capturing ? 'bg-amber shadow-glow-amber' : 'bg-ink-dim'}`} />
                   {status.capturing ? 'Capturing' : 'Idle'}
-                </StatusBadge>
+                </span>
               ) : null}
-              {skyState ? <SkyStateBadge skyState={skyState} /> : null}
+              {skyState ? (
+                <span
+                  className={`${HEADER_BOX} tabular-nums font-mono text-code-sm border-transparent ring-1 shadow-glow-amber ${
+                    PERIOD_COLORS[skyState.period] ?? 'bg-panel-raised text-ink-muted ring-border'
+                  }`}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
+                  <span className="font-sans text-label-sm tracking-[0.08em] uppercase">{periodLabel(skyState.period)}</span>
+                  <span className="inline-flex items-center gap-1 text-ink-muted">
+                    <SunIcon size={13} />
+                    {skyState.sun_altitude_deg.toFixed(1)}°
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-ink-muted">
+                    <MoonIcon size={13} />
+                    {Math.round(skyState.moon_illumination * 100)}%
+                  </span>
+                </span>
+              ) : null}
+              {skySetup ? (
+                <span className={`${HEADER_BOX} border-border`}>
+                  <SkySettingsMenu settings={skyView} onChange={updateSkyView} />
+                </span>
+              ) : null}
             </>
           }
         />
         {statusError || skyError ? <Message kind="error">{statusError ?? skyError}</Message> : null}
       </div>
-
-      {skySetup ? (
-        <div className="flex justify-end">
-          <SkySettingsMenu settings={skyView} onChange={updateSkyView} />
-        </div>
-      ) : null}
 
       <LiveFrame live={!!status?.capturing && !!frame}>
         {frame ? (
