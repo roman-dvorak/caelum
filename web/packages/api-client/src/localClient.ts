@@ -35,6 +35,7 @@ import type {
   Role,
   SkyObjectsRequest,
   SkyObjectsResponse,
+  MountState,
   SkySetup,
   SkyStateResponse,
   StatusResponse,
@@ -221,6 +222,11 @@ export class LocalApiClient {
   /** The lens and the observer's position (preview level). */
   getSkySetup(): Promise<SkySetup> {
     return this.request<SkySetup>('/sky/setup')
+  }
+
+  /** Where the telescope points right now (preview level). */
+  getMountState(): Promise<MountState> {
+    return this.request<MountState>('/mount/state')
   }
 
   /** The sky projected with the configured lens (preview level). */

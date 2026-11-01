@@ -141,6 +141,17 @@ class TelescopePositionWorker(Plugin):
     def close(self) -> None:
         self._poller.close()
 
+    @property
+    def label(self) -> str:
+        return self._settings.label
+
+    def current_state(self) -> MountState | None:
+        """The latest mount state (``offline`` once stale) — what the live view polls."""
+        state = self._poller.latest()
+        if state is not None and state.status == "offline" and not self._settings.show_stale:
+            return None
+        return state
+
     def provide_overlay_elements(self, frame: ProcessedFrame) -> list[OverlayElement]:
         if self.config_manager is None:
             return []

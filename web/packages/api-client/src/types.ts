@@ -169,6 +169,22 @@ export interface SkySetup {
   elevation_m: number
 }
 
+/** The telescope's latest state (`GET /api/mount/state`). Nothing is drawn unless `enabled`. */
+export interface MountState {
+  enabled: boolean
+  label: string
+  status: 'tracking' | 'slewing' | 'idle' | 'parked' | 'disconnected' | 'error' | 'offline' | null
+  ra_deg: number | null
+  dec_deg: number | null
+  epoch: 'jnow' | 'j2000'
+  alt_deg: number | null
+  az_deg: number | null
+  pier_side: string | null
+  error: string | null
+  /** Seconds since the mount last reported. */
+  age_s: number | null
+}
+
 export interface SkyObjectsRequest {
   lens: LensConfig
   max_mag?: number

@@ -58,6 +58,26 @@ export function horizontal(ra: number, dec: number, jd: number, latDeg: number, 
   return [deg(alt), (deg(az) + 360) % 360]
 }
 
+/**
+ * Alt/az of an equatorial position (degrees). `epoch` "j2000" is catalog
+ * coordinates, precessed to the date; "jnow" is already of date, which is
+ * what mount drivers usually report.
+ */
+export function equatorialToHorizontal(
+  raDeg: number,
+  decDeg: number,
+  epoch: 'j2000' | 'jnow',
+  when: Date,
+  latDeg: number,
+  lonDeg: number,
+): [number, number] {
+  const jd = julianDate(when)
+  let ra = rad(raDeg)
+  let dec = rad(decDeg)
+  if (epoch === 'j2000') [ra, dec] = precessFromJ2000(ra, dec, (jd - J2000_JD) / 36525)
+  return horizontal(ra, dec, jd, latDeg, lonDeg)
+}
+
 /** Alt/az of every catalog star brighter than `maxMag` (above or below the horizon). */
 export function starPositions(
   catalog: StarCatalog,

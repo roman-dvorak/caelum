@@ -386,6 +386,8 @@ The cross is coloured by the mount's status: `tracking` (green), `slewing`
 horizon the element has no `x`/`y`. The plugin ships disabled — enable it from
 the Overlay editor page or `PUT /api/plugins/{id}`.
 
+The local web UI's live view also draws the crosshair itself (layer **Telescope** in the sky menu), from `GET /api/mount/state` polled every 1.5 s, so it follows a slew between frames; when the stored overlay already shows the marker, the live copy is skipped so it is not doubled.
+
 ::: warning
 `overlay`'s `custom_image` elements reference an asset by filename in
 `data_dir/overlay_assets/` (`GET /api/overlay/assets/{name}`, admin-only to
