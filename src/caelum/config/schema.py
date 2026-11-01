@@ -486,6 +486,21 @@ def _move_identity_out_of_upload(data: Any) -> Any:
     return {**data, "upload": upload, "camera": {**camera, "identity": identity}}
 
 
+def _add_new_builtin_plugins(data: Any) -> Any:
+    """A config stored by an older release has no entry for a built-in
+    plugin added since; without one it would never show up on the Plugins
+    page. Add the missing ones (as shipped: mostly disabled)."""
+    if isinstance(data, dict) and isinstance(data.get("plugins"), dict):
+        missing = {
+            plugin_id: cfg.model_dump()
+            for plugin_id, cfg in _default_plugins().items()
+            if plugin_id not in data["plugins"]
+        }
+        if missing:
+            data = {**data, "plugins": {**data["plugins"], **missing}}
+    return data
+
+
 def load_stored(raw: str) -> AppConfig:
     """Load a config this install stored itself (disk, Redis) — leniently.
 
@@ -494,7 +509,7 @@ def load_stored(raw: str) -> AppConfig:
     would refuse those settings as unknown keys and not start at all; here
     they are dropped with a warning instead. Anything else invalid still
     raises, and API writes and imports stay strict."""
-    data = json.loads(raw)
+    data = _add_new_builtin_plugins(json.loads(raw))
     dropped: list[str] = []
     while True:
         try:

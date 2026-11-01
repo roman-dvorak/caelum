@@ -2,29 +2,31 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from caelum.api.deps import get_config_manager
+from caelum.api.deps import get_config_manager, get_plugin_loader
 from caelum.api.schemas import PluginUpdateRequest
 from caelum.config.manager import ConfigManager
 from caelum.config.schema import PluginConfig
-from caelum.derivatives.overlay import OverlaySettings
+from caelum.plugins.loader import PluginLoader
 
 router = APIRouter()
 
 
 @router.get("/plugins", response_model=dict[str, PluginConfig])
-def list_plugins(config_manager: ConfigManager = Depends(get_config_manager)) -> dict[str, PluginConfig]:
+def list_plugins(
+    config_manager: ConfigManager = Depends(get_config_manager),
+    plugin_loader: PluginLoader | None = Depends(get_plugin_loader),
+) -> dict[str, PluginConfig]:
     """Sorted by `order` ascending — the same order DerivativePool/PluginLoader
     apply when chaining hooks."""
     plugins = dict(config_manager.current.plugins)
-    overlay = plugins.get("overlay")
-    if overlay is not None:
-        # As the camera reads it (older shapes migrated, the default template
-        # filled in) — so the editor shows exactly what gets rendered.
-        try:
-            settings = OverlaySettings.model_validate(overlay.settings).model_dump()
-            plugins["overlay"] = overlay.model_copy(update={"settings": settings})
-        except ValueError:
-            pass
+    if plugin_loader is not None:
+        # As the camera reads them (older shapes migrated, defaults filled
+        # in) — so the page shows every setting a plugin has, and the
+        # overlay editor exactly what gets rendered.
+        plugins = {
+            plugin_id: cfg.model_copy(update={"settings": plugin_loader.effective_settings(plugin_id, cfg.settings)})
+            for plugin_id, cfg in plugins.items()
+        }
     return dict(sorted(plugins.items(), key=lambda item: item[1].order))
 
 

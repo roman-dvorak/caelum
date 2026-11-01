@@ -110,3 +110,22 @@ def test_thermal_values_land_in_xmp_fields():
     assert _thermal_xmp({"thermal": {"dome_temp": 1.5, "age_s": 2.0}}) == {
         "thermal_dome_temp": 1.5, "thermal_age_s": 2.0}
     assert _thermal_xmp(None) == {}
+
+
+def test_stored_config_without_the_plugin_gains_it_disabled():
+    from caelum.config.schema import AppConfig, load_stored
+
+    stored = AppConfig().model_dump(mode="json")
+    del stored["plugins"]["thermal_status"]
+    config = load_stored(json.dumps(stored))
+    assert config.plugins["thermal_status"].enabled is False
+
+
+def test_plugin_settings_are_listed_with_defaults():
+    from caelum.derivatives.thermal_status import ThermalStatusWorker
+    from caelum.plugins.loader import PluginLoader
+
+    settings = PluginLoader([ThermalStatusWorker]).effective_settings("thermal_status", {})
+    assert settings["path"] == "/var/run/thermal-control-status.json"
+    assert "dome_temp" in settings["metadata_fields"]
+    assert settings["overlay"]["enabled"] is True

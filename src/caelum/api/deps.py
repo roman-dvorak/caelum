@@ -14,6 +14,7 @@ from caelum.capture_runtime.store import ProgramStore
 from caelum.config.manager import ConfigManager
 from caelum.control.skystate import SkyStateCalculator
 from caelum.logging_conf import LogBuffer
+from caelum.plugins.loader import PluginLoader
 from caelum.settings import Settings
 from caelum.update.job import Updater
 from caelum.upload.uploader import UploadWorker
@@ -21,6 +22,10 @@ from caelum.upload.uploader import UploadWorker
 
 def get_config_manager(conn: HTTPConnection) -> ConfigManager:
     return conn.app.state.config_manager
+
+
+def get_plugin_loader(conn: HTTPConnection) -> PluginLoader | None:
+    return getattr(conn.app.state, "plugin_loader", None)
 
 
 def get_settings(conn: HTTPConnection) -> Settings:

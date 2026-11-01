@@ -34,6 +34,18 @@ class PluginLoader:
         self._available: dict[str, type[Plugin]] = {cls.id: cls for cls in available_classes}
         self._loaded: list[LoadedPlugin] = []
 
+    def effective_settings(self, plugin_id: str, settings: dict) -> dict:
+        """`settings` as the plugin reads them: validated against its
+        `config_schema`, defaults filled in (older shapes migrated). The
+        stored settings if the plugin is unknown or they don't validate."""
+        plugin_cls = self._available.get(plugin_id)
+        if plugin_cls is None or plugin_cls.config_schema is None:
+            return settings
+        try:
+            return plugin_cls.config_schema.model_validate(settings).model_dump()
+        except ValueError:
+            return settings
+
     def register_class(self, plugin_cls: type[Plugin]) -> None:
         self._available[plugin_cls.id] = plugin_cls
 
