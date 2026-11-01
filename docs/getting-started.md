@@ -17,8 +17,8 @@ together.
 ## Get a camera
 
 caelum runs on a Raspberry Pi with a camera module, under a dome, outdoors. The
-simplest way is an AMASC01 — a finished, weatherproof camera with a heated dome
-and a single PoE+ cable. You can also build your own.
+simplest way is an [AMASC01](/cameras/amasc01), a finished, weatherproof camera
+with a heated dome and a single PoE+ cable. You can also build your own.
 
 - [AMASC01](/cameras/amasc01)
 - [Build your own](/cameras/diy)
@@ -78,7 +78,7 @@ zone. Until this is right, the camera exposes for somebody else's sky.
 ## Check the picture
 
 Point the camera at the sky and turn the lens until the **focus score** on the
-Dashboard is as high as it gets. Leave the exposure alone — caelum adjusts it
+Dashboard is as high as it gets. Leave the exposure alone, caelum adjusts it
 and the gain by itself, within limits for each part of the day. **Live stream**
 shows frames as they come. The camera then captures around the clock: a frame
 every minute by day and every 30 seconds at night.

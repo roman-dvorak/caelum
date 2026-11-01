@@ -1,16 +1,19 @@
 ---
-description: 'AMASC01, the AstroMeters allsky camera: Sony IMX477, 180° fisheye, heated dome, PoE+. Components, example images and running caelum on it.'
+description: 'AMASC01, the AstroMeters allsky camera: Sony IMX477, 180° fisheye, heated dome, PoE+. Features, example images and videos and running caelum on it.'
 ---
 
 # AMASC01
 
-**AMASC01** is the AstroMeters allsky camera — a weatherproof, single-cable
+**AMASC01** is the AstroMeters allsky camera, a weatherproof, single-cable
 camera built for permanent outdoor operation. It is designed, developed and
 manufactured by [AstroMeters](https://astrometers.eu), the maintainers of
 caelum, and it is the hardware caelum is developed and tested against.
 
-- Product page: [astrometers.eu/products/AMASC01](https://astrometers.eu/products/AMASC01/)
-- Hardware documentation (installation, focusing, maintenance): [astrometers.eu/docs/AMASC01](https://astrometers.eu/docs/AMASC01/)
+<p class="open-viewer">
+  <a class="open-viewer-btn" href="https://astrometers.eu/products/AMASC01/" target="_blank" rel="noopener">Product page</a>
+  <a class="open-viewer-btn" href="https://astrometers.eu/docs/AMASC01/" target="_blank" rel="noopener">Camera documentation</a>
+  <span>installation, focusing, maintenance</span>
+</p>
 
 <div class="photo-row">
   <figure>
@@ -28,14 +31,14 @@ caelum, and it is the hardware caelum is developed and tested against.
     <p class="support-title">Buying an AMASC01 funds caelum</p>
     <p>caelum is open-source software developed by AstroMeters, and AMASC01 is
     what pays for it. Buying one gets you a camera that is tested with every
-    caelum release — and funds the development that every caelum user,
+    caelum release, and funds the development that every caelum user,
     including DIY builders, benefits from.</p>
-    <p><a href="https://astrometers.eu/products/AMASC01/">Product page &amp; order</a> ·
-    <a href="mailto:info@astrometers.eu?subject=AMASC01">info@astrometers.eu</a></p>
+    <p><a href="https://astrometers.eu/products/AMASC01/">Product page and order</a>,
+    or write to <a href="mailto:info@astrometers.eu?subject=AMASC01">info@astrometers.eu</a></p>
   </div>
 </div>
 
-## Components
+## Features
 
 | Part | What it is |
 |---|---|
@@ -46,10 +49,10 @@ caelum, and it is the hardware caelum is developed and tested against.
 | Ventilation | Active ventilation of the enclosure plus dedicated CPU cooling |
 | Environmental sensors | Dome temperature; body temperature, humidity and pressure; optional external sensor |
 | Timekeeping | Battery-backed RTC, so frames are timestamped correctly with no network |
-| Network and power | Gigabit Ethernet (1000BASE-T) with PoE+ (IEEE 802.3at) — one cable. A separate power input is available on request |
+| Network and power | Gigabit Ethernet (1000BASE-T) with PoE+ (IEEE 802.3at), one cable. A separate power input is available on request |
 | Control electronics | Custom AstroMeters board managing heating, ventilation and peripherals |
 
-## Example images
+## Example images and videos
 
 <div class="photo-row">
   <figure>
@@ -58,7 +61,22 @@ caelum, and it is the hardware caelum is developed and tested against.
   </figure>
   <figure>
     <img src="/images/amasc01/keogram.webp" alt="Keogram from AMASC01">
-    <figcaption>Keogram from AMASC01 — one column per frame</figcaption>
+    <figcaption>Keogram from AMASC01, one column per frame</figcaption>
+  </figure>
+</div>
+
+<div class="photo-row">
+  <figure>
+    <video controls loop muted playsinline preload="metadata" poster="/images/amasc01/eclipse-poster.webp">
+      <source src="/images/amasc01/eclipse-timelapse.mp4" type="video/mp4">
+    </video>
+    <figcaption>Total solar eclipse, 12 August 2026: a frame every 20 s from 20:15 to 20:45 CEST</figcaption>
+  </figure>
+  <figure>
+    <video controls loop muted playsinline preload="metadata" poster="/images/amasc01/aurora-poster.webp">
+      <source src="/images/amasc01/aurora-timelapse.mp4" type="video/mp4">
+    </video>
+    <figcaption>Aurora borealis over the Czech Republic, 19 January 2026</figcaption>
   </figure>
 </div>
 
@@ -84,7 +102,7 @@ The camera is driven by the [`picamera2` backend](/guide/cameras#picamera2):
 ```
 
 `[4056, 3040]` is the IMX477's full resolution and already the schema default.
-Install as described in [Getting started](/getting-started) — the installer
+Install as described in [Getting started](/getting-started). The installer
 picks `picamera2` by default on a Pi.
 
 ::: info Thermal control is separate
@@ -95,7 +113,7 @@ does not yet read those sensors or drive the heater.
 
 ## Getting one
 
-AMASC01 is available from AstroMeters — see the
+AMASC01 is available from AstroMeters, see the
 [product page](https://astrometers.eu/products/AMASC01/) or write to
 [info@astrometers.eu](mailto:info@astrometers.eu). Modified versions (lens and
 field of view, sensor, power, mounting) can be made on request.

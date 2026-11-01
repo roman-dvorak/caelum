@@ -186,6 +186,7 @@ html:not(.dark) {
 .vp-doc .photo-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 24px 0; }
 .vp-doc .photo-row figure, .vp-doc figure.photo { margin: 0; }
 .vp-doc .photo-row img { width: 100%; height: 260px; object-fit: cover; border-radius: 8px; }
+.vp-doc .photo-row video { width: 100%; height: auto; border-radius: 8px; background: #000; }
 .vp-doc figure.photo { margin: 24px 0; }
 .vp-doc figure.photo img { border-radius: 8px; }
 .vp-doc figcaption { margin-top: 6px; font-size: 13px; color: var(--vp-c-text-3); }

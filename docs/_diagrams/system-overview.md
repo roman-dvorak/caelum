@@ -1,8 +1,8 @@
 ```mermaid
 flowchart LR
   you["<b>You</b><br/>on the local network"]
-  subgraph cam["<b>Camera</b> · Raspberry Pi under the dome"]
-    ui["<b>Web interface</b><br/>control & live view"]
+  subgraph cam["<b>Camera</b>, Raspberry Pi under the dome"]
+    ui["<b>Web interface</b><br/>control and live view"]
     eng["<b>Capture engine</b><br/>exposure, storage, plugins"]
   end
   srv[("<b>Storage server</b><br/>permanent archive")]
