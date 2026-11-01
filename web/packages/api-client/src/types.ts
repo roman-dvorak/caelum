@@ -978,11 +978,19 @@ export interface OverlaySettings {
 }
 
 export interface TelescopePositionSettings {
-  source: 'simulated'
-  center_x: number
-  center_y: number
-  radius: number
-  azimuth_offset_deg: number
-  mirror: boolean
+  source: 'simulated' | 'indi' | 'alpaca'
+  /** INDI / ASCOM Alpaca server on another computer. */
+  host: string
+  /** 0 = protocol default (INDI 7624, Alpaca 11111). */
+  port: number
+  /** INDI device name; empty = first telescope on the server. */
+  device: string
+  /** Alpaca device number. */
+  device_number: number
+  poll_interval_s: number
+  /** A report older than this counts as offline. */
+  stale_after_s: number
+  /** Keep drawing the last known pointing, greyed out, while offline. */
+  show_stale: boolean
   label: string
 }

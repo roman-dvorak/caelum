@@ -79,6 +79,20 @@ def _precess_from_j2000(ra_rad: np.ndarray, dec_rad: np.ndarray, t: float):
     return np.arctan2(a, b) + z, np.arcsin(np.clip(c, -1.0, 1.0))
 
 
+def radec_to_altaz(
+    ra_deg: float, dec_deg: float, when: datetime, lat_deg: float, lon_deg: float, epoch: str = "j2000"
+) -> tuple[float, float]:
+    """Alt/az (degrees, azimuth from north through east) of an equatorial position.
+    `epoch` is ``"j2000"`` (catalog coordinates, precessed to the date) or
+    ``"jnow"`` (already of date, which is what mount drivers usually report)."""
+    jd = julian_date(when)
+    ra, dec = np.array([math.radians(ra_deg)]), np.array([math.radians(dec_deg)])
+    if epoch == "j2000":
+        ra, dec = _precess_from_j2000(ra, dec, (jd - _J2000_JD) / 36525.0)
+    alt, az = _horizontal(ra, dec, jd, lat_deg, lon_deg)
+    return float(alt[0]), float(az[0])
+
+
 @dataclass(frozen=True)
 class StarPositions:
     hr: np.ndarray

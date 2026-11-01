@@ -360,19 +360,31 @@ ships disabled — see [Lens calibration and the sky overlay](/guide/lens-calibr
 
 ## Worked example: the telescope-position widget
 
-`TelescopePositionWorker` (id `telescope_position`) is a small demo proving
-the same interface can back a "widget", not just static annotations: it
-contributes a `telescope_marker` overlay element showing where a telescope is
-pointed, projected onto the allsky image with the standard equidistant-fisheye
-formula (`r = radius * (90 - altitude) / 90`, with `radius` a fraction of the frame's shorter side). `source: "simulated"` — the only
-mode implemented today — sweeps a fake alt/az over a few minutes rather than
-querying real hardware; swapping in a query against an INDI/ASCOM server is a
-drop-in replacement for that one function, everything else about the plugin
-stays the same.
+`TelescopePositionWorker` (id `telescope_position`) draws a **crosshair** on
+the frame where a telescope is pointed (a point, not a field of view). The
+position is read from an **INDI** or **ASCOM Alpaca** server — normally on
+another computer on the network — by a background thread (`caelum.mount`), so
+a slow or unreachable server never delays a frame; every frame just takes the
+latest stored state. RA/Dec (JNow or J2000) becomes alt/az for the camera's
+site and then a pixel through the calibrated lens (`camera.lens`), so the
+cross sits on the same stars as the sky overlay.
 
-`telescope_position` ships disabled (a fake telescope marker showing up
-unasked would be a bad default) — enable it from the Overlay editor page or
-`PUT /api/plugins/{id}`.
+| Setting | Meaning |
+| --- | --- |
+| `source` | `simulated`, `indi` or `alpaca` |
+| `host`, `port` | the server (`port: 0` = default: INDI 7624, Alpaca 11111) |
+| `device` | INDI device name (empty = first telescope on the server) |
+| `device_number` | Alpaca device number |
+| `poll_interval_s`, `stale_after_s` | polling period; a report older than this counts as offline |
+| `show_stale` | keep drawing the last known pointing, greyed out, while offline |
+
+The cross is coloured by the mount's status: `tracking` (green), `slewing`
+(amber), `idle`, `parked`, `disconnected` (driver not connected to the mount),
+`error`, `offline` (server unreachable or report stale; grey). The stored
+`telescope_marker` element carries `ra_deg`, `dec_deg`, `epoch`, `alt_deg`,
+`az_deg`, `status` and, when the lens sees that direction, `x`/`y` — below the
+horizon the element has no `x`/`y`. The plugin ships disabled — enable it from
+the Overlay editor page or `PUT /api/plugins/{id}`.
 
 ::: warning
 `overlay`'s `custom_image` elements reference an asset by filename in

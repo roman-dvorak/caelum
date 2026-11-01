@@ -55,11 +55,13 @@ const LABEL_PLACEHOLDERS = [
 
 const DEFAULT_TELESCOPE_SETTINGS: TelescopePositionSettings = {
   source: 'simulated',
-  center_x: 0.5,
-  center_y: 0.5,
-  radius: 0.48,
-  azimuth_offset_deg: 0,
-  mirror: false,
+  host: '',
+  port: 0,
+  device: '',
+  device_number: 0,
+  poll_interval_s: 1,
+  stale_after_s: 10,
+  show_stale: true,
   label: 'Telescope',
 }
 
@@ -344,7 +346,7 @@ export function OverlayEditor() {
     setMessage(null)
     try {
       await updatePlugin('telescope_position', { settings: { ...telescope } })
-      setMessage('Saved telescope calibration.')
+      setMessage('Saved telescope settings.')
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err))
     } finally {
@@ -395,7 +397,7 @@ export function OverlayEditor() {
           Elements
         </TabButton>
         <TabButton active={tab === 'telescope'} onClick={() => setTab('telescope')}>
-          Telescope demo
+          Telescope
         </TabButton>
         <TabButton active={tab === 'lens'} onClick={() => setTab('lens')}>
           Lens
@@ -425,13 +427,6 @@ export function OverlayEditor() {
                 />
               ))
             : null}
-          {tab === 'telescope' ? (
-            <TelescopeOverlay
-              settings={telescope}
-              containerRef={containerRef}
-              onChange={(patch) => setTelescope((current) => ({ ...current, ...patch }))}
-            />
-          ) : null}
           {tab === 'lens' ? (
             <TelescopeOverlay
               settings={lens}
@@ -558,7 +553,7 @@ export function OverlayEditor() {
 
         {tab === 'telescope' ? (
           <div className="flex flex-col gap-3">
-            <Panel title="Telescope demo">
+            <Panel title="Telescope">
               <div className="flex flex-col gap-3">
                 <label className="flex items-center gap-2 text-label-md text-ink-muted">
                   <input
@@ -570,9 +565,68 @@ export function OverlayEditor() {
                   Enabled
                 </label>
                 <p className="text-xs text-ink-muted">
-                  Source: simulated demo sweep — stands in for a future INDI mount connection. Drag the
-                  center point and its radius handle on the preview to calibrate the projection.
+                  Draws a crosshair where the telescope points, through the calibrated lens (Lens tab). The
+                  mount is read in the background from an INDI or ASCOM Alpaca server on another computer.
                 </p>
+                <Field label="Source">
+                  <select
+                    className={inputClass}
+                    value={telescope.source}
+                    onChange={(e) =>
+                      setTelescope((c) => ({ ...c, source: e.target.value as TelescopePositionSettings['source'] }))
+                    }
+                  >
+                    <option value="simulated">Simulated sweep</option>
+                    <option value="indi">INDI server</option>
+                    <option value="alpaca">ASCOM Alpaca</option>
+                  </select>
+                </Field>
+                {telescope.source !== 'simulated' ? (
+                  <>
+                    <Field label="Host">
+                      <input
+                        className={inputClass}
+                        value={telescope.host}
+                        placeholder="192.168.1.50"
+                        onChange={(e) => setTelescope((c) => ({ ...c, host: e.target.value.trim() }))}
+                      />
+                    </Field>
+                    <Field label="Port (0 = default)">
+                      <input
+                        type="number"
+                        className={inputClass}
+                        value={telescope.port}
+                        onChange={(e) => setTelescope((c) => ({ ...c, port: Number(e.target.value) }))}
+                      />
+                    </Field>
+                    {telescope.source === 'indi' ? (
+                      <Field label="INDI device (empty = first telescope)">
+                        <input
+                          className={inputClass}
+                          value={telescope.device}
+                          onChange={(e) => setTelescope((c) => ({ ...c, device: e.target.value }))}
+                        />
+                      </Field>
+                    ) : (
+                      <Field label="Alpaca device number">
+                        <input
+                          type="number"
+                          className={inputClass}
+                          value={telescope.device_number}
+                          onChange={(e) => setTelescope((c) => ({ ...c, device_number: Number(e.target.value) }))}
+                        />
+                      </Field>
+                    )}
+                    <Field label="Offline after (s)">
+                      <input
+                        type="number"
+                        className={inputClass}
+                        value={telescope.stale_after_s}
+                        onChange={(e) => setTelescope((c) => ({ ...c, stale_after_s: Number(e.target.value) }))}
+                      />
+                    </Field>
+                  </>
+                ) : null}
                 <Field label="Label">
                   <input
                     className={inputClass}
@@ -580,27 +634,19 @@ export function OverlayEditor() {
                     onChange={(e) => setTelescope((c) => ({ ...c, label: e.target.value }))}
                   />
                 </Field>
-                <Field label="Azimuth offset (deg)">
-                  <input
-                    type="number"
-                    className={inputClass}
-                    value={telescope.azimuth_offset_deg}
-                    onChange={(e) => setTelescope((c) => ({ ...c, azimuth_offset_deg: Number(e.target.value) }))}
-                  />
-                </Field>
                 <label className="flex items-center gap-2 text-label-md text-ink-muted">
                   <input
                     type="checkbox"
-                    checked={telescope.mirror}
-                    onChange={(e) => setTelescope((c) => ({ ...c, mirror: e.target.checked }))}
+                    checked={telescope.show_stale}
+                    onChange={(e) => setTelescope((c) => ({ ...c, show_stale: e.target.checked }))}
                     className="accent-amber"
                   />
-                  Mirror (east/west flip)
+                  Keep the last known position (greyed out) while offline
                 </label>
               </div>
             </Panel>
             <Button variant="primary" onClick={() => void saveTelescope()} disabled={saving}>
-              Save telescope calibration
+              Save telescope settings
             </Button>
           </div>
         ) : null}
