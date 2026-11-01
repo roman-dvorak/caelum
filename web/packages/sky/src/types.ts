@@ -22,3 +22,18 @@ export interface LensConfig {
   /** … and towards which compass azimuth. */
   tilt_azimuth_deg?: number
 }
+
+/** What the mount is doing — drives the crosshair's colour and caption. */
+export type TelescopeStatus = 'tracking' | 'slewing' | 'idle' | 'parked' | 'disconnected' | 'error' | 'offline'
+
+/** Where a telescope points: RA/Dec (with its epoch) or, failing that, alt/az. */
+export interface TelescopePointing {
+  status: TelescopeStatus
+  raDeg?: number
+  decDeg?: number
+  /** Default "jnow" — what mount drivers report. */
+  epoch?: 'j2000' | 'jnow'
+  altDeg?: number
+  azDeg?: number
+  label?: string
+}

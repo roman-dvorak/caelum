@@ -1,10 +1,10 @@
-import type { LensConfig } from './types.ts'
-import { eclipticPath, horizontal, julianDate, starPositions } from './astro.ts'
+import type { LensConfig, TelescopePointing, TelescopeStatus } from './types.ts'
+import { eclipticPath, equatorialToHorizontal, horizontal, julianDate, starPositions } from './astro.ts'
 import type { SkyData } from './catalog.ts'
 import { altAzToFraction } from './lens.ts'
 
 /** The toggleable parts of the sky overlay. */
-export const SKY_LAYERS = ['outline', 'grid', 'ecliptic', 'radec', 'constellations', 'stars', 'planets', 'compass'] as const
+export const SKY_LAYERS = ['outline', 'grid', 'ecliptic', 'radec', 'constellations', 'stars', 'planets', 'telescope', 'compass'] as const
 export type SkyLayer = (typeof SKY_LAYERS)[number]
 
 /** Layers that are off until the viewer switches them on. */
@@ -27,11 +27,24 @@ export interface SkyDrawOptions {
   maxMagnitude?: number
   /** Multiplies the size of the rings marking stars and bodies (default 1). */
   symbolScale?: number
+  /** Where the telescope points; drawn as a crosshair (layer "telescope"). */
+  telescope?: TelescopePointing | null
+}
+
+/** Crosshair colour and caption per mount status (mirrors the backend renderer). */
+export const TELESCOPE_STYLE: Record<TelescopeStatus, { color: string; caption: string }> = {
+  tracking: { color: '#5adc78', caption: 'tracking' },
+  slewing: { color: '#e8a13a', caption: 'slewing' },
+  idle: { color: '#78beff', caption: 'idle' },
+  parked: { color: '#aaaabe', caption: 'parked' },
+  disconnected: { color: '#969696', caption: 'not connected' },
+  error: { color: '#eb5050', caption: 'error' },
+  offline: { color: '#828282', caption: 'offline' },
 }
 
 /** A star or body that was drawn, with its place on the canvas (CSS pixels). */
 export interface SkyHit {
-  kind: 'star' | 'sun' | 'moon' | 'planet'
+  kind: 'star' | 'sun' | 'moon' | 'planet' | 'telescope'
   name: string
   mag: number
   alt: number
@@ -258,6 +271,36 @@ export function drawSky(
       ctx.stroke()
       label(body.name, p[0] + 12 * k * scale, p[1], BODY_COLOR[body.kind])
       hits.push({ kind: body.kind, name: body.name, mag: body.kind === 'planet' ? 0 : -10, alt: body.alt, az: body.az, x: p[0], y: p[1] })
+    }
+  }
+
+  if (o.telescope && show('telescope')) {
+    const t = o.telescope
+    let alt = t.altDeg
+    let az = t.azDeg
+    if (t.raDeg !== undefined && t.decDeg !== undefined) {
+      ;[alt, az] = equatorialToHorizontal(t.raDeg, t.decDeg, t.epoch ?? 'jnow', o.when, o.latDeg, o.lonDeg)
+    }
+    const p = alt !== undefined && az !== undefined && alt >= minAlt ? project(alt, az) : null
+    if (inFrame(p) && alt !== undefined && az !== undefined) {
+      const style = TELESCOPE_STYLE[t.status] ?? TELESCOPE_STYLE.idle
+      const ring = 9 * k * scale
+      const gap = 3 * k * scale
+      const tick = 8 * k * scale
+      for (const [width, color] of [[3.5 * k, 'rgba(0,0,0,0.65)'], [2 * k, style.color]] as const) {
+        ctx.strokeStyle = color
+        ctx.lineWidth = width
+        ctx.beginPath()
+        ctx.arc(p[0], p[1], ring, 0, Math.PI * 2)
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          ctx.moveTo(p[0] + dx * gap, p[1] + dy * gap)
+          ctx.lineTo(p[0] + dx * (ring + tick), p[1] + dy * (ring + tick))
+        }
+        ctx.stroke()
+      }
+      const text = [t.label, style.caption].filter(Boolean).join(' · ')
+      if (text) label(text, p[0] + ring + tick + 4 * k, p[1], style.color)
+      hits.push({ kind: 'telescope', name: text || 'Telescope', mag: -20, alt, az, x: p[0], y: p[1] })
     }
   }
 

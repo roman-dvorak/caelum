@@ -43,6 +43,7 @@ const TEXT: Record<SkyLocale, SkyText> = {
       constellations: 'Constellation lines',
       stars: 'Stars',
       planets: 'Sun, Moon & planets',
+      telescope: 'Telescope',
       compass: 'Compass',
     },
     sliders: {
@@ -62,6 +63,7 @@ const TEXT: Record<SkyLocale, SkyText> = {
       constellations: 'Čáry souhvězdí',
       stars: 'Hvězdy',
       planets: 'Slunce, Měsíc a planety',
+      telescope: 'Dalekohled',
       compass: 'Světové strany',
     },
     sliders: {

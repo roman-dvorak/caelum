@@ -7,6 +7,7 @@ import {
   type LensConfig,
   type SkyData,
   type SkyHit,
+  type TelescopePointing,
 } from '../index.ts'
 import { SkyDetailContext } from './detail.ts'
 
@@ -28,6 +29,8 @@ export interface SkyCanvasProps {
   symbolScale?: number
   /** How opaque the sky is over the picture, 0 – 1 (default 1). */
   opacity?: number
+  /** Where the telescope points — a crosshair, shown with the "telescope" layer. */
+  telescope?: TelescopePointing | null
   /** Show a popup with the name or sky position under the pointer. */
   interactive?: boolean
   /** Click handler, in frame fractions (the lens page uses it to pick the centre). */
@@ -94,6 +97,7 @@ export function SkyCanvas({
   hidden,
   maxMagnitude,
   symbolScale,
+  telescope,
   opacity = 1,
   interactive = false,
   onPick,
@@ -137,8 +141,8 @@ export function SkyCanvas({
 
   const whenMs = when.getTime()
   const options = useMemo(
-    () => ({ lens, latDeg, lonDeg, elevationM, when: new Date(whenMs), hidden, maxMagnitude, symbolScale }),
-    [lens, latDeg, lonDeg, elevationM, whenMs, hidden, maxMagnitude, symbolScale],
+    () => ({ lens, latDeg, lonDeg, elevationM, when: new Date(whenMs), hidden, maxMagnitude, symbolScale, telescope }),
+    [lens, latDeg, lonDeg, elevationM, whenMs, hidden, maxMagnitude, symbolScale, telescope],
   )
 
   useEffect(() => {

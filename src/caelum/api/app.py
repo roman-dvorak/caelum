@@ -16,6 +16,7 @@ from .routes import (
     files,
     frames,
     logs,
+    mount,
     overlay,
     plugins,
     raw_white_balance,
@@ -65,6 +66,7 @@ def create_app(static_dir: Path | None = None, cors_origins: tuple[str, ...] = (
     app.include_router(camera.router, prefix="/api", dependencies=admin_only)
     app.include_router(sky.lens_router, prefix="/api", dependencies=admin_only)
     app.include_router(sky.router, prefix="/api", dependencies=preview_only)
+    app.include_router(mount.router, prefix="/api", dependencies=preview_only)
     app.include_router(plugins.router, prefix="/api", dependencies=admin_only)
     app.include_router(system.router, prefix="/api", dependencies=admin_only)
     app.include_router(update.router, prefix="/api", dependencies=admin_only)

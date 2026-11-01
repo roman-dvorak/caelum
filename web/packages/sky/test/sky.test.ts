@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { altAzToFraction, eclipticPath, fractionToAltAz, starPositions, type LensConfig, type StarCatalog } from '../src/index.ts'
+import { altAzToFraction, eclipticPath, equatorialToHorizontal, fractionToAltAz, starPositions, type LensConfig, type StarCatalog } from '../src/index.ts'
 import { bodyPositions } from '../src/bodies.ts'
 
 // What the Python backend computes (scripts/export_sky_fixtures.py): the reference.
@@ -86,5 +86,16 @@ describe('sky settings menu description', () => {
       for (const spec of SKY_SLIDERS) expect(skySliderLabel(spec, text, 1)).not.toContain('{value}')
     }
     expect(skyText('xx').sky).toBe('Sky')
+  })
+})
+
+describe('equatorialToHorizontal', () => {
+  // Reference values from the backend's `caelum.sky.positions.radec_to_altaz`.
+  const when = new Date('2026-01-15T22:00:00Z')
+  it.each([
+    ['j2000', [59.96333991450045, 178.08056917095928] as [number, number]],
+    ['jnow', [59.99572842492368, 178.80373529283415] as [number, number]],
+  ] as const)('matches the backend (%s)', (epoch, expected) => {
+    expect(separation(equatorialToHorizontal(100, 20, epoch, when, 50, 14), expected)).toBeLessThan(0.001)
   })
 })

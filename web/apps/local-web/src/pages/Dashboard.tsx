@@ -17,6 +17,7 @@ import {
 import { useFrameStream } from '../hooks/useFrameStream.ts'
 import { useLiveOverlay } from '../hooks/useLiveOverlay.ts'
 import { useSkySetup } from '../hooks/useSkySetup.ts'
+import { useTelescope } from '../hooks/useTelescope.ts'
 import { useSkyState } from '../hooks/useSkyState.ts'
 import { useStatus } from '../hooks/useStatus.ts'
 
@@ -26,6 +27,10 @@ export function Dashboard() {
   const { frame, status: streamStatus } = useFrameStream()
   const overlaySrc = useLiveOverlay(frame?.metadata)
   const skySetup = useSkySetup()
+  const telescope = useTelescope(!!skySetup)
+  // The stored overlay already shows the crosshair as of the frame; drawing it live too would double it.
+  const storedTelescope =
+    !!overlaySrc && !!frame?.metadata.overlay_elements.some((e) => e.type === 'telescope_marker')
   const [skyView, updateSkyView] = useSkySettings()
   const [showJson, setShowJson] = useState(false)
 
@@ -75,6 +80,7 @@ export function Dashboard() {
                 maxMagnitude={skyView.maxMagnitude}
                 symbolScale={skyView.symbolScale}
                 opacity={skyView.opacity}
+                telescope={storedTelescope ? null : telescope}
                 interactive
               />
             ) : null}
