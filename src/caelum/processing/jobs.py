@@ -24,6 +24,8 @@ _RAW_ALIGN = 64
 @dataclass(frozen=True)
 class ProcessingSettings:
     thumbnail_max_dim: int
+    thumbnail_downscale: str
+    thumbnail_gamma: float
     webp_quality: int
     jpeg_quality: int
     #: Pixel level counted as saturated in the frame stats (ADU).
@@ -42,6 +44,8 @@ class ProcessingSettings:
         preset = cfg.exposure_policy.preset_for(period)
         return cls(
             thumbnail_max_dim=cfg.storage_policy.thumbnail_max_dim,
+            thumbnail_downscale=cfg.storage_policy.thumbnail_downscale,
+            thumbnail_gamma=cfg.storage_policy.thumbnail_gamma,
             webp_quality=cfg.storage_policy.webp_quality,
             jpeg_quality=cfg.storage_policy.jpeg_quality,
             saturation_adu=FULL_SCALE_ADU * 2.0**preset.saturation_ev,

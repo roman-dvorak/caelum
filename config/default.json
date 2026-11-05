@@ -111,8 +111,10 @@
       "night"
     ],
     "thumbnail_max_dim": 1024,
+    "thumbnail_downscale": "peak",
+    "thumbnail_gamma": 1.0,
     "jpeg_quality": 85,
-    "webp_quality": 80,
+    "webp_quality": 90,
     "dng_compress": true,
     "night_capture_interval_s": 30.0,
     "day_capture_interval_s": 60.0,

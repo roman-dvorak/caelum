@@ -7,16 +7,51 @@ The stored per-capture thumbnail is WebP; the live stream
 
 from __future__ import annotations
 
+import math
+from typing import Literal
+
 import cv2
 import numpy as np
 
+Downscale = Literal["area", "peak"]
 
-def resize(image: np.ndarray, max_dim: int = 1024) -> np.ndarray:
+#: How far "peak" pulls a block's brightness from its mean towards its
+#: brightest pixel. Full weight would turn every noise spike into a star.
+_PEAK_WEIGHT = 0.5
+
+
+def resize(image: np.ndarray, max_dim: int = 1024, mode: Downscale = "area") -> np.ndarray:
+    """Shrink to `max_dim` on the longest side. "area" averages each block of
+    source pixels, which flattens a 1-2 px star by the block area; "peak"
+    additionally lifts each block's brightness towards its brightest pixel
+    (hue kept), so stars survive the reduction."""
     h, w = image.shape[:2]
     scale = max_dim / max(h, w)
-    if scale < 1.0:
-        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-    return image
+    if scale >= 1.0:
+        return image
+    size = (int(w * scale), int(h * scale))
+    small = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+    if mode == "peak" and image.ndim == 3 and image.dtype == np.uint8:
+        small = _lift_peaks(image, small, math.ceil(1.0 / scale))
+    return small
+
+
+def _lift_peaks(image: np.ndarray, small: np.ndarray, block: int) -> np.ndarray:
+    peak = cv2.dilate(image.max(axis=2), np.ones((block, block), np.uint8))
+    peak = cv2.resize(peak, (small.shape[1], small.shape[0]), interpolation=cv2.INTER_NEAREST).astype(np.float32)
+    mean = small.max(axis=2).astype(np.float32)
+    target = mean + _PEAK_WEIGHT * np.maximum(peak - mean, 0.0)
+    gain = np.where(mean > 0.0, target / np.maximum(mean, 1.0), 1.0)
+    return np.clip(small * gain[..., None] + 0.5, 0, 255).astype(np.uint8)
+
+
+def apply_gamma(image: np.ndarray, gamma: float = 1.0) -> np.ndarray:
+    """Tone curve `out = in ** (1 / gamma)` on 8-bit values: above 1 lifts
+    the shadows (faint stars), 1 leaves the image untouched."""
+    if gamma == 1.0 or image.dtype != np.uint8:
+        return image
+    lut = (np.power(np.arange(256) / 255.0, 1.0 / gamma) * 255.0 + 0.5).astype(np.uint8)
+    return cv2.LUT(image, lut)
 
 
 def _encode(image: np.ndarray, ext: str, params: list[int]) -> bytes:

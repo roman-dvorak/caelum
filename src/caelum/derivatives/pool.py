@@ -244,7 +244,7 @@ class DerivativePool:
             policy = self._config_manager.current.storage_policy if self._config_manager else StoragePolicyConfig()
             overlay, png = None, None
             if policy.overlay_mode != "off":
-                small = thumbnail_module.resize(frame.image, policy.thumbnail_max_dim)
+                small = thumbnail_module.resize(frame.image, policy.thumbnail_max_dim, policy.thumbnail_downscale)
                 layer = overlay_render.render_layer(
                     elements, (small.shape[1], small.shape[0]), self._data_dir / "overlay_assets"
                 )
@@ -267,7 +267,7 @@ class DerivativePool:
         if policy.overlay_mode == "burn":
             # From the full frame again rather than decoding the stored WebP:
             # one lossy encode, not two.
-            burned = overlay_render.composite(small, layer)
+            burned = overlay_render.composite(thumbnail_module.apply_gamma(small, policy.thumbnail_gamma), layer)
             _write_atomic(thumb, thumbnail_module.encode_webp(burned, policy.webp_quality))
             return "burned"
         path = paths.overlay_path(self._data_dir, thumb)

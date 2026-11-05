@@ -140,7 +140,9 @@ listed in `storage_policy.raw_periods`, which defaults to:
   "storage_policy": {
     "raw_periods": ["astronomical_twilight", "night"],
     "thumbnail_max_dim": 1024,
-    "webp_quality": 80,
+    "thumbnail_downscale": "peak",
+    "thumbnail_gamma": 1.0,
+    "webp_quality": 90,
     "night_capture_interval_s": 30.0,
     "day_capture_interval_s": 60.0,
     "realtime_stream_fps": 2.0
@@ -156,6 +158,14 @@ raw is being saved, `day_capture_interval_s` otherwise.
 Thumbnails are encoded in memory at `thumbnail_max_dim` on the longest side
 (1024 px by default) at `webp_quality`. No temporary files are involved at any
 point in the pipeline.
+
+Three settings decide how well faint stars survive that step:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `thumbnail_downscale` | `peak` | `area` averages each block of source pixels, so a 1–2 px star loses most of its brightness in a 4× reduction. `peak` also pulls each block half-way towards its brightest pixel (hue is kept). Affects the stored thumbnail and the live stream. |
+| `thumbnail_gamma` | `1.0` | Tone curve `out = in ** (1 / gamma)` on the stored WebP only. Above 1 lifts the shadows; 1 is off. |
+| `webp_quality` | `90` | Lossy WebP quality, 1–100. At 1024 px a night frame is roughly 100 kB at 80, 150 kB at 85 and 240 kB at 90. |
 
 The actual writing happens in `StorageWriter`, which subscribes to
 `frame_captured` and immediately submits to a two-thread pool — the capture

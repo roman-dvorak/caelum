@@ -46,9 +46,10 @@ def analyze(
     circle = brightness_module.measure(calibrated, info.settings.brightness_roi_diameter_frac)
     stats = replace(stats, median=circle.median)
     timer.lap("stats")
-    small = thumbnail_module.resize(calibrated, info.settings.thumbnail_max_dim)
+    small = thumbnail_module.resize(calibrated, info.settings.thumbnail_max_dim, info.settings.thumbnail_downscale)
     live_jpeg = thumbnail_module.encode_jpeg(small, info.settings.jpeg_quality)
-    webp = thumbnail_module.encode_webp(small, info.settings.webp_quality)
+    toned = thumbnail_module.apply_gamma(small, info.settings.thumbnail_gamma)
+    webp = thumbnail_module.encode_webp(toned, info.settings.webp_quality)
     timer.lap("encode")
     return calibrated, stats, live_jpeg, webp
 

@@ -313,6 +313,8 @@ export interface ExposurePolicyConfig {
 export interface StoragePolicyConfig {
   raw_periods: SkyPeriod[]
   thumbnail_max_dim: number
+  thumbnail_downscale?: 'area' | 'peak'
+  thumbnail_gamma?: number
   jpeg_quality: number
   webp_quality?: number
   overlay_mode?: OverlayMode

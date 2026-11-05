@@ -254,10 +254,17 @@ class StoragePolicyConfig(StrictModel):
 
     raw_periods: tuple[SkyPeriod, ...] = ("astronomical_twilight", "night")
     thumbnail_max_dim: int = 1024
+    #: How the frame is shrunk to `thumbnail_max_dim`: "area" averages, "peak"
+    #: also keeps each block's brightest pixel in play so stars are not
+    #: averaged away. Applies to the stored thumbnail and the live stream.
+    thumbnail_downscale: Literal["area", "peak"] = "peak"
+    #: Tone curve of the stored WebP only (`out = in ** (1 / gamma)`): above
+    #: 1 lifts faint stars, 1 is off. The live stream is not touched.
+    thumbnail_gamma: float = Field(default=1.0, ge=0.2, le=5.0)
     #: Live stream (`/api/frame/latest.jpg`, `/ws/stream`) only — the stored
     #: thumbnail is WebP, see `webp_quality`.
     jpeg_quality: int = 85
-    webp_quality: int = Field(default=80, ge=1, le=100)
+    webp_quality: int = Field(default=90, ge=1, le=100)
     #: The rendered overlay of each stored thumbnail: "file" — a transparent
     #: PNG in `overlays/` stacked over the clean WebP by the viewers;
     #: "burn" — drawn into the WebP itself; "off" — not rendered at all.
