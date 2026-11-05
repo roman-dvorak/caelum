@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 
 from caelum.capture import thumbnail
@@ -44,3 +45,37 @@ def test_gamma_one_is_identity_and_above_one_lifts_shadows():
     lifted = thumbnail.apply_gamma(image, 2.0)
     assert lifted[0, 0, 0] == round(255 * (40 / 255) ** 0.5)
     assert thumbnail.apply_gamma(np.array([[0, 255]], np.uint8), 2.2).tolist() == [[0, 255]]
+
+
+def _noisy_sky() -> np.ndarray:
+    rng = np.random.default_rng(0)
+    return np.clip(rng.normal(30, 8, (400, 400, 3)), 0, 255).astype(np.uint8)
+
+
+def test_prefilter_calms_noise_that_peak_would_lift():
+    image = _noisy_sky()
+    raw = thumbnail.resize(image, 100, "peak")
+    filtered = thumbnail.resize(image, 100, "peak", prefilter_sigma=0.8)
+    assert filtered.std() < raw.std() * 0.7
+
+
+def test_prefilter_keeps_a_two_pixel_star():
+    image = np.full((400, 400, 3), 20, np.uint8)
+    image[200:202, 200:202] = 255
+    small = thumbnail.resize(image, 100, "peak", prefilter_sigma=0.8)
+    assert small.max() > 80
+
+
+def test_prefilter_zero_is_off():
+    image = _noisy_sky()
+    assert np.array_equal(thumbnail.resize(image, 100, "peak"), thumbnail.resize(image, 100, "peak", 0.0))
+
+
+def test_chroma_blur_smooths_colour_but_not_brightness():
+    image = _noisy_sky()
+    blurred = thumbnail.apply_chroma_blur(image, 2.0)
+    ycc_in = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb).astype(float)
+    ycc_out = cv2.cvtColor(blurred, cv2.COLOR_RGB2YCrCb).astype(float)
+    assert ycc_out[..., 1:].std() < ycc_in[..., 1:].std() * 0.5
+    assert abs(ycc_out[..., 0].std() - ycc_in[..., 0].std()) < 1.0
+    assert thumbnail.apply_chroma_blur(image, 0.0) is image

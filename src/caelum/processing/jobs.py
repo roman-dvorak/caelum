@@ -25,6 +25,8 @@ _RAW_ALIGN = 64
 class ProcessingSettings:
     thumbnail_max_dim: int
     thumbnail_downscale: str
+    thumbnail_prefilter_sigma: float
+    thumbnail_chroma_blur: float
     thumbnail_gamma: float
     webp_quality: int
     jpeg_quality: int
@@ -45,6 +47,8 @@ class ProcessingSettings:
         return cls(
             thumbnail_max_dim=cfg.storage_policy.thumbnail_max_dim,
             thumbnail_downscale=cfg.storage_policy.thumbnail_downscale,
+            thumbnail_prefilter_sigma=cfg.storage_policy.thumbnail_prefilter_sigma,
+            thumbnail_chroma_blur=cfg.storage_policy.thumbnail_chroma_blur,
             thumbnail_gamma=cfg.storage_policy.thumbnail_gamma,
             webp_quality=cfg.storage_policy.webp_quality,
             jpeg_quality=cfg.storage_policy.jpeg_quality,

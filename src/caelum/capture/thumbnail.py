@@ -20,15 +20,22 @@ Downscale = Literal["area", "peak"]
 _PEAK_WEIGHT = 0.5
 
 
-def resize(image: np.ndarray, max_dim: int = 1024, mode: Downscale = "area") -> np.ndarray:
+def resize(
+    image: np.ndarray, max_dim: int = 1024, mode: Downscale = "area", prefilter_sigma: float = 0.0
+) -> np.ndarray:
     """Shrink to `max_dim` on the longest side. "area" averages each block of
     source pixels, which flattens a 1-2 px star by the block area; "peak"
     additionally lifts each block's brightness towards its brightest pixel
-    (hue kept), so stars survive the reduction."""
+    (hue kept), so stars survive the reduction. `prefilter_sigma` (source
+    pixels, 0 = off) first smooths the full-size frame with a Gaussian, so
+    single noisy pixels no longer count as peaks while a star's 2 px profile
+    still does."""
     h, w = image.shape[:2]
     scale = max_dim / max(h, w)
     if scale >= 1.0:
         return image
+    if prefilter_sigma > 0.0:
+        image = cv2.GaussianBlur(image, (0, 0), prefilter_sigma)
     size = (int(w * scale), int(h * scale))
     small = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
     if mode == "peak" and image.ndim == 3 and image.dtype == np.uint8:
@@ -43,6 +50,16 @@ def _lift_peaks(image: np.ndarray, small: np.ndarray, block: int) -> np.ndarray:
     target = mean + _PEAK_WEIGHT * np.maximum(peak - mean, 0.0)
     gain = np.where(mean > 0.0, target / np.maximum(mean, 1.0), 1.0)
     return np.clip(small * gain[..., None] + 0.5, 0, 255).astype(np.uint8)
+
+
+def apply_chroma_blur(image: np.ndarray, sigma: float = 0.0) -> np.ndarray:
+    """Gaussian blur of the colour channels only (`sigma` in output pixels,
+    0 = off); brightness, and so star shape, is left alone."""
+    if sigma <= 0.0 or image.ndim != 3:
+        return image
+    ycc = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+    ycc[..., 1:] = cv2.GaussianBlur(ycc[..., 1:], (0, 0), sigma)
+    return cv2.cvtColor(ycc, cv2.COLOR_YCrCb2RGB)
 
 
 def apply_gamma(image: np.ndarray, gamma: float = 1.0) -> np.ndarray:
@@ -76,3 +93,8 @@ def encode_webp(image: np.ndarray, quality: int = 80) -> bytes:
 def encode(image: np.ndarray, max_dim: int = 1024, quality: int = 85) -> bytes:
     """Resize + JPEG in one go (derivative thumbnails)."""
     return encode_jpeg(resize(image, max_dim), quality)
+
+
+def stored_tone(image: np.ndarray, gamma: float = 1.0, chroma_blur: float = 0.0) -> np.ndarray:
+    """What only the stored WebP gets on top of the shared resize."""
+    return apply_gamma(apply_chroma_blur(image, chroma_blur), gamma)

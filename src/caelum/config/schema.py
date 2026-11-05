@@ -258,6 +258,16 @@ class StoragePolicyConfig(StrictModel):
     #: also keeps each block's brightest pixel in play so stars are not
     #: averaged away. Applies to the stored thumbnail and the live stream.
     thumbnail_downscale: Literal["area", "peak"] = "peak"
+    #: Gaussian sigma, in source pixels, of a blur applied to the full-size
+    #: frame before it is shrunk; 0 = off. Stops single noisy pixels from
+    #: being lifted as "peaks" — about 0.8 halves the noise of a night frame
+    #: and nearly halves the WebP, a star's 2 px profile survives. Applies to
+    #: the stored thumbnail and the live stream.
+    thumbnail_prefilter_sigma: float = Field(default=0.8, ge=0.0, le=4.0)
+    #: Gaussian sigma, in thumbnail pixels, of a blur of the colour channels
+    #: only; 0 = off. Removes coloured speckle without softening stars.
+    #: Stored WebP only.
+    thumbnail_chroma_blur: float = Field(default=0.0, ge=0.0, le=8.0)
     #: Tone curve of the stored WebP only (`out = in ** (1 / gamma)`): above
     #: 1 lifts faint stars, 1 is off. The live stream is not touched.
     thumbnail_gamma: float = Field(default=1.0, ge=0.2, le=5.0)

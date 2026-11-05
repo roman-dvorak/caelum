@@ -141,6 +141,8 @@ listed in `storage_policy.raw_periods`, which defaults to:
     "raw_periods": ["astronomical_twilight", "night"],
     "thumbnail_max_dim": 1024,
     "thumbnail_downscale": "peak",
+    "thumbnail_prefilter_sigma": 0.8,
+    "thumbnail_chroma_blur": 0.0,
     "thumbnail_gamma": 1.0,
     "webp_quality": 90,
     "night_capture_interval_s": 30.0,
@@ -159,11 +161,13 @@ Thumbnails are encoded in memory at `thumbnail_max_dim` on the longest side
 (1024 px by default) at `webp_quality`. No temporary files are involved at any
 point in the pipeline.
 
-Three settings decide how well faint stars survive that step:
+Five settings decide how well faint stars survive that step:
 
 | Setting | Default | Effect |
 |---|---|---|
 | `thumbnail_downscale` | `peak` | `area` averages each block of source pixels, so a 1–2 px star loses most of its brightness in a 4× reduction. `peak` also pulls each block half-way towards its brightest pixel (hue is kept). Affects the stored thumbnail and the live stream. |
+| `thumbnail_prefilter_sigma` | `0.8` | Gaussian blur (sigma in source pixels, 0–4, 0 = off) of the full-size frame before the reduction. Single noisy pixels stop counting as peaks while a star's 2 px profile survives; on a night frame it roughly halves the noise and nearly halves the WebP. Affects the stored thumbnail and the live stream. |
+| `thumbnail_chroma_blur` | `0.0` | Gaussian blur (sigma in thumbnail pixels, 0–8, 0 = off) of the colour channels only; removes coloured speckle without softening stars. Stored WebP only. |
 | `thumbnail_gamma` | `1.0` | Tone curve `out = in ** (1 / gamma)` on the stored WebP only. Above 1 lifts the shadows; 1 is off. |
 | `webp_quality` | `90` | Lossy WebP quality, 1–100. At 1024 px a night frame is roughly 100 kB at 80, 150 kB at 85 and 240 kB at 90. |
 

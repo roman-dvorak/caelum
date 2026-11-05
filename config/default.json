@@ -112,6 +112,8 @@
     ],
     "thumbnail_max_dim": 1024,
     "thumbnail_downscale": "peak",
+    "thumbnail_prefilter_sigma": 0.8,
+    "thumbnail_chroma_blur": 0.0,
     "thumbnail_gamma": 1.0,
     "jpeg_quality": 85,
     "webp_quality": 90,
