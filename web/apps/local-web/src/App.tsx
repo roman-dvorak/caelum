@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { HashRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
   AppShell,
@@ -12,6 +12,7 @@ import {
   LensIcon,
   LiveIcon,
   Loading,
+  LoginIcon,
   LogoutIcon,
   LogsIcon,
   ProgramIcon,
@@ -89,6 +90,9 @@ const ADMIN_SECTION: NavSection = {
 export default function App() {
   const { context, loading, error, isAuthenticated, isAdmin, logout } = useAuth()
   const cameraName = context?.camera_name || ''
+  // A public-preview visitor who asked to sign in. Cleared on sign out, so
+  // signing out of a public camera lands back on the preview, not the form.
+  const [wantsLogin, setWantsLogin] = useState(false)
 
   // Tab titles are how you tell several cameras apart in a browser.
   useEffect(() => {
@@ -117,8 +121,8 @@ export default function App() {
   // preview to the public — in which case they get the read-only shell and
   // can sign in later for control.
   const previewIsPublic = context?.preview_access === 'public'
-  if (!isAuthenticated && !previewIsPublic) {
-    return <Login />
+  if (!isAuthenticated && (!previewIsPublic || wantsLogin)) {
+    return <Login onCancel={previewIsPublic ? () => setWantsLogin(false) : undefined} />
   }
 
   const sections = isAdmin ? [VIEW_SECTION, ADMIN_SECTION] : [VIEW_SECTION]
@@ -142,8 +146,16 @@ export default function App() {
               )}
             </div>
             {isAuthenticated && context?.auth_enabled ? (
-              <Button icon={<LogoutIcon size={16} />} onClick={() => void logout()} className="w-full">
+              <Button icon={<LogoutIcon size={16} />} onClick={() => {
+                  setWantsLogin(false)
+                  void logout()
+                }} className="w-full">
                 Sign out
+              </Button>
+            ) : null}
+            {!isAuthenticated && context?.auth_enabled ? (
+              <Button icon={<LoginIcon size={16} />} onClick={() => setWantsLogin(true)} className="w-full">
+                Sign in
               </Button>
             ) : null}
           </div>

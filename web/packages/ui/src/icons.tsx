@@ -35,6 +35,7 @@ import {
   Power,
   PuzzlePiece,
   Scroll,
+  SignIn,
   SignOut,
   SlidersHorizontal,
   Stack,
@@ -92,6 +93,7 @@ export const InfoIcon = icon(Info)
 export const SpinnerIcon = icon(CircleNotch)
 
 // Controls
+export const LoginIcon = icon(SignIn)
 export const LogoutIcon = icon(SignOut)
 export const MenuIcon = icon(List)
 export const CloseIcon = icon(X)
