@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Button, DOCS_URL, Field, Message, inputClass } from '@caelum/ui'
 import { useAuth } from '../authContext.ts'
 
-export function Login() {
+/** `onCancel` is set when the visitor came from the public preview and can go back to it. */
+export function Login({ onCancel }: { onCancel?: () => void } = {}) {
   const { login, context } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -66,6 +67,12 @@ export function Login() {
             <p className="text-center text-xs text-ink-muted">
               The live preview on this camera is public — sign in only to control it.
             </p>
+          ) : null}
+
+          {onCancel ? (
+            <Button type="button" variant="ghost" onClick={onCancel} className="py-2">
+              Back to preview
+            </Button>
           ) : null}
 
           <a
